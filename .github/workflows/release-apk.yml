@@ -1,0 +1,124 @@
+name: Release APK
+
+# Builds a signed RELEASE APK (R8 + resource shrinking) and publishes it as a GitHub
+# release asset, so there is always a downloadable link.
+#
+# Tag (`v*`)            -> a versioned release for that tag.
+# Manual dispatch       -> the rolling `apk-release` prerelease, for a link without tagging.
+#
+# Signing: uses the `RELEASE_KEYSTORE_BASE64` secret when it is set. Without it the job
+# generates a throwaway keystore so the build still produces an installable APK — but a
+# throwaway key changes every run, and Android refuses to update an app in place across a
+# key change, so testers must uninstall before reinstalling. Add the secrets below for a
+# stable, upgradeable key:
+#   RELEASE_KEYSTORE_BASE64  base64 of a .jks      (base64 -w0 my-release.jks)
+#   RELEASE_STORE_PASSWORD   keystore password
+#   RELEASE_KEY_ALIAS        key alias             (default: release)
+#   RELEASE_KEY_PASSWORD     key password          (default: same as store password)
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup JDK
+        uses: actions/setup-java@v5
+        with:
+          distribution: "zulu"
+          java-version: "21"
+
+      # The runner's preinstalled SDK may not carry this project's compileSdk, and
+      # `assembleRelease` fails late and confusingly when it is missing. Install the
+      # packages explicitly; `--install` is a no-op for anything already present.
+      - name: Ensure Android SDK packages
+        run: |
+          SDKMANAGER="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$SDKMANAGER" ]; then
+            SDKMANAGER="$(find "$ANDROID_SDK_ROOT" -name sdkmanager -type f | head -1)"
+          fi
+          yes | "$SDKMANAGER" --licenses >/dev/null 2>&1 || true
+          "$SDKMANAGER" --install "platforms;android-37.0" "build-tools;37.0.0" "platform-tools"
+
+      # `app/build.gradle.kts` reads a properties file at `<repo>/../openCook.keystore`, whose
+      # `releaseKeyStore` is resolved relative to the repo root — so the keystore itself can
+      # live outside the checkout and never lands in the repository.
+      - name: Configure release signing
+        env:
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+          RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          KS="../release-keystore.jks"
+          if [ -n "${RELEASE_KEYSTORE_BASE64:-}" ]; then
+            echo "Using the release keystore from secrets."
+            printf '%s' "$RELEASE_KEYSTORE_BASE64" | base64 -d > "$KS"
+            ALIAS="${RELEASE_KEY_ALIAS:-release}"
+            STORE_PASS="$RELEASE_STORE_PASSWORD"
+            KEY_PASS="${RELEASE_KEY_PASSWORD:-$RELEASE_STORE_PASSWORD}"
+          else
+            echo "::warning::No RELEASE_KEYSTORE_BASE64 secret — generating a throwaway keystore. \
+          Every run will sign differently, so testers must uninstall before reinstalling. \
+          Add the secrets documented at the top of this workflow for a stable key."
+            keytool -genkeypair -v -keystore "$KS" \
+              -alias release -keyalg RSA -keysize 2048 -validity 10000 \
+              -storepass android -keypass android \
+              -dname "CN=openCook CI, OU=Dev, O=openCook, C=US"
+            ALIAS=release; STORE_PASS=android; KEY_PASS=android
+          fi
+          cat > ../openCook.keystore <<EOF
+          releaseKeyStore=../release-keystore.jks
+          releaseKeyAlias=$ALIAS
+          releaseKeyPassword=$KEY_PASS
+          releaseStorePassword=$STORE_PASS
+          EOF
+
+      - name: Build signed release APK
+        run: ./gradlew assembleRelease --console=plain
+
+      - name: Verify the APK is signed and carries the translations
+        run: |
+          set -euo pipefail
+          APK=$(ls app/build/outputs/apk/release/*.apk | head -1)
+          echo "APK: $APK ($(du -h "$APK" | cut -f1))"
+          "$ANDROID_HOME/build-tools/37.0.0/apksigner" verify --print-certs "$APK" | head -3
+          # Resource shrinking is on for release; prove a translation actually survived it
+          # rather than trusting that it did.
+          ANALYZER="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/apkanalyzer"
+          if [ -x "$ANALYZER" ]; then
+            echo "zh lang_chinese = $("$ANALYZER" resources value --config zh --type string --name lang_chinese "$APK")"
+          fi
+
+      - name: Publish APK
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          APK=$(ls app/build/outputs/apk/release/*.apk | head -1)
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            TAG=apk-release
+            gh release delete "$TAG" --yes --cleanup-tag 2>/dev/null || true
+            gh release create "$TAG" "$APK" \
+              --prerelease \
+              --target "$GITHUB_SHA" \
+              --title "openCook release APK (rolling)" \
+              --notes "Signed release build of ${GITHUB_SHA::7}. Rolling: replaced by the next run."
+          else
+            TAG="$GITHUB_REF_NAME"
+            gh release create "$TAG" "$APK" \
+              --target "$GITHUB_SHA" \
+              --title "openCook $TAG" \
+              --generate-notes
+          fi
+          echo "Download: $(gh release view "$TAG" --json assets --jq '.assets[0].url')"
