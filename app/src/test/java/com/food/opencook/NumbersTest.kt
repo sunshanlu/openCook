@@ -36,6 +36,36 @@ class NumbersTest {
         assertNull(Numbers.parseQuantity(null))
     }
 
+    /** Chinese numerals are read one character at a time: 半 = 0.5, 两 = 2, 十 = 10, 一 = 1.
+     *  A vague quantifier must NOT yield a quantity — quantity extraction runs before noise
+     *  stripping, so a naive 一→1 would make "一点盐" become "1 salt", worse than not parsing. */
+    @Test
+    fun parseQuantityReadsChineseNumeralsAndFullWidthDigits() {
+        assertEquals(600.0, Numbers.parseQuantity("600克面粉")!!, 0.001)
+        assertEquals(2.0, Numbers.parseQuantity("两个鸡蛋")!!, 0.001)
+        assertEquals(0.5, Numbers.parseQuantity("半斤五花肉")!!, 0.001)
+        assertEquals(1.0, Numbers.parseQuantity("一斤")!!, 0.001) // 一 alone is still one
+        assertEquals(10.0, Numbers.parseQuantity("十个")!!, 0.001)
+
+        // The trap: 一 is a morpheme in these fixed vague words, not the number one.
+        assertNull(Numbers.parseQuantity("一点盐"))
+        assertNull(Numbers.parseQuantity("一些糖"))
+        assertNull(Numbers.parseQuantity("一起"))
+
+        // Compound numerals are deliberately unsupported — not half-read as their first digit.
+        assertNull(Numbers.parseQuantity("二十三"))
+        assertNull(Numbers.parseQuantity("六百"))
+
+        // 一打 ("one dozen") is not expanded to 12 — 打 is a measure word, so only 一 → 1 is read.
+        assertEquals(1.0, Numbers.parseQuantity("一打")!!, 0.001)
+
+        // Full-width digits/punctuation normalize before parsing; parens fold to ASCII.
+        assertEquals(600.0, Numbers.parseQuantity("６００")!!, 0.001)
+        assertEquals(1.5, Numbers.parseQuantity("１，５")!!, 0.001)
+        assertEquals(600.0, Numbers.parseQuantity("（６００）")!!, 0.001)
+        assertEquals("(600)中筋", Numbers.normalizeFullWidth("（６００）中筋"))
+    }
+
     @Test
     fun formatQuantityDropsTrailingZero() {
         assertEquals("400", Numbers.formatQuantity(400.0))
