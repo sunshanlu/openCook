@@ -191,6 +191,7 @@ fun contentLanguageLabel(code: String?): String = when (code) {
     "de" -> stringResource(R.string.lang_german)
     "en" -> stringResource(R.string.lang_english)
     "fr" -> stringResource(R.string.lang_french)
+    "zh" -> stringResource(R.string.lang_chinese)
     else -> code.uppercase()
 }
 

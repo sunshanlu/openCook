@@ -552,6 +552,7 @@
     <string name="lang_german">Deutsch</string>
     <string name="lang_english">English</string>
     <string name="lang_french">Français</string>
+    <string name="lang_chinese">中文</string>
 
     <!-- Recipe categories (stored as keys, shown localized) -->
     <string name="cat_pasta">Pâtes</string>
