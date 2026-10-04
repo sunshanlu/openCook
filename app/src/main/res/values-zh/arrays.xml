@@ -1,0 +1,330 @@
+<!--
+  ~  openCook
+  ~  Copyright (C) 2026 olie.xdev <olie.xdeveloper@googlemail.com>
+  ~
+  ~  This program is free software: you can redistribute it and/or modify
+  ~  it under the terms of the GNU General Public License as published by
+  ~  the Free Software Foundation, either version 3 of the License, or
+  ~  (at your option) any later version.
+  ~
+  ~  This program is distributed in the hope that it will be useful,
+  ~  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  ~  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  ~  GNU General Public License for more details.
+  ~
+  ~  You should have received a copy of the GNU General Public License
+  ~  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+  -->
+
+<!-- These are *vocabulary* lists, not positional arrays: each language names as many words as
+     it needs, and they are unioned across languages at runtime. InconsistentArrays compares
+     item counts between locales, which is meaningless here.
+
+     Chinese has no word spaces and no plural inflection. Substring matching has no word
+     boundary, so every aisle and protein keyword is at least two characters — a lone 油 would
+     fire on 油菜/油条/牛油果, a lone 鸡 on 鸡蛋, a lone 牛 on 牛奶/牛油果 and a lone 羊 on 羊奶.
+     Units, by contrast, are prefix-matched after a quantity and may be a single character. -->
+<resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="InconsistentArrays">
+    <!-- Grocery-aisle keyword lists (substring match, lower-case). Order of aisles is fixed
+         in code; first matching aisle wins. -->
+    <string-array name="grocery_kw_frozen">
+        <item>冷冻</item><item>速冻</item><item>冰冻</item><item>冰淇淋</item><item>雪糕</item>
+    </string-array>
+    <string-array name="grocery_kw_meat_fish">
+        <!-- Bare 鸡 is absent: it would swallow 鸡蛋 (egg). Same for 牛 (牛奶/牛油果) and
+             羊 (羊奶). Named cuts and species only. -->
+        <item>鸡胸</item><item>鸡腿</item><item>鸡翅</item><item>鸡肉</item><item>整鸡</item>
+        <item>鸡丁</item><item>鸡排</item><item>火鸡</item>
+        <item>鸭肉</item><item>鸭腿</item><item>烤鸭</item><item>鹅肉</item>
+        <item>牛肉</item><item>牛排</item><item>牛腩</item><item>牛肋</item><item>牛尾</item>
+        <item>牛筋</item><item>牛舌</item>
+        <item>猪肉</item><item>猪排</item><item>猪蹄</item><item>猪肝</item><item>猪里脊</item>
+        <item>五花肉</item><item>排骨</item><item>里脊肉</item><item>肉末</item><item>肉馅</item>
+        <item>肉丸</item><item>培根</item><item>火腿</item><item>香肠</item><item>腊肠</item><item>腊肉</item>
+        <item>羊肉</item><item>羊排</item><item>羊腿</item><item>羊腩</item><item>羊蝎子</item>
+        <item>三文鱼</item><item>鲑鱼</item><item>金枪鱼</item><item>鳕鱼</item><item>带鱼</item>
+        <item>鲈鱼</item><item>黄鱼</item><item>鱼肉</item><item>鱼片</item><item>鱼柳</item>
+        <item>鱼排</item><item>鱼头</item><item>鱼丸</item>
+        <item>虾仁</item><item>大虾</item><item>鲜虾</item><item>基围虾</item><item>河虾</item>
+        <item>龙虾</item><item>虾皮</item>
+        <item>螃蟹</item><item>蟹肉</item><item>大闸蟹</item><item>蟹棒</item>
+        <item>扇贝</item><item>蛤蜊</item><item>牡蛎</item><item>生蚝</item><item>鱿鱼</item>
+        <item>章鱼</item><item>墨鱼</item><item>海参</item><item>鲍鱼</item>
+    </string-array>
+    <string-array name="grocery_kw_produce">
+        <item>西红柿</item><item>番茄</item>
+        <item>洋葱</item><item>大葱</item><item>小葱</item><item>香葱</item><item>青葱</item><item>葱花</item>
+        <item>大蒜</item><item>蒜瓣</item><item>蒜末</item><item>蒜蓉</item>
+        <item>生姜</item><item>老姜</item><item>姜片</item><item>姜末</item>
+        <item>胡萝卜</item><item>白萝卜</item><item>萝卜</item><item>土豆</item><item>马铃薯</item>
+        <item>红薯</item><item>山药</item><item>芋头</item>
+        <item>生菜</item><item>大白菜</item><item>白菜</item><item>卷心菜</item><item>圆白菜</item>
+        <item>包菜</item><item>菠菜</item><item>韭菜</item><item>芹菜</item><item>香菜</item>
+        <item>油菜</item><item>芥蓝</item><item>空心菜</item><item>茼蒿</item>
+        <item>黄瓜</item><item>西葫芦</item><item>冬瓜</item><item>南瓜</item><item>苦瓜</item><item>丝瓜</item>
+        <item>茄子</item><item>西兰花</item><item>花椰菜</item><item>菜花</item>
+        <item>蘑菇</item><item>香菇</item><item>木耳</item><item>金针菇</item><item>平菇</item>
+        <item>青椒</item><item>彩椒</item><item>辣椒</item><item>小米辣</item><item>尖椒</item>
+        <item>苹果</item><item>香蕉</item><item>柠檬</item><item>橙子</item><item>橘子</item>
+        <item>柚子</item><item>草莓</item><item>蓝莓</item><item>树莓</item><item>雪梨</item>
+        <item>牛油果</item><item>鳄梨</item><item>芒果</item><item>葡萄</item><item>桃子</item>
+        <item>樱桃</item><item>西瓜</item><item>哈密瓜</item><item>火龙果</item>
+        <item>罗勒</item><item>薄荷</item><item>玉米</item><item>豌豆</item><item>四季豆</item>
+        <item>豆角</item><item>荷兰豆</item><item>海带</item><item>紫菜</item>
+        <item>蔬菜</item><item>水果</item>
+    </string-array>
+    <string-array name="grocery_kw_bakery">
+        <item>面包</item><item>全麦面包</item><item>吐司</item><item>法棍</item><item>贝果</item>
+        <item>可颂</item><item>牛角包</item><item>馒头</item><item>花卷</item><item>烧饼</item><item>饼干</item>
+    </string-array>
+    <string-array name="grocery_kw_drinks">
+        <item>矿泉水</item><item>苏打水</item><item>气泡水</item><item>纯净水</item>
+        <item>果汁</item><item>橙汁</item><item>咖啡</item><item>绿茶</item><item>红茶</item>
+        <item>奶茶</item><item>可乐</item><item>汽水</item><item>啤酒</item><item>红酒</item>
+        <item>白酒</item><item>豆浆</item><item>饮料</item>
+    </string-array>
+    <string-array name="grocery_kw_spices">
+        <!-- 盐/糖/醋 alone are single characters and are handled as staples; the aisle
+             keywords use the full forms. Oils and vinegars end in the bare staple, so each is
+             also listed in ingredient_distinctions below. -->
+        <item>食盐</item><item>精盐</item><item>胡椒</item><item>黑胡椒</item><item>白胡椒</item>
+        <item>花椒</item><item>花椒油</item><item>五香粉</item><item>十三香</item><item>咖喱</item>
+        <item>咖喱粉</item><item>孜然</item><item>肉桂</item><item>桂皮</item><item>八角</item>
+        <item>香叶</item><item>迷迭香</item><item>百里香</item><item>牛至</item>
+        <item>香草</item><item>香草精</item><item>香料</item><item>调味料</item>
+        <item>香醋</item><item>陈醋</item><item>米醋</item><item>白醋</item>
+        <item>酱油</item><item>生抽</item><item>老抽</item><item>蚝油</item>
+        <item>香油</item><item>芝麻油</item><item>麻油</item><item>花生油</item><item>菜籽油</item>
+        <item>橄榄油</item><item>食用油</item><item>植物油</item><item>椰子油</item><item>猪油</item>
+        <item>豆瓣酱</item><item>甜面酱</item><item>沙拉酱</item><item>芥末</item><item>蛋黄酱</item>
+        <item>高汤</item><item>鸡汤</item><item>浓汤宝</item>
+        <item>料酒</item><item>味淋</item><item>味精</item><item>鸡精</item>
+    </string-array>
+    <string-array name="grocery_kw_pantry">
+        <item>面条</item><item>挂面</item><item>意面</item><item>意大利面</item><item>通心粉</item>
+        <item>粉丝</item><item>粉条</item><item>大米</item><item>糯米</item><item>藜麦</item>
+        <item>燕麦</item><item>麦片</item><item>面粉</item><item>淀粉</item><item>生粉</item>
+        <item>白糖</item><item>红糖</item><item>冰糖</item><item>砂糖</item>
+        <item>糖粉</item><item>蜂蜜</item><item>果酱</item><item>巧克力</item><item>可可粉</item>
+        <item>酵母</item><item>干酵母</item><item>泡打粉</item><item>小苏打</item><item>苏打粉</item>
+        <item>椰奶</item><item>椰浆</item><item>红豆</item><item>绿豆</item><item>黄豆</item>
+        <item>鹰嘴豆</item><item>扁豆</item><item>枸杞</item><item>红枣</item><item>莲子</item>
+        <item>银耳</item><item>坚果</item><item>核桃</item><item>杏仁</item><item>腰果</item>
+        <item>芝麻</item><item>花生酱</item><item>罐头</item>
+    </string-array>
+    <string-array name="grocery_kw_dairy">
+        <item>牛奶</item><item>奶粉</item><item>奶油</item><item>淡奶油</item><item>鲜奶油</item>
+        <item>黄油</item><item>酸奶</item><item>奶酪</item><item>芝士</item><item>起司</item>
+        <item>炼乳</item><item>鸡蛋</item><item>蛋黄</item><item>蛋清</item><item>鸭蛋</item>
+        <item>皮蛋</item><item>马苏里拉</item><item>帕玛森</item><item>马斯卡彭</item><item>菲达</item>
+    </string-array>
+
+    <!-- Background staples the meal-planner excludes from the reuse score. Only bare,
+         unambiguous basics live here; a named variety that ends in a staple (橄榄油, 红糖,
+         陈醋) is deliberately NOT a staple — it is kept apart by ingredient_distinctions. -->
+    <string-array name="ingredient_staples">
+        <item>盐</item><item>油</item><item>糖</item><item>酱油</item><item>醋</item><item>料酒</item>
+        <item>胡椒</item><item>黑胡椒</item><item>白胡椒</item><item>花椒</item>
+        <item>水</item><item>面粉</item><item>淀粉</item><item>蜂蜜</item><item>芥末</item>
+        <item>高汤</item><item>番茄膏</item><item>泡打粉</item><item>酵母</item><item>干酵母</item>
+    </string-array>
+
+    <!-- Staples seeded into a new household's pantry (display spelling). -->
+    <string-array name="pantry_defaults">
+        <item>盐</item><item>胡椒</item><item>橄榄油</item><item>黄油</item><item>醋</item>
+        <item>糖</item><item>面粉</item><item>蔬菜高汤</item><item>浓汤宝</item><item>芥末</item>
+        <item>番茄膏</item><item>酱油</item><item>辣椒粉</item><item>肉豆蔻</item><item>蜂蜜</item>
+        <item>泡打粉</item><item>香草糖</item><item>干酵母</item>
+    </string-array>
+
+    <!-- Recognized measuring units (kept verbatim; never converted). Prefix-matched after a
+         quantity, so single characters are fine. 斤/两 (market units) and the measure words
+         (个/条/根/片/块/瓣/只/把/颗 …) are units, exactly like English piece/slice/clove. -->
+    <string-array name="ingredient_units">
+        <item>克</item><item>千克</item><item>毫克</item><item>公斤</item>
+        <item>毫升</item><item>升</item><item>磅</item><item>盎司</item>
+        <item>汤匙</item><item>汤勺</item><item>大匙</item><item>大勺</item><item>茶匙</item>
+        <item>小匙</item><item>小勺</item><item>调羹</item><item>勺</item>
+        <item>个</item><item>只</item><item>条</item><item>根</item><item>片</item><item>块</item>
+        <item>瓣</item><item>颗</item><item>粒</item><item>棵</item><item>把</item><item>束</item>
+        <item>扎</item><item>串</item><item>支</item><item>张</item><item>团</item><item>卷</item>
+        <item>朵</item><item>份</item><item>滴</item><item>撮</item>
+        <item>杯</item><item>碗</item><item>盒</item><item>瓶</item><item>袋</item><item>罐</item><item>桶</item>
+        <item>斤</item><item>两</item>
+    </string-array>
+
+    <!-- Main-protein keywords for the meal-planner variety scoring (substring match, lower-case).
+         Grouped by a fixed canonical key; only the keywords are translated per language.
+         No bare 鸡/牛/羊 — see grocery_kw_meat_fish. -->
+    <string-array name="protein_kw_poultry">
+        <item>鸡胸</item><item>鸡腿</item><item>鸡翅</item><item>鸡肉</item><item>整鸡</item>
+        <item>鸡丁</item><item>鸡排</item><item>火鸡</item><item>鸭肉</item><item>鸭腿</item>
+        <item>鹅肉</item><item>家禽</item>
+    </string-array>
+    <string-array name="protein_kw_fish">
+        <item>鱼肉</item><item>三文鱼</item><item>鲑鱼</item><item>金枪鱼</item><item>鳕鱼</item>
+        <item>带鱼</item><item>鲈鱼</item><item>黄鱼</item><item>鱼片</item><item>鱼柳</item>
+        <item>鱼排</item><item>鱼丸</item><item>虾仁</item><item>大虾</item><item>鲜虾</item>
+        <item>基围虾</item><item>龙虾</item><item>螃蟹</item><item>蟹肉</item><item>扇贝</item>
+        <item>蛤蜊</item><item>牡蛎</item><item>鱿鱼</item><item>章鱼</item><item>墨鱼</item>
+    </string-array>
+    <string-array name="protein_kw_mince">
+        <item>肉末</item><item>肉馅</item><item>肉糜</item><item>牛肉末</item><item>猪肉末</item>
+    </string-array>
+    <string-array name="protein_kw_pork">
+        <item>猪肉</item><item>猪排</item><item>五花肉</item><item>排骨</item><item>猪蹄</item>
+        <item>猪肝</item><item>猪里脊</item><item>培根</item><item>火腿</item><item>香肠</item><item>腊肠</item>
+    </string-array>
+    <string-array name="protein_kw_beef">
+        <item>牛肉</item><item>牛排</item><item>牛腩</item><item>牛肋</item><item>牛尾</item>
+        <item>牛筋</item><item>牛舌</item>
+    </string-array>
+    <string-array name="protein_kw_lamb">
+        <item>羊肉</item><item>羊排</item><item>羊腿</item><item>羊腩</item><item>羊蝎子</item>
+    </string-array>
+    <string-array name="protein_kw_plant">
+        <item>豆腐</item><item>豆干</item><item>豆皮</item><item>腐竹</item><item>天贝</item>
+        <item>面筋</item><item>素鸡</item>
+    </string-array>
+
+    <!-- Legacy/import category words → the fixed category keys (exact match, lower-case).
+         The keys themselves ("pasta", "meat", …) always match and need no entry here. -->
+    <string-array name="cat_alias_pasta">
+        <item>面食</item><item>面条</item><item>意面</item><item>意大利面</item>
+    </string-array>
+    <string-array name="cat_alias_meat">
+        <item>肉类</item><item>肉食</item><item>荤菜</item>
+    </string-array>
+    <string-array name="cat_alias_fish">
+        <item>海鲜</item><item>水产</item><item>鱼类</item>
+    </string-array>
+    <string-array name="cat_alias_soup">
+        <item>汤类</item><item>汤羹</item><item>炖菜</item><item>煲汤</item>
+    </string-array>
+    <string-array name="cat_alias_vegetarian">
+        <item>素食</item><item>素菜</item><item>纯素</item>
+    </string-array>
+    <string-array name="cat_alias_salad">
+        <item>沙拉</item><item>凉菜</item><item>凉拌</item>
+    </string-array>
+    <string-array name="cat_alias_dessert">
+        <item>甜点</item><item>甜品</item><item>糕点</item>
+    </string-array>
+    <string-array name="cat_alias_other">
+        <item>其他</item><item>其它</item><item>杂项</item>
+    </string-array>
+
+    <!-- Legacy/import meal words → the fixed meal-type keys (exact match, lower-case).
+         The keys themselves ("breakfast", "lunch", "snack", "dinner") need no entry. 中餐
+         deliberately stays out: it means "Chinese food", not midday. -->
+    <string-array name="mealtype_alias_breakfast">
+        <item>早餐</item><item>早饭</item><item>早点</item>
+    </string-array>
+    <string-array name="mealtype_alias_lunch">
+        <item>午餐</item><item>午饭</item><item>正午</item>
+    </string-array>
+    <string-array name="mealtype_alias_snack">
+        <item>加餐</item><item>点心</item><item>小吃</item><item>下午茶</item><item>零食</item><item>宵夜</item>
+    </string-array>
+    <string-array name="mealtype_alias_dinner">
+        <item>晚餐</item><item>晚饭</item><item>晚宴</item><item>正餐</item>
+    </string-array>
+
+    <!-- Language mechanics for ingredient matching. -->
+
+    <!-- Vague amounts ("适量", "一点") and leaked measure words, stripped before and after a
+         leading number. 卷 is deliberately absent: it would strip the 卷 from 卷心菜. -->
+    <string-array name="ingredient_leading_noise">
+        <item>适量</item><item>少许</item><item>少量</item><item>一点</item><item>一些</item>
+        <item>些许</item><item>若干</item><item>大约</item><item>大概</item><item>约</item>
+        <item>克</item><item>千克</item><item>毫克</item><item>公斤</item><item>毫升</item><item>升</item>
+        <item>汤匙</item><item>汤勺</item><item>大匙</item><item>大勺</item><item>茶匙</item>
+        <item>小匙</item><item>小勺</item><item>调羹</item><item>勺</item>
+        <item>个</item><item>只</item><item>条</item><item>根</item><item>片</item><item>块</item>
+        <item>瓣</item><item>颗</item><item>粒</item><item>棵</item><item>把</item><item>束</item>
+        <item>扎</item><item>串</item><item>支</item><item>张</item><item>团</item><item>朵</item>
+        <item>份</item><item>滴</item><item>撮</item>
+        <item>杯</item><item>碗</item><item>盒</item><item>瓶</item><item>袋</item><item>罐</item>
+        <item>斤</item><item>两</item>
+    </string-array>
+
+    <!-- Words opening a trailing *use* phrase: "油用于油炸" is still oil. -->
+    <string-array name="ingredient_use_phrases">
+        <item>用于</item><item>用来</item><item>用作</item>
+    </string-array>
+
+    <!-- Chinese builds no plural form — nothing to relate, so the list stays empty. -->
+    <string-array name="ingredient_plural_suffixes" />
+
+    <!-- Chinese compounds are head-FINAL (橄榄油's head is 油), like German/English — no
+         connectors. The matcher's empty-list branch is exactly right here. -->
+    <string-array name="ingredient_head_connectors" />
+
+    <!-- Same-product groups, "|"-separated. Kept short: a wrong entry merges two real
+         ingredients. -->
+    <string-array name="ingredient_synonyms">
+        <item>西红柿|番茄</item>
+        <item>香油|芝麻油|麻油</item>
+        <item>土豆|马铃薯|洋芋</item>
+        <item>卷心菜|圆白菜|包菜</item>
+        <item>香菜|芫荽</item>
+        <item>小葱|香葱|青葱</item>
+        <item>三文鱼|鲑鱼</item>
+        <item>金枪鱼|吞拿鱼</item>
+        <item>花椰菜|菜花</item>
+        <item>香菇|冬菇</item>
+        <item>木耳|黑木耳</item>
+        <item>酱油|生抽|老抽</item>
+        <item>淀粉|生粉</item>
+        <item>泡打粉|发酵粉</item>
+        <item>小苏打|苏打粉|碳酸氢钠</item>
+        <item>椰奶|椰浆</item>
+        <item>淡奶油|鲜奶油</item>
+    </string-array>
+
+    <!-- "Never the same" pairs, "|"-separated, exactly two per line. The bare staples 油/糖/醋
+         are compound heads (橄榄油 ends in 油), so every named variety has to be listed here or
+         the pantry row "oil" would satisfy a recipe calling for olive oil. -->
+    <string-array name="ingredient_distinctions">
+        <item>橄榄油|油</item>
+        <item>花生油|油</item>
+        <item>菜籽油|油</item>
+        <item>芝麻油|油</item>
+        <item>香油|油</item>
+        <item>麻油|油</item>
+        <item>椰子油|油</item>
+        <item>猪油|油</item>
+        <item>牛油|油</item>
+        <item>黄油|油</item>
+        <item>奶油|油</item>
+        <item>酱油|油</item>
+        <item>蚝油|油</item>
+        <item>红糖|糖</item>
+        <item>冰糖|糖</item>
+        <item>糖粉|糖</item>
+        <item>香草糖|糖</item>
+        <item>葡萄糖|糖</item>
+        <item>陈醋|醋</item>
+        <item>香醋|醋</item>
+        <item>米醋|醋</item>
+        <item>白醋|醋</item>
+        <item>椰奶|牛奶</item>
+        <item>豆奶|牛奶</item>
+        <item>杏仁奶|牛奶</item>
+        <item>羊奶|牛奶</item>
+        <item>矿泉水|水</item>
+        <item>苏打水|水</item>
+    </string-array>
+
+    <!-- Words that mark an hour / a minute in a typed or imported cooking time. Read only,
+         never written. Merged across all languages. -->
+    <string-array name="duration_hours">
+        <item>小时</item>
+        <item>钟头</item>
+        <item>时</item>
+    </string-array>
+    <string-array name="duration_minutes">
+        <item>分钟</item>
+        <item>分</item>
+    </string-array>
+</resources>
