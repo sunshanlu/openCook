@@ -144,6 +144,26 @@ def test_chinese_duration_words_resolve():
     assert _iso_duration("2小时", zh) == "PT120M"
 
 
+def test_space_less_cjk_compound_duration_keeps_its_hour():
+    """A Chinese time is one run of characters ("1小时30分钟"), not words split by spaces.
+
+    The unit matcher ended with \\b, which fails here: in Python's Unicode-aware re a digit
+    counts as a word character, so the "3" directly after 小时 killed the hour match and a
+    90-minute braise was stored as 30 minutes. The spaced form never showed it.
+    """
+    zh = load_i18n("zh")
+    assert _iso_duration("1小时30分钟", zh) == "PT90M"
+    assert _iso_duration("1 小时 30 分钟", zh) == "PT90M"  # spaced form keeps working
+    assert _iso_duration("45分钟", zh) == "PT45M"
+    assert _iso_duration("2小时", zh) == "PT120M"
+    assert _iso_duration("1小时即可", zh) == "PT60M"  # glued to following prose
+
+    # The boundary the guard exists for still holds: a Latin word is not its leading letter.
+    de = load_i18n("de")
+    assert _iso_duration("10 Hähnchen", de) is None
+    assert _iso_duration("200 ml", de) is None
+
+
 def test_prompt_unit_example_is_language_neutral():
     old_english_only = "(g, kg, ml, l, tbsp, tsp, cup, can, package, slice, clove, pinch, oz, lb)"
     for lang in ("en", "zh"):
