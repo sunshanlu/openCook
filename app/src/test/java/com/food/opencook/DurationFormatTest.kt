@@ -165,4 +165,15 @@ class DurationFormatTest {
         assertEquals(emptyList<Pair<String, Int>>(), found("200 ml Milch und 4 Hähnchenschenkel"))
         assertEquals(emptyList<Pair<String, Int>>(), found("Bei 180 Grad backen."))
     }
+
+    /** A CJK unit may be followed immediately by Han text ("10分钟即可") — Han is a letter to
+     *  Unicode, but the word-boundary guard must not reject it. Latin words still do. */
+    @Test
+    fun cjkDurationFollowedByHanTextIsFound() {
+        DurationFormat.setUnits(hourWords + "小时", minuteWords + "分钟")
+        assertEquals(listOf("10分钟" to 600), found("10分钟即可"))
+        assertEquals(listOf("1小时30分钟" to 5400), found("1小时30分钟后加入"))
+        // The guard still rejects a unit embedded in a Latin word.
+        assertEquals(emptyList<Pair<String, Int>>(), found("200 ml Milch"))
+    }
 }

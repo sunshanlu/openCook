@@ -19,6 +19,7 @@
 package com.food.opencook.data.recipeimport
 
 import com.food.opencook.data.remote.dto.IngredientDto
+import com.food.opencook.util.Scripts
 
 /**
  * Best-effort parser for a free-text ingredient line ("600 g Hackfleisch, halb und halb",
@@ -106,24 +107,36 @@ object IngredientLineParser {
         return nn / dd
     }
 
-    /** Longest unit spelling we try to match, in whitespace-separated words ("c. à soupe"). */
-    private const val MAX_UNIT_WORDS = 3
+    /** Longest decoration a unit can carry in the text ("Zehe/n", "Stk.", "Ei(er)"). */
+    private const val UNIT_DECORATION_CHARS = 11
 
     /**
-     * Split "<unit> <name>"; unit only when the leading token(s) form a known one.
-     * Longest match first: French measures are usually several words ("c. à soupe",
-     * "cuillère à café"), so a single-token test would leave them in the name.
-     * A unit is only taken when something is left over to be the ingredient name.
+     * Split "<unit><name>"; a unit is taken only when a non-blank name is left over.
+     *
+     * The unit is found by **prefix-matching the known unit list**, not by splitting on
+     * whitespace — so a unit glued to a CJK name ("600克面粉" → "克" + "面粉") resolves, and
+     * French multi-word units ("c. à soupe") still match because the whole prefix is compared.
+     * The prefix scan tries every length, so a unit carrying a plural/abbreviation decoration
+     * ("Zehe/n", "Stk.") is matched with the decoration included. A prefix only counts as a
+     * unit when what follows is a word boundary: end of string, whitespace (Latin languages), or
+     * a CJK character (a name glued directly on, no space).
      */
     private fun splitUnit(rest: String): Pair<String?, String> {
         if (rest.isBlank()) return null to rest
-        val parts = rest.trim().split(Regex("\\s+"))
-        for (n in minOf(MAX_UNIT_WORDS, parts.size - 1) downTo 1) {
-            val candidate = parts.take(n).joinToString(" ")
-            val norm = candidate.lowercase()
-                .removeSuffix(".").removeSuffix("/n").removeSuffix("(n)").removeSuffix("(en)").removeSuffix(".")
-            if (norm in UNITS) return candidate to parts.drop(n).joinToString(" ")
+        val cap = minOf(rest.length, (UNITS.maxOfOrNull { it.length } ?: 0) + UNIT_DECORATION_CHARS)
+        for (n in 1..cap) {
+            val candidate = rest.substring(0, n)
+            if (normalizeUnit(candidate) !in UNITS) continue
+            val after = rest.getOrNull(n)
+            val boundary = after == null || after.isWhitespace() || Scripts.isCjk(after)
+            if (!boundary) continue
+            val name = rest.substring(n).trim()
+            if (name.isNotEmpty()) return candidate to name
         }
         return null to rest
     }
+
+    /** The unit spelling as the unit list stores it: lower-case, without an attached plural form. */
+    private fun normalizeUnit(candidate: String): String = candidate.lowercase()
+        .removeSuffix(".").removeSuffix("/n").removeSuffix("(n)").removeSuffix("(en)").removeSuffix(".")
 }
