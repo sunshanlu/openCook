@@ -197,6 +197,60 @@ class ChineseMatchingTest {
         assertEquals("一些糖", b.name)
     }
 
+    /**
+     * A leading numeral character alone is not a quantity: Chinese puts a measure word between a
+     * numeral and its noun (两个鸡蛋), so in these single nouns the numeral is a morpheme, not a
+     * count. Without the unit requirement 三文鱼 would parse as 3 文鱼 and drop out of its aisle.
+     */
+    @Test
+    fun numeralHeadedNounsAreNotQuantities() {
+        listOf("三文鱼", "五花肉", "五香粉", "四季豆", "三明治", "八宝粥", "二锅头").forEach { word ->
+            val i = p(word)
+            assertNull("$word must not be read as a quantity", i.quantity)
+            assertNull("$word must not split off a unit", i.unit)
+            assertEquals(word, i.name)
+        }
+    }
+
+    /** The positive half: a numeral directly before a known measure word *is* a quantity. */
+    @Test
+    fun numeralBeforeAMeasureWordIsAQuantity() {
+        val egg = p("两个鸡蛋")
+        assertEquals(2.0, egg.quantity!!, 1e-9)
+        assertEquals("个", egg.unit)
+        assertEquals("鸡蛋", egg.name)
+
+        val pork = p("半斤五花肉")
+        assertEquals(0.5, pork.quantity!!, 1e-9)
+        assertEquals("斤", pork.unit)
+        assertEquals("五花肉", pork.name)
+
+        // A bare "一斤" still reads the 1; with no name after the unit it stays in the name.
+        val jin = p("一斤")
+        assertEquals(1.0, jin.quantity!!, 1e-9)
+        assertNull(jin.unit)
+        assertEquals("斤", jin.name)
+
+        val potato = p("一斤土豆")
+        assertEquals(1.0, potato.quantity!!, 1e-9)
+        assertEquals("斤", potato.unit)
+        assertEquals("土豆", potato.name)
+
+        val onion = p("三根葱")
+        assertEquals(3.0, onion.quantity!!, 1e-9)
+        assertEquals("根", onion.unit)
+        assertEquals("葱", onion.name)
+
+        // The vague-quantifier guard stays: 一 before 点/些 is a morpheme, not a count.
+        val salt = p("一点盐")
+        assertNull(salt.quantity)
+        assertEquals("一点盐", salt.name)
+
+        val sugar = p("一些糖")
+        assertNull(sugar.quantity)
+        assertEquals("一些糖", sugar.name)
+    }
+
     @Test
     fun fullWidthDigitsParseFromALine() {
         val i = p("６００克面粉")

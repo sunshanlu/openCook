@@ -19,27 +19,27 @@
 package com.food.opencook.util
 
 /**
- * Script-aware predicates for languages written **without word spaces** (Chinese, Japanese,
- * Korean). The parser's word-boundary assumptions hold for Latin/Germanic languages; CJK text
+ * Script-aware predicates for languages written **without word spaces** (Chinese, Japanese).
+ * The parser's word-boundary assumptions hold for Latin/Germanic languages; Han and kana text
  * instead glues unit, number and name into one solid run ("600克面粉"). These helpers let each
- * such assumption relax *only* where CJK characters are actually present, so English, German and
- * French behaviour is byte-for-byte unchanged.
+ * such assumption relax *only* where these characters are actually present, so English, German
+ * and French behaviour is byte-for-byte unchanged. Korean is deliberately excluded: it writes
+ * words with spaces, so relaxing a boundary at a space would misfire there.
  */
 object Scripts {
 
     /**
-     * The CJK script classes as a regex character-class body, for embedding in `[...]`:
-     * `[$CJK_REGEX_CLASS]` matches one CJK letter. Han covers Chinese (and Japanese kanji),
-     * Hiragana/Katakana Japanese kana, Hangul Korean.
+     * The space-less CJK script classes as a regex character-class body, for embedding in `[...]`:
+     * `[$CJK_REGEX_CLASS]` matches one such letter. Han covers Chinese (and Japanese kanji),
+     * Hiragana/Katakana Japanese kana. Hangul is excluded — Korean uses word spaces.
      */
-    const val CJK_REGEX_CLASS = """\p{IsHan}\p{IsHiragana}\p{IsKatakana}\p{IsHangul}"""
+    const val CJK_REGEX_CLASS = """\p{IsHan}\p{IsHiragana}\p{IsKatakana}"""
 
-    /** True if [c] belongs to a CJK script. */
+    /** True if [c] belongs to a space-less CJK script (Han, Hiragana, Katakana). */
     fun isCjk(c: Char): Boolean = when (Character.UnicodeScript.of(c.code)) {
         Character.UnicodeScript.HAN,
         Character.UnicodeScript.HIRAGANA,
         Character.UnicodeScript.KATAKANA,
-        Character.UnicodeScript.HANGUL,
         -> true
 
         else -> false

@@ -43,9 +43,10 @@ object Numbers {
             "(?:一(?!点|些|起)|[二两三四五六七八九十]|半)" +
             "(?![零一二三四五六七八九十百千万亿两半])"
 
-    /** Value of a lone Chinese numeral token as matched by [CN_NUMERAL_REGEX] (半→0.5, 两→2,
-     *  一→1, 十→10). The vague-quantifier and compound guards live in the regex, so callers
-     *  must only pass a token that pattern accepted. */
+    /** Value of a lone Chinese numeral token (半→0.5, 两→2, 一→1, 十→10), or null for anything
+     *  else. Since this is an exact whole-token lookup it can never read a numeral out of a
+     *  longer word (三文鱼 → null), and the compound/vague forms [CN_NUMERAL_REGEX] rejects
+     *  (二十三, 一点) fall out here too. */
     fun chineseNumeralValue(token: String): Double? = when (token.trim()) {
         "半" -> 0.5
         "一" -> 1.0
@@ -82,14 +83,16 @@ object Numbers {
         }
     }
 
-    /** Parse a quantity from text ("400", "1,5", "1.5 ", "两个", "半斤"）→ 400.0 / 1.5 / 2.0 /
-     *  0.5; null if none. Full-width digits normalize first, and Chinese numerals are read by
-     *  [chineseNumeralValue] — see [CN_NUMERAL_REGEX] for the vague-quantifier guard. */
-    fun parseQuantity(text: String?): Double? =
-        text
-            ?.let { normalizeFullWidth(it).trim().replace(',', '.') }
-            ?.let { Regex("""-?\d+(\.\d+)?|$CN_NUMERAL_REGEX""").find(it) }
-            ?.let { m -> m.value.toDoubleOrNull() ?: chineseNumeralValue(m.value) }
+    /** Parse a quantity from text ("400", "1,5", "1.5 " → 400.0 / 1.5 / 1.5); null if none.
+     *  Full-width digits normalize first. A Chinese numeral is accepted **only as the whole
+     *  trimmed input** ("三" → 3, "半" → 0.5): inside a longer word the numeral character is a
+     *  noun morpheme, so 三文鱼 is salmon and must not be read as 3 文鱼. ASCII digits may still
+     *  sit in a larger string ("400 g"), since a digit run is unambiguous. */
+    fun parseQuantity(text: String?): Double? {
+        val t = text?.let { normalizeFullWidth(it).trim().replace(',', '.') } ?: return null
+        chineseNumeralValue(t)?.let { return it }
+        return Regex("""-?\d+(\.\d+)?""").find(t)?.value?.toDoubleOrNull()
+    }
 
     /** Render a quantity without a trailing ".0" (400.0 → "400", 1.5 → "1.5"). */
     fun formatQuantity(value: Double?): String? {

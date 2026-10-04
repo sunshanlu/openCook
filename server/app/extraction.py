@@ -144,6 +144,12 @@ def _smart_resize(img: Image.Image, long_side: int = SENT_LONG_SIDE) -> Image.Im
 # word character — so `\b` fails, the hour alternative never matches, and a 90-minute braise is
 # silently stored as 30 minutes. End the unit on "not followed by a non-CJK letter" instead:
 # CJK text glues its words together, so the character after a unit there starts a new word.
+#
+# Cross-language twin: app/src/main/java/com/food/opencook/util/DurationFormat.kt defines the
+# same boundary as WORD_BOUNDARY, and its CJK side comes from util/Scripts.kt
+# (CJK_REGEX_CLASS = Han/Hiragana/Katakana). There the rule is "a non-CJK *letter* disqualifies";
+# here it is the equivalent positive list of Latin/Greek/Cyrillic ranges below. The two cannot
+# share code across languages, so keep them in agreement whenever either's script set changes.
 _NON_CJK_LETTER = (
     "A-Za-z"
     "À-ÖØ-öø-ɏ"  # Latin-1 Supplement, Latin Extended-A/B

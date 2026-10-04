@@ -36,16 +36,26 @@ class NumbersTest {
         assertNull(Numbers.parseQuantity(null))
     }
 
-    /** Chinese numerals are read one character at a time: 半 = 0.5, 两 = 2, 十 = 10, 一 = 1.
-     *  A vague quantifier must NOT yield a quantity — quantity extraction runs before noise
-     *  stripping, so a naive 一→1 would make "一点盐" become "1 salt", worse than not parsing. */
+    /** A Chinese numeral is a quantity only as the **whole** token: 半 = 0.5, 两 = 2, 十 = 10,
+     *  一 = 1. Embedded in a longer word it is a noun morpheme, never a count — 三文鱼 is salmon,
+     *  not 3 文鱼. A vague quantifier must NOT yield a quantity either; quantity extraction runs
+     *  before noise stripping, so a naive 一→1 would lock "一点盐" in as "1 salt". */
     @Test
     fun parseQuantityReadsChineseNumeralsAndFullWidthDigits() {
+        assertEquals(3.0, Numbers.parseQuantity("三")!!, 0.001)
+        assertEquals(2.0, Numbers.parseQuantity("两")!!, 0.001)
+        assertEquals(0.5, Numbers.parseQuantity("半")!!, 0.001)
+        assertEquals(1.0, Numbers.parseQuantity("一")!!, 0.001)
+        assertEquals(10.0, Numbers.parseQuantity("十")!!, 0.001)
+
+        // Digits may still sit inside a larger string ("400 g"); only Chinese numerals are
+        // whole-token, because a numeral character inside a word is a morpheme (三文鱼, 五花肉).
         assertEquals(600.0, Numbers.parseQuantity("600克面粉")!!, 0.001)
-        assertEquals(2.0, Numbers.parseQuantity("两个鸡蛋")!!, 0.001)
-        assertEquals(0.5, Numbers.parseQuantity("半斤五花肉")!!, 0.001)
-        assertEquals(1.0, Numbers.parseQuantity("一斤")!!, 0.001) // 一 alone is still one
-        assertEquals(10.0, Numbers.parseQuantity("十个")!!, 0.001)
+        assertNull(Numbers.parseQuantity("两个鸡蛋"))
+        assertNull(Numbers.parseQuantity("半斤五花肉"))
+        assertNull(Numbers.parseQuantity("一斤"))
+        assertNull(Numbers.parseQuantity("十个"))
+        assertNull(Numbers.parseQuantity("三文鱼"))
 
         // The trap: 一 is a morpheme in these fixed vague words, not the number one.
         assertNull(Numbers.parseQuantity("一点盐"))
@@ -56,8 +66,8 @@ class NumbersTest {
         assertNull(Numbers.parseQuantity("二十三"))
         assertNull(Numbers.parseQuantity("六百"))
 
-        // 一打 ("one dozen") is not expanded to 12 — 打 is a measure word, so only 一 → 1 is read.
-        assertEquals(1.0, Numbers.parseQuantity("一打")!!, 0.001)
+        // 一打 ("one dozen") is a word, not the lone numeral 一 — no quantity.
+        assertNull(Numbers.parseQuantity("一打"))
 
         // Full-width digits/punctuation normalize before parsing; parens fold to ASCII.
         assertEquals(600.0, Numbers.parseQuantity("６００")!!, 0.001)

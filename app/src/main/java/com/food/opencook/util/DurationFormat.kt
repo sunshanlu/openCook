@@ -110,7 +110,13 @@ object DurationFormat {
 
     /** A unit must end a word ("200 ml" is no minute, "10 Hähnchen" no hour) — but CJK text
      *  glues the next word straight on ("10分钟即可"), and Han is a Unicode letter, so only a
-     *  *non-CJK* letter disqualifies the match. */
+     *  *non-CJK* letter disqualifies the match.
+     *
+     *  Cross-language twin: `server/app/extraction.py`'s `_NON_CJK_LETTER` / `_WORD_END` encode
+     *  the same "a unit ends at the first non-CJK letter" boundary for the Python extraction
+     *  path (the CJK side there is "anything the positive list does not cover"). The two cannot
+     *  share code across languages, so keep them in agreement whenever either's script set
+     *  changes. */
     private val WORD_BOUNDARY = """(?![\p{L}&&[^${Scripts.CJK_REGEX_CLASS}]])"""
 
     /** One cooking time found in a text by [findIn]: where it sits, and how long it is. */

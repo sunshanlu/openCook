@@ -52,9 +52,17 @@ object IngredientLineParser {
     @Volatile
     private var UNITS: Set<String> = DEFAULT_UNITS_DE
 
+    /** Leading-quantity matcher; rebuilt by [setUnits] because its Chinese branch is compiled
+     *  from the active unit list — see [buildLeadingQty]. */
+    @Volatile
+    private var LEADING_QTY: Regex = buildLeadingQty(UNITS)
+
     /** Replace the recognized units (called by `LocalizedLists` on language change). */
     fun setUnits(units: Set<String>) {
-        if (units.isNotEmpty()) UNITS = units
+        if (units.isNotEmpty()) {
+            UNITS = units
+            LEADING_QTY = buildLeadingQty(units)
+        }
     }
 
     /** Active units — exposed so tests can snapshot and restore around [setUnits]. */
@@ -65,12 +73,31 @@ object IngredientLineParser {
         '⅛' to 0.125, '⅜' to 0.375, '⅝' to 0.625, '⅞' to 0.875,
     )
 
-    // A leading Chinese numeral (half/两/一–十; see Numbers.CN_NUMERAL_REGEX for the guard that
-    // keeps 一点/一些 from being read as 1) | "1 1/2" (mixed) | "1/2" (fraction) |
-    // "1,5"/"1.5"/"600" with optional "2-3" range.
-    private val LEADING_QTY = Regex(
-        """^(${Numbers.CN_NUMERAL_REGEX}|\d+\s+\d+/\d+|\d+/\d+|\d+(?:[.,]\d+)?(?:\s*[-–]\s*\d+(?:[.,]\d+)?)?)\s*""",
-    )
+    /**
+     * Leading quantity at the start of an ingredient line:
+     *  - a Chinese numeral, but **only when immediately followed by a known unit**. Chinese needs
+     *    a measure word between a numeral and its noun (两个鸡蛋 = "two 个 eggs"), so requiring the
+     *    unit is what keeps a numeral-headed *noun* from reading as a count: 三文鱼 is salmon, never
+     *    3 文鱼. The vague-quantifier guard (一点/一些/一起) stays inside [Numbers.CN_NUMERAL_REGEX]
+     *    as a second defence.
+     *  - "1 1/2" (mixed) | "1/2" (fraction) | "1,5"/"600" with optional "2-3" range.
+     *
+     * The Chinese branch is compiled from the active [units], so this is rebuilt by [setUnits].
+     * When that list holds no units, the branch is built to match nothing *deliberately*: with no
+     * measure word available there is nothing a numeral could be a quantity of, and reading one
+     * anyway is the bug this guards. Before `LocalizedLists` installs Chinese units the default
+     * Latin list applies and likewise contains none, so Chinese lines keep their whole name.
+     */
+    private fun buildLeadingQty(units: Set<String>): Regex {
+        val unitAlt = units.filter { it.isNotBlank() }
+            .sortedByDescending { it.length }
+            .joinToString("|") { Regex.escape(it) }
+        // `(?!x)x` can never match, so `^(cn|…)` behaves as if the branch were absent.
+        val cnNumeral = if (unitAlt.isEmpty()) "(?!x)x" else "${Numbers.CN_NUMERAL_REGEX}(?=$unitAlt)"
+        return Regex(
+            """^($cnNumeral|\d+\s+\d+/\d+|\d+/\d+|\d+(?:[.,]\d+)?(?:\s*[-–]\s*\d+(?:[.,]\d+)?)?)\s*""",
+        )
+    }
 
     fun parse(raw: String): IngredientDto {
         val s = Numbers.normalizeFullWidth(raw).trim()
@@ -113,7 +140,13 @@ object IngredientLineParser {
         return nn / dd
     }
 
-    /** Longest decoration a unit can carry in the text ("Zehe/n", "Stk.", "Ei(er)"). */
+    /**
+     * Longest decoration a unit can carry in the text, in characters. [normalizeUnit] strips
+     * decorations by chained suffix removal, and the longest run those five calls can strip is
+     * ".(en)(n)/n." = 11 chars (final "." 1, "(en)" 4, "(n)" 3, "/n" 2, leading "." 1). The
+     * prefix scan adds this to the longest known unit, so a decorated spelling ("Zehe/n", "Stk.")
+     * is never truncated short of the real unit. Re-derive if [normalizeUnit]'s suffix set changes.
+     */
     private const val UNIT_DECORATION_CHARS = 11
 
     /**
