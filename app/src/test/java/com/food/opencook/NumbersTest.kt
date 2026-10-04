@@ -50,6 +50,14 @@ class NumbersTest {
         assertEquals("1 Bund Basilikum", Numbers.displayIngredient(1.0, "Bund", "Basilikum"))
     }
 
+    /** A CJK amount reads without intervening spaces; Latin amounts keep them. */
+    @Test
+    fun displayIngredientOmitsSpacesForCjk() {
+        assertEquals("200克面粉", Numbers.displayIngredient(200.0, "克", "面粉"))
+        assertEquals("1个鸡蛋", Numbers.displayIngredient(1.0, "个", "鸡蛋"))
+        assertEquals("400 g Nudeln", Numbers.displayIngredient(400.0, "g", "Nudeln"))
+    }
+
     @Test
     fun scaleForHouseholdSize() {
         assertEquals(2.0, Numbers.scaleFor(servings = 2, target = 4), 0.001) // 2-portion recipe for 4

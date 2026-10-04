@@ -100,13 +100,18 @@ object DurationFormat {
         val num = """\d+(?:[.,]\d+)?"""
         val gap = """[\s  ]*"""
         val range = """(?:$gap[-–]$gap$num)?"""
-        val h = """(?:${alt(hourWords)})(?!\p{L})"""
-        val m = """(?:${alt(minuteWords)})(?!\p{L})"""
+        val h = """(?:${alt(hourWords)})$WORD_BOUNDARY"""
+        val m = """(?:${alt(minuteWords)})$WORD_BOUNDARY"""
         return Regex(
             """(?<![\d.,])(?:($num)$range$gap$h(?:\.?$gap($num)$gap$m)?|($num)$range$gap$m)""",
             RegexOption.IGNORE_CASE,
         )
     }
+
+    /** A unit must end a word ("200 ml" is no minute, "10 Hähnchen" no hour) — but CJK text
+     *  glues the next word straight on ("10分钟即可"), and Han is a Unicode letter, so only a
+     *  *non-CJK* letter disqualifies the match. */
+    private val WORD_BOUNDARY = """(?![\p{L}&&[^${Scripts.CJK_REGEX_CLASS}]])"""
 
     /** One cooking time found in a text by [findIn]: where it sits, and how long it is. */
     data class TextDuration(val range: IntRange, val seconds: Int)

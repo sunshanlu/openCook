@@ -35,10 +35,17 @@ object Numbers {
         return if (value % 1.0 == 0.0) value.toLong().toString() else value.toString()
     }
 
-    /** "400 g Nudeln" / "1 Bund Basilikum" / "Salz" — display join of quantity+unit+name. */
-    fun displayIngredient(quantity: Double?, unit: String?, name: String): String =
-        listOfNotNull(formatQuantity(quantity), unit?.takeIf { it.isNotBlank() }, name.takeIf { it.isNotBlank() })
-            .joinToString(" ")
+    /** "400 g Nudeln" / "1 Bund Basilikum" / "Salz" — display join of quantity+unit+name.
+     *  A CJK amount renders solid ("200克面粉"), the way Chinese writes it — no word spaces. */
+    fun displayIngredient(quantity: Double?, unit: String?, name: String): String {
+        val parts = listOfNotNull(
+            formatQuantity(quantity),
+            unit?.takeIf { it.isNotBlank() },
+            name.takeIf { it.isNotBlank() },
+        )
+        val separator = if (parts.any { Scripts.containsCjk(it) }) "" else " "
+        return parts.joinToString(separator)
+    }
 
     /**
      * Factor to scale a recipe made for [servings] up/down to [target] people.

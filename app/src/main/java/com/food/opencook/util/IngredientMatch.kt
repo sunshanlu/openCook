@@ -41,8 +41,14 @@ object IngredientMatch {
 
     private const val MIN_STEM = 3
 
-    /** Quantity / prep note glued onto a name: "Mehl (ca. 200 g)" → "Mehl". */
-    private val PARENTHETICAL = Regex("""\s*\([^)]*\)""")
+    /** Minimum stem/head length for a CJK compound: one Han character is already a whole word. */
+    private const val MIN_STEM_CJK = 1
+
+    /** One CJK letter, as a regex class — used to relax word boundaries for CJK text. */
+    private val CJK = "[${Scripts.CJK_REGEX_CLASS}]"
+
+    /** Quantity / prep note glued onto a name: "Mehl (ca. 200 g)" → "Mehl", "面粉（中筋）" → "面粉". */
+    private val PARENTHETICAL = Regex("""\s*(?:\([^)]*\)|（[^）]*）)""")
 
     /** A leaked amount at the front: "3 Löffel Öl" → "Löffel Öl", "1/2 TL Salz" → "TL Salz". */
     private val LEADING_NUMBER =
@@ -119,10 +125,18 @@ object IngredientMatch {
             .joinToString("|") { Regex.escape(it) }
 
     private fun leadingRegex(words: Collection<String>): Regex? =
-        alternation(words).takeIf { it.isNotEmpty() }?.let { Regex("^($it)\\s+") }
+        alternation(words).takeIf { it.isNotEmpty() }?.let {
+            // Latin: the noise word is its own token ("etwas Öl"). CJK: it is glued to the noun
+            // ("一点盐"), so a following CJK character is enough of a boundary.
+            Regex("^(?:$it)\\s+|^(?:$it)(?=$CJK)")
+        }
 
     private fun trailingRegex(words: Collection<String>): Regex? =
-        alternation(words).takeIf { it.isNotEmpty() }?.let { Regex("\\s+($it)\\s+.*$") }
+        alternation(words).takeIf { it.isNotEmpty() }?.let {
+            // Latin: a whitespace-delimited use phrase ("Butter zum Anbraten"). CJK: glued on
+            // both sides ("油用于油炸"), so CJK neighbours count as boundaries too.
+            Regex("\\s+(?:$it)\\s+.*$|(?<=$CJK)(?:$it)(?=$CJK).*$")
+        }
 
     /** True if [a] and [b] refer to the same ingredient (see class doc for the layers). */
     fun matches(a: String, b: String): Boolean {
@@ -136,7 +150,9 @@ object IngredientMatch {
         // Compound-noun head: in German the right-most part is the head ("Weizen-mehl" → mehl).
         // Only conflate when that head is a staple — otherwise distinct products that merely
         // share a suffix ("Kichererbsen"/"Erbsen") would collapse together.
-        if (' ' in x || ' ' in y) return false
+        // A space means "a multi-word Latin phrase" ("sugar snap peas") — but CJK text may carry
+        // a space too ("橄榄 油"), and there the solid-compound head rule still applies.
+        if ((' ' in x && !Scripts.containsCjk(x)) || (' ' in y && !Scripts.containsCjk(y))) return false
         return (isCompoundHead(x, y) && IngredientStaples.isStapleWord(y)) ||
             (isCompoundHead(y, x) && IngredientStaples.isStapleWord(x))
     }
@@ -217,11 +233,16 @@ object IngredientMatch {
     private fun isPluralOf(whole: String, stem: String, suf: String): Boolean =
         whole.length - suf.length >= MIN_STEM && whole.endsWith(suf) && whole.dropLast(suf.length) == stem
 
-    /** True if [head] is the right-most component of compound [whole] ("Mehl" in "Weizenmehl"). */
-    private fun isCompoundHead(whole: String, head: String): Boolean =
-        head.length >= MIN_STEM &&
-            whole.length - head.length >= MIN_STEM &&
+    /** True if [head] is the right-most component of compound [whole] ("Mehl" in "Weizenmehl").
+     *  The minimum length is script-aware: one CJK character is a whole word ("油" in "橄榄油"),
+     *  while Latin keeps the three-character minimum that guards against "Ei"/"Eis". */
+    private fun isCompoundHead(whole: String, head: String): Boolean {
+        val headMin = if (Scripts.containsCjk(head)) MIN_STEM_CJK else MIN_STEM
+        val stemMin = if (Scripts.containsCjk(whole)) MIN_STEM_CJK else MIN_STEM
+        return head.length >= headMin &&
+            whole.length - head.length >= stemMin &&
             whole.endsWith(head)
+    }
 
     /** True if any element of [set] (treated as pantry-side) covers [name] (recipe-side). */
     fun containsLike(set: Collection<String>, name: String): Boolean = set.any { covers(it, name) }
