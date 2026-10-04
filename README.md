@@ -23,7 +23,7 @@ A recipe and meal-planning app that:
 * turns a **photo of a recipe into a ready-to-edit recipe** for you,
 * helps you **plan the week** and shop **once** for it,
 * lets the **whole family share** the same recipes, plan and list,
-* speaks **English, German and French**,
+* speaks **English, German, French and Simplified Chinese**,
 * is **open source** and free.
 
 # Features :sparkles:
