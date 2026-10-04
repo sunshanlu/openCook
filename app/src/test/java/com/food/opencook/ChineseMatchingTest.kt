@@ -169,6 +169,42 @@ class ChineseMatchingTest {
         assertFalse(IngredientMatch.matches("Reis", "Eis"))
     }
 
+    // --- Fix 5: Chinese numerals + full-width digits in a whole ingredient line ------------
+
+    @Test
+    fun chineseNumeralLineParses() {
+        val j = p("两个鸡蛋")
+        assertEquals(2.0, j.quantity!!, 1e-9)
+        assertEquals("个", j.unit)
+        assertEquals("鸡蛋", j.name)
+
+        val k = p("半斤五花肉")
+        assertEquals(0.5, k.quantity!!, 1e-9)
+        assertEquals("斤", k.unit)
+        assertEquals("五花肉", k.name)
+    }
+
+    @Test
+    fun vagueQuantifierYieldsNoQuantity() {
+        // Quantity extraction runs *before* noise stripping, so the guard must live in the
+        // numeral layer; otherwise "一点盐" would be locked in as "1 salt".
+        val a = p("一点盐")
+        assertNull(a.quantity)
+        assertEquals("一点盐", a.name)
+
+        val b = p("一些糖")
+        assertNull(b.quantity)
+        assertEquals("一些糖", b.name)
+    }
+
+    @Test
+    fun fullWidthDigitsParseFromALine() {
+        val i = p("６００克面粉")
+        assertEquals(600.0, i.quantity!!, 1e-9)
+        assertEquals("克", i.unit)
+        assertEquals("面粉", i.name)
+    }
+
     // --- Fix 6: full-width parentheses are stripped ---------------------------------------
 
     @Test

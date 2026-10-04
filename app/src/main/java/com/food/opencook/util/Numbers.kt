@@ -25,9 +25,71 @@ import com.food.opencook.R
 /** Helpers for the structured numeric quantities/servings. */
 object Numbers {
 
-    /** Parse a quantity from text ("400", "1,5", "1.5 ") → 400.0 / 1.5; null if none. */
+    /**
+     * A Chinese numeral that is a quantity **on its own**, as a regex fragment for embedding in
+     * a larger alternation. Supported: the single-value numerals 一/二/两/三/…/十, plus 半 (0.5).
+     * Two exclusions, both because a half-read number is worse than none:
+     *
+     *  - `一` is a morpheme, not the number one, in the fixed vague quantifiers 一点/一些/一起.
+     *    Quantity extraction runs *before* noise stripping, so without this guard "一点盐"
+     *    would be locked in as "1 salt". `一斤` still matches — the exclusion is those specific
+     *    words, not `一` generally.
+     *  - Compound / place-value numerals (二十三, 六百) are deliberately unimplemented: a
+     *    sequence that touches another numeral or place character (十百千万亿两半) is rejected
+     *    whole, so `二十三` yields **no** quantity rather than a wrong 2 or 3.
+     */
+    const val CN_NUMERAL_REGEX: String =
+        "(?<![零一二三四五六七八九十百千万亿两半])" +
+            "(?:一(?!点|些|起)|[二两三四五六七八九十]|半)" +
+            "(?![零一二三四五六七八九十百千万亿两半])"
+
+    /** Value of a lone Chinese numeral token as matched by [CN_NUMERAL_REGEX] (半→0.5, 两→2,
+     *  一→1, 十→10). The vague-quantifier and compound guards live in the regex, so callers
+     *  must only pass a token that pattern accepted. */
+    fun chineseNumeralValue(token: String): Double? = when (token.trim()) {
+        "半" -> 0.5
+        "一" -> 1.0
+        "二", "两" -> 2.0
+        "三" -> 3.0
+        "四" -> 4.0
+        "五" -> 5.0
+        "六" -> 6.0
+        "七" -> 7.0
+        "八" -> 8.0
+        "九" -> 9.0
+        "十" -> 10.0
+        else -> null
+    }
+
+    /**
+     * Fold the ASCII-compatible full-width block (U+FF01–U+FF5E) to ASCII — digits `６００` →
+     * `600`, comma `，` → `,`, parens `（）` → `()`, plus the ideographic space. CJK recipes
+     * often arrive with full-width characters; normalizing before parsing lets the number regex
+     * and the unit split see the same shapes they already understand.
+     */
+    fun normalizeFullWidth(text: String): String {
+        if (text.none { it.code in 0xFF01..0xFF5E || it == '　' }) return text
+        return buildString(text.length) {
+            for (c in text) {
+                append(
+                    when {
+                        c.code in 0xFF01..0xFF5E -> (c.code - 0xFEE0).toChar()
+                        c == '　' -> ' '
+                        else -> c
+                    },
+                )
+            }
+        }
+    }
+
+    /** Parse a quantity from text ("400", "1,5", "1.5 ", "两个", "半斤"）→ 400.0 / 1.5 / 2.0 /
+     *  0.5; null if none. Full-width digits normalize first, and Chinese numerals are read by
+     *  [chineseNumeralValue] — see [CN_NUMERAL_REGEX] for the vague-quantifier guard. */
     fun parseQuantity(text: String?): Double? =
-        text?.trim()?.replace(',', '.')?.let { Regex("""-?\d+(\.\d+)?""").find(it)?.value?.toDoubleOrNull() }
+        text
+            ?.let { normalizeFullWidth(it).trim().replace(',', '.') }
+            ?.let { Regex("""-?\d+(\.\d+)?|$CN_NUMERAL_REGEX""").find(it) }
+            ?.let { m -> m.value.toDoubleOrNull() ?: chineseNumeralValue(m.value) }
 
     /** Render a quantity without a trailing ".0" (400.0 → "400", 1.5 → "1.5"). */
     fun formatQuantity(value: Double?): String? {

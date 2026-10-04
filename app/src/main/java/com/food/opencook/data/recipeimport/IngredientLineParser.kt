@@ -19,6 +19,7 @@
 package com.food.opencook.data.recipeimport
 
 import com.food.opencook.data.remote.dto.IngredientDto
+import com.food.opencook.util.Numbers
 import com.food.opencook.util.Scripts
 
 /**
@@ -64,14 +65,16 @@ object IngredientLineParser {
         '⅛' to 0.125, '⅜' to 0.375, '⅝' to 0.625, '⅞' to 0.875,
     )
 
-    // "1 1/2" (mixed) | "1/2" (fraction) | "1,5"/"1.5"/"600" with optional "2-3" range.
+    // A leading Chinese numeral (half/两/一–十; see Numbers.CN_NUMERAL_REGEX for the guard that
+    // keeps 一点/一些 from being read as 1) | "1 1/2" (mixed) | "1/2" (fraction) |
+    // "1,5"/"1.5"/"600" with optional "2-3" range.
     private val LEADING_QTY = Regex(
-        """^(\d+\s+\d+/\d+|\d+/\d+|\d+(?:[.,]\d+)?(?:\s*[-–]\s*\d+(?:[.,]\d+)?)?)\s*""",
+        """^(${Numbers.CN_NUMERAL_REGEX}|\d+\s+\d+/\d+|\d+/\d+|\d+(?:[.,]\d+)?(?:\s*[-–]\s*\d+(?:[.,]\d+)?)?)\s*""",
     )
 
     fun parse(raw: String): IngredientDto {
-        val s = raw.trim()
-        if (s.isEmpty()) return IngredientDto(null, null, raw.trim())
+        val s = Numbers.normalizeFullWidth(raw).trim()
+        if (s.isEmpty()) return IngredientDto(null, null, s)
 
         // Leading unicode fraction, e.g. "½ TL Salz".
         UNICODE_FRACTIONS[s.firstOrNull()]?.let { value ->
@@ -88,6 +91,9 @@ object IngredientLineParser {
 
     private fun parseQuantity(token: String): Double? {
         val t = token.trim()
+        // A Chinese numeral token (半 / 两 / 一–十) is read by the numeral layer, which owns the
+        // 一点/一些 guard; the ASCII branch below handles the rest.
+        Numbers.chineseNumeralValue(t)?.let { return it }
         return when {
             t.contains(' ') && t.contains('/') -> { // mixed "1 1/2"
                 val (whole, frac) = t.split(Regex("\\s+"), limit = 2)
