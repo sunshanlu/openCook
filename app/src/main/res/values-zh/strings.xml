@@ -1,0 +1,648 @@
+<!--
+  ~  openCook
+  ~  Copyright (C) 2026 olie.xdev <olie.xdeveloper@googlemail.com>
+  ~
+  ~  This program is free software: you can redistribute it and/or modify
+  ~  it under the terms of the GNU General Public License as published by
+  ~  the Free Software Foundation, either version 3 of the License, or
+  ~  (at your option) any later version.
+  ~
+  ~  This program is distributed in the hope that it will be useful,
+  ~  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  ~  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  ~  GNU General Public License for more details.
+  ~
+  ~  You should have received a copy of the GNU General Public License
+  ~  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+  -->
+
+<!-- Simplified Chinese (zh). Chinese has only the "other" plural form: <plurals> carry no
+     "one" item. Universal values (URLs, brand names, format-only strings) are kept verbatim
+     because they have no translation; nothing is left as copied English prose. -->
+<resources>
+    <string name="back">返回</string>
+
+    <!-- Bottom navigation -->
+    <string name="nav_recipes">菜谱</string>
+
+    <!-- Settings -->
+    <string name="settings_title">设置</string>
+    <string name="settings_server_url_label">服务器地址</string>
+    <string name="settings_server_url_placeholder">http://192.168.1.10:8000</string>
+    <string name="settings_household_hint">你的家庭会在所有设备间共享菜谱、购物清单和计划。</string>
+    <string name="settings_household_code_label">家庭代码</string>
+    <string name="settings_household_code_copied">代码已复制</string>
+    <string name="settings_sync_now">立即同步</string>
+    <string name="settings_save">保存</string>
+
+    <!-- Scan -->
+    <string name="scan_take_photo">拍照</string>
+    <string name="scan_pick_gallery">从相册选择</string>
+    <string name="scan_no_server_title">照片识别需要服务器</string>
+    <string name="scan_no_server">AI 在你的 openCook 服务器上运行。没有服务器时，你仍可手动添加菜谱或从文件导入。</string>
+    <string name="scan_tile_needs_server">需要服务器</string>
+    <string name="scan_tile_later">稍后识别</string>
+    <string name="scan_go_to_settings">前往设置</string>
+
+    <!-- Camera -->
+    <string name="camera_capture">拍摄</string>
+    <string name="camera_permission_rationale">拍照需要相机权限。你也可以改为从相册选择图片。</string>
+
+    <!-- Processing -->
+    <string name="processing_cancel">取消</string>
+
+    <!-- Review -->
+    <string name="review_title">审阅菜谱</string>
+    <string name="review_recipe_index">第 %1$d 道，共 %2$d 道</string>
+    <string name="review_name">标题</string>
+    <string name="review_servings">份数</string>
+    <string name="review_cookbook">菜谱集／合集</string>
+    <string name="review_category">分类</string>
+    <string name="review_prep_time">准备时间</string>
+    <string name="review_cook_time">烹饪时间</string>
+    <string name="review_ingredients">食材</string>
+    <string name="review_instructions">做法</string>
+    <string name="review_nutrition">营养</string>
+    <string name="review_notes">备注</string>
+    <string name="review_add_ingredient">添加食材</string>
+    <string name="review_add_step">添加步骤</string>
+    <string name="review_save">保存</string>
+    <string name="review_image_take">拍照</string>
+    <string name="review_image_gallery">相册</string>
+    <string name="review_image_rotate">旋转 90°</string>
+    <string name="review_image_crop">裁剪</string>
+    <string name="crop_apply">应用</string>
+    <string name="crop_cancel">取消</string>
+
+    <!-- Recipes -->
+    <string name="recipes_title">菜谱</string>
+    <string name="recipes_title_count">菜谱（%1$d）</string>
+    <string name="recipes_search_hint">搜索菜谱…</string>
+    <string name="recipes_filter_all">全部</string>
+    <string name="recipes_filter">筛选</string>
+    <string name="recipes_filter_title">筛选与排序</string>
+    <string name="recipes_filter_reset">重置</string>
+    <string name="recipes_sort">排序</string>
+    <string name="recipes_sort_newest">最新优先</string>
+    <string name="recipes_sort_name">按名称</string>
+    <string name="recipes_filter_liked">仅收藏</string>
+    <string name="recipes_filter_cookable">现在可做</string>
+    <string name="recipes_filter_remove">移除筛选 %1$s</string>
+    <string name="recipes_filter_status">状态</string>
+    <string name="recipes_filter_cooked_group">已烹饪</string>
+    <string name="recipes_filter_cooked">曾经做过</string>
+    <string name="recipes_filter_never_cooked">从未做过</string>
+    <string name="recipes_filter_stale">好久没做</string>
+    <string name="recipe_delete">删除</string>
+    <string name="recipe_edit">编辑</string>
+    <string name="recipe_like">已收藏</string>
+    <string name="recipe_cooked_mark">标记为已烹饪</string>
+    <string name="recipe_cooked_marked">今天已烹饪</string>
+    <string name="recipe_cooked_badge">已烹饪</string>
+    <string name="recipe_last_cooked_prefix">上次烹饪</string>
+    <string name="recipe_cooked_today">今天</string>
+    <string name="recipe_cooked_yesterday">昨天</string>
+    <plurals name="recipe_cooked_days_ago">
+        <item quantity="other">%1$d 天前</item>
+    </plurals>
+    <string name="recipe_cooked_week_ago">1 周前</string>
+    <plurals name="recipe_cooked_weeks_ago">
+        <item quantity="other">%1$d 周前</item>
+    </plurals>
+    <string name="recipe_liked_label">♥ 已收藏</string>
+    <string name="recipe_cook_moved">已将“%1$s”移至 %2$s</string>
+    <string name="recipe_cook_removed">已将“%1$s”从今天移除</string>
+    <plurals name="recipe_cooked_times">
+        <item quantity="other">已烹饪 %1$d 次</item>
+    </plurals>
+    <string name="recipe_cooked_last_short">上次 %1$s</string>
+
+    <!-- Retrospective ("what we've cooked"), reached from the top of the plan list -->
+    <string name="retrospect_title">回顾</string>
+    <string name="retrospect_entry_title">我们做过的菜</string>
+    <plurals name="retrospect_entry_subtitle">
+        <item quantity="other">%1$s：%2$d 餐</item>
+    </plurals>
+    <plurals name="retrospect_month_meals">
+        <item quantity="other">已烹饪 %1$d 餐</item>
+    </plurals>
+    <string name="retrospect_empty_title">还没有可回顾的内容</string>
+    <string name="retrospect_empty_message">当你把餐次标记为已烹饪后，它们会汇集在这里。</string>
+
+    <!-- Barcode scanning -->
+    <string name="barcode_scan_cd">扫描条形码</string>
+    <string name="barcode_hint">将条形码对准取景框</string>
+    <string name="barcode_found">已找到商品</string>
+    <string name="barcode_not_found">未找到 — 请输入名称</string>
+    <string name="barcode_name_label">商品名称</string>
+    <string name="barcode_code_label">条形码：%1$s</string>
+    <string name="barcode_add">添加</string>
+    <string name="barcode_rescan">重新扫描</string>
+
+    <!-- Status strip (running scans) -->
+    <string name="status_queued">排队中…</string>
+    <string name="stage_reading_text">正在读取菜谱文字…</string>
+    <string name="stage_detecting_photos">正在检测菜品照片…</string>
+    <string name="status_processing_generic">处理中…</string>
+    <string name="status_review_action">审阅</string>
+    <string name="status_dismiss">忽略</string>
+    <string name="status_cancel">取消</string>
+    <string name="status_retry">重试</string>
+    <string name="status_stage_with_queue">%1$s · 队列中 %2$d</string>
+    <string name="status_queued_only">队列中 %1$d…</string>
+    <plurals name="status_failed">
+        <item quantity="other">%1$d 次扫描失败</item>
+    </plurals>
+    <string name="status_added_one">已添加“%1$s”</string>
+    <string name="status_added_many">“%1$s”等 %2$d 个</string>
+
+    <!-- Shopping list -->
+    <string name="segment_shopping">购物清单</string>
+    <string name="segment_pantry">食材库存</string>
+    <string name="search">搜索</string>
+    <string name="search_close">关闭搜索</string>
+    <string name="search_clear">清除输入</string>
+    <string name="search_hint">搜索…</string>
+    <string name="search_no_results">无结果</string>
+    <string name="shopping_add_hint">添加条目…</string>
+    <string name="shopping_add">添加</string>
+    <string name="shopping_empty">购物清单是空的。添加条目，或拉入菜谱的食材。</string>
+    <string name="shopping_delete">移除</string>
+    <string name="shopping_all_bought_title">全部买齐 🎉</string>
+    <string name="shopping_all_bought_action">移入食材库存</string>
+    <string name="shopping_add_from_recipe">加入购物清单</string>
+    <string name="shopping_already_home">家里已有（→ 食材库存）</string>
+    <string name="shopping_moved_to_pantry">已移入食材库存</string>
+    <string name="shopping_skipped_chip">食材库存中已有 %1$d 项 — 已跳过</string>
+    <string name="shopping_need_anyway">仍然需要</string>
+    <string name="shopping_needed_for">用于：%1$s</string>
+    <string name="shopping_actions">操作</string>
+    <string name="swipe_to_pantry">食材库存</string>
+    <string name="swipe_to_shopping">购物清单</string>
+    <string name="shopping_nf_adapt">标记为完成</string>
+    <string name="shopping_adapted">已标记为完成</string>
+    <string name="scan_manual">手动创建</string>
+    <string name="recipe_add_to_plan">加入周计划</string>
+    <string name="recipe_plan_sheet_title">选择日期</string>
+    <string name="recipe_plan_added">已添加到 %1$s</string>
+    <string name="recipe_plan_replace_title">当天已有计划</string>
+    <string name="recipe_plan_replace_text">“%2$s”已安排在 %1$s。要用这道菜谱替换吗？</string>
+    <string name="recipe_plan_replace_confirm">替换</string>
+    <string name="recipe_plan_add_also">也添加</string>
+    <string name="recipe_timer_set">步骤 %1$d：已启动新的 %2$s 计时器</string>
+    <string name="recipe_timer_own">设置计时器</string>
+    <string name="recipe_tags_less">收起</string>
+    <string name="recipe_tags_more">还有 %1$d 个</string>
+    <string name="recipe_timer_label">步骤 %1$d · %2$s</string>
+    <string name="recipe_timer_open_clock">打开时钟</string>
+    <string name="recipe_timer_no_app">未找到带计时器的时钟应用</string>
+    <string name="recipe_plan_day_free">空闲</string>
+    <string name="wizard_step_of">第 %1$d 步，共 %2$d 步</string>
+    <string name="wizard_back">上一步</string>
+    <string name="wizard_next">下一步</string>
+    <string name="wizard_step_basics">图片与基本信息</string>
+    <string name="wizard_step_ingredients">食材</string>
+    <string name="wizard_step_steps">步骤</string>
+    <string name="wizard_step_details">可选</string>
+    <string name="wizard_step_summary">摘要</string>
+    <string name="wizard_name_required">请先输入标题。</string>
+    <string name="wizard_no_ingredients">还没有食材。点按“添加食材”。</string>
+    <string name="wizard_no_steps">还没有步骤。点按“添加步骤”。</string>
+    <string name="wizard_summary_servings">%1$s 人份</string>
+    <string name="wizard_summary_no_image">未选择图片。</string>
+    <string name="wizard_ingredient_qty">数量</string>
+    <string name="wizard_ingredient_unit">单位</string>
+    <string name="wizard_ingredient_name">食材</string>
+    <string name="wizard_step_move_up">上移</string>
+    <string name="wizard_step_move_down">下移</string>
+    <string name="wizard_time_none">未指定</string>
+    <string name="wizard_time_minutes">%1$d 分钟</string>
+    <string name="wizard_time_hour">%1$d 小时</string>
+    <string name="wizard_time_hour_minutes">%1$d 小时 %2$d 分钟</string>
+    <string name="wizard_nutrition_toggle">添加营养信息</string>
+    <string name="wizard_correction_suggest">你是说“%1$s”吗？</string>
+    <string name="wizard_correction_auto">已自动更正</string>
+
+    <!-- Pantry -->
+    <string name="pantry_add_hint">添加食材库存条目…</string>
+    <string name="pantry_empty">还没有食材库存。</string>
+    <string name="shopping_added">已加入购物清单</string>
+
+    <!-- Meal plan -->
+    <string name="mealplan_title">饮食计划</string>
+    <string name="mealplan_to_shopping">生成购物清单</string>
+    <string name="mealplan_pick_recipe">选择菜谱</string>
+    <string name="mealplan_suggestion">建议</string>
+    <string name="mealplan_swap_dish">换一道菜</string>
+    <string name="mealplan_pick_clear_filter">移除上方的筛选，即可从所有菜谱中选择。</string>
+    <string name="mealplan_no_recipes">还没有可计划的菜谱。</string>
+    <string name="mealplan_generated">食材已加入购物清单</string>
+    <string name="mealplan_day_not_planned">未计划</string>
+    <string name="mealplan_day_yesterday">昨天</string>
+    <string name="mealplan_day_today">今天</string>
+    <string name="mealplan_day_tomorrow">明天</string>
+    <string name="mealplan_week_last">上周</string>
+    <string name="mealplan_week_current">本周</string>
+    <string name="mealplan_week_next">下周</string>
+    <string name="mealplan_week_after_next">下下周</string>
+    <string name="mealplan_jump_today">今天</string>
+
+    <!-- Meal-planner reasons (why a dish was picked) -->
+    <string name="mealplan_reason_week_reuse">用完 %1$s</string>
+    <string name="mealplan_reason_pantry_reuse">来自食材库存：%1$s</string>
+    <string name="mealplan_reason_liked">已收藏</string>
+    <string name="mealplan_reason_quick_weekday">快捷（%1$s）</string>
+    <string name="mealplan_reason_big_batch_leftover">够吃两天</string>
+    <string name="mealplan_reason_new_ingredients">你还需要：%1$s</string>
+    <string name="mealplan_reason_recently_planned">最近计划过（%1$s）</string>
+    <string name="mealplan_reason_recently_cooked">最近做过（%1$s）</string>
+    <string name="mealplan_reason_same_category">与相邻一天相似（%1$s）</string>
+    <string name="mealplan_reason_monotony">本周已频繁出现：%1$s</string>
+    <string name="mealplan_reason_same_protein">与另一天主料相同：%1$s</string>
+    <!-- Display labels for the meal-planner main-protein groups (keys are fixed in code). -->
+    <string name="protein_label_poultry">禽肉</string>
+    <string name="protein_label_fish">鱼</string>
+    <string name="protein_label_mince">肉末</string>
+    <string name="protein_label_pork">猪肉</string>
+    <string name="protein_label_beef">牛肉</string>
+    <string name="protein_label_lamb">羊肉</string>
+    <string name="protein_label_plant">植物基</string>
+    <string name="mealplan_reasons_title">为什么推荐这道菜？</string>
+    <string name="mealplan_reasons_why">为什么？</string>
+    <string name="mealplan_reasons_section_for">推荐理由</string>
+    <string name="mealplan_reasons_section_against">不利因素</string>
+    <string name="mealplan_reasons_none">手动添加 — 无推荐理由。</string>
+
+    <!-- Settings: household size -->
+    <string name="settings_household_size_hint">计划供几人食用。数量较大时，规划器会建议次日吃剩菜。</string>
+    <string name="settings_household_size_label">人数</string>
+
+    <!-- Onboarding -->
+    <string name="onboarding_title">欢迎使用 openCook</string>
+    <string name="onboarding_subtitle">收集、计划并烹饪菜谱 — 离线且无需账号。</string>
+    <string name="onboarding_mode_step_title">你想如何使用 openCook？</string>
+    <string name="onboarding_mode_local_title">仅在这部手机上</string>
+    <string name="onboarding_mode_local_subtitle">菜谱、计划和购物清单都离线保存在此设备上。</string>
+    <string name="onboarding_mode_server_title">连接到家庭服务器</string>
+    <string name="onboarding_mode_server_subtitle">解锁照片扫描和家人同步（需要一台家庭服务器）。</string>
+    <string name="onboarding_mode_serverless_title">无服务器的家庭</string>
+    <string name="onboarding_mode_serverless_subtitle">手机之间通过你的 Wi-Fi 直接同步。之后可以再添加服务器。</string>
+    <string name="onboarding_peer_subtitle">此 Wi-Fi 上的手机</string>
+    <string name="onboarding_server_step_title">选择服务器</string>
+    <string name="onboarding_searching">正在搜索网络…</string>
+    <string name="onboarding_peers_step_title">通过一台已有该家庭的手机加入 — 或新建一个</string>
+    <string name="onboarding_peers_searching">正在查找此 Wi-Fi 上的手机…另一部手机必须打开 openCook。</string>
+    <string name="onboarding_peers_create_subtitle">从这部手机开始 — 其他手机稍后加入。</string>
+    <string name="onboarding_manual_toggle">手动输入服务器</string>
+    <string name="onboarding_manual_address_label">服务器地址</string>
+    <string name="onboarding_manual_address_placeholder">192.168.0.10:8000</string>
+    <string name="onboarding_connect">连接</string>
+    <string name="onboarding_household_step_title">选择家庭</string>
+    <string name="onboarding_no_households">还没有家庭 — 创建一个。</string>
+    <string name="onboarding_create_household">创建新家庭</string>
+    <string name="onboarding_persons">%1$d 人</string>
+    <string name="onboarding_protected">受 PIN 码保护</string>
+    <string name="onboarding_pin_prompt_title">“%1$s”的 PIN 码</string>
+    <string name="onboarding_pin_label">PIN 码</string>
+    <string name="onboarding_join">加入</string>
+    <string name="onboarding_cancel">取消</string>
+    <string name="onboarding_create_step_title">创建家庭</string>
+    <string name="onboarding_name_label">家庭名称</string>
+    <string name="onboarding_pin_optional_label">PIN 码（可选）</string>
+    <string name="onboarding_create">创建</string>
+    <string name="onboarding_back">返回</string>
+
+    <!-- Settings: household membership -->
+    <string name="settings_household_leave">离开／切换家庭</string>
+    <string name="settings_connect_server">连接到服务器</string>
+    <string name="settings_connect_server_hint">解锁照片扫描和家人同步 — 你的数据会被保留。</string>
+    <string name="settings_appearance_section">外观</string>
+    <string name="settings_dynamic_color">Material You（系统配色）</string>
+
+    <!-- Settings: grouped sections + admin -->
+    <string name="settings_household_section_label">家庭</string>
+    <string name="settings_server_label">服务器与连接</string>
+    <string name="settings_p2p_title">手机间同步</string>
+    <string name="settings_p2p_subtitle">通过 Wi-Fi 直接同步，即使应用已关闭</string>
+    <string name="standby_channel_name">家人同步待机</string>
+    <string name="standby_notification_title">家人可以联系到你</string>
+    <string name="standby_notification_text">家庭设备可以与此手机同步（仅限 Wi-Fi）。</string>
+    <string name="settings_attach_server">添加服务器</string>
+    <string name="settings_attach_server_hint">可选：照片扫描、备份和浏览器导入需要一台家庭服务器。</string>
+    <string name="settings_attach_server_action">添加服务器</string>
+
+    <!-- Admin area (server backup/restore) -->
+
+    <!-- Recipe JSON import (button on the add-recipe screen) -->
+    <string name="import_from_file">从文件导入</string>
+    <string name="import_running">正在导入菜谱…</string>
+    <string name="import_done">已导入 %1$d 个，跳过 %2$d 个</string>
+    <string name="import_error">导入失败：%1$s</string>
+    <string name="import_read_failed">无法读取该文件</string>
+    <string name="import_generic_failed">导入失败</string>
+
+    <!-- Browser-inbox import (recipes pushed by the extension, drained during sync) -->
+    <plurals name="import_browser_imported">
+        <item quantity="other">已从浏览器导入 %1$d 道菜谱</item>
+    </plurals>
+    <plurals name="import_browser_skipped">
+        <item quantity="other">已跳过 %1$d 个重复项</item>
+    </plurals>
+
+    <!-- Share import (Share → openCook): a recipe page URL shared from a browser -->
+    <string name="import_share_saved">已导入菜谱：%1$s</string>
+    <string name="import_share_view">查看</string>
+    <string name="import_share_duplicate">“%1$s”已存在</string>
+    <string name="import_share_no_recipe">此页面上未找到菜谱</string>
+    <string name="import_share_error_load">无法加载该页面。</string>
+    <string name="import_share_fallback_name">菜谱</string>
+
+    <string name="scan_discover">在线发现</string>
+    <string name="discover_title">发现菜谱</string>
+    <string name="discover_add">添加</string>
+    <string name="discover_remove">移除 %1$s</string>
+    <string name="discover_address_hint">allrecipes.com/recipes</string>
+    <string name="discover_removed">已移除“%1$s”</string>
+    <string name="discover_clear">删除 %1$s 的 Cookie</string>
+    <string name="discover_clear_confirm_title">删除 %1$s 的 Cookie？</string>
+    <string name="discover_clear_confirm_text">%1$s 会忘记这部手机：Cookie 和该站点在浏览器中存储的内容都会被删除，包括你在那里接受的 Cookie 提示 — 下次访问时会再次询问。你从 %1$s 导入的菜谱会留在你的菜谱集中。</string>
+    <string name="discover_cleared">已删除 %1$s 的 Cookie</string>
+    <string name="discover_import">导入这道菜谱</string>
+    <string name="discover_import_short">导入</string>
+    <string name="discover_close">关闭站点</string>
+    <string name="discover_disclaimer">内置浏览器视图：这些站点属于他人，有自己的广告和自己的 Cookie。openCook 与它们没有关联，只保存你打开的菜谱，供你个人使用。</string>
+    <string name="discover_no_webview_title">浏览器视图不可用</string>
+    <string name="discover_no_webview_body">此设备未安装或已停用 Android System WebView，因此无法在此显示页面。仍可通过照片、文件、分享的链接或手动方式添加菜谱。</string>
+
+    <!-- Home (Today) -->
+
+    <!-- Recipes list -->
+    <string name="recipes_add">添加菜谱</string>
+    <string name="recipes_empty_title">还没有菜谱</string>
+    <string name="recipes_empty_msg">添加或创建一道菜谱。</string>
+    <string name="recipes_search_empty_title">未找到</string>
+    <string name="recipes_search_empty_msg">换一个搜索词试试。</string>
+    <string name="review_remove">移除</string>
+
+    <!-- Confirmations -->
+    <string name="action_delete">删除</string>
+    <string name="recipe_delete_confirm_title">删除菜谱？</string>
+    <string name="recipe_delete_confirm_text">这道菜谱将被永久删除。</string>
+    <!-- Multi-select in the recipe list (long-press a card) -->
+    <string name="recipes_selected_of">已选 %1$d／%2$d</string>
+    <string name="recipes_select_all">全选</string>
+    <string name="recipes_selection_cancel">取消选择</string>
+    <string name="recipes_select_none">取消全选</string>
+    <plurals name="recipes_bulk_edit_title">
+        <item quantity="other">编辑 %1$d 道菜谱</item>
+    </plurals>
+    <string name="recipes_bulk_apply">应用</string>
+    <string name="recipes_bulk_mixed">混合</string>
+    <string name="recipes_bulk_no_cookbook">无菜谱集</string>
+    <string name="recipes_bulk_mealtypes_hint">点按某个餐次即可赋予全部菜谱，或全部取消。</string>
+    <plurals name="recipes_bulk_done">
+        <item quantity="other">已更新 %1$d 道菜谱</item>
+    </plurals>
+    <plurals name="recipes_delete_selected_title">
+        <item quantity="other">删除 %1$d 道菜谱？</item>
+    </plurals>
+    <plurals name="recipes_delete_selected_text">
+        <item quantity="other">这些菜谱将被永久删除。</item>
+    </plurals>
+    <string name="settings_leave_confirm_title">离开家庭？</string>
+    <string name="settings_leave_confirm_text">此设备将离开家庭并返回初次设置。共享数据会留在服务器上。</string>
+    <string name="undo">撤销</string>
+    <string name="deleted">已删除</string>
+
+    <!-- Sync status (shared top bar) -->
+    <string name="sync_status_ok">一切已同步</string>
+    <string name="sync_status_ok_peer">一切已同步（经由 %1$s）</string>
+    <string name="sync_status_not_configured">无服务器 — 点按进入设置</string>
+    <string name="sync_status_syncing">正在同步…</string>
+    <string name="sync_status_failed">未连接 — 点按同步</string>
+    <string name="sync_status_off_home_network">不在家庭网络 — 已暂停同步</string>
+    <string name="sync_status_household_missing">服务器上找不到该家庭 — 可能已重新设置。请在设置中重新加入。</string>
+    <string name="sync_error_offline">无法连接服务器 — 恢复后会自动重试。</string>
+    <string name="sync_error_off_home_network">同步仅在家庭 Wi-Fi（或 VPN）下有效 — 你回来后它会自行继续。</string>
+    <string name="sync_status_last_success">一切已同步 — 上次交换 %1$s</string>
+    <string name="sync_progress_recipes">正在同步菜谱 … %1$d</string>
+    <string name="sync_progress_images">正在加载图片 … %1$d / %2$d</string>
+    <string name="sync_progress_percent">%1$d %%</string>
+
+    <!-- Notifications -->
+    <string name="notif_channel_jobs_name">菜谱识别</string>
+    <string name="notif_channel_jobs_desc">扫描的菜谱识别完成后通知你。</string>
+    <string name="notif_recipe_ready_title">菜谱已识别</string>
+    <string name="notif_recipe_ready_body">点按审阅识别出的菜谱。</string>
+
+    <!-- Top-level navigation tabs -->
+    <string name="nav_plan">计划</string>
+    <string name="nav_shopping_short">购物</string>
+    <string name="nav_more">更多</string>
+
+    <!-- Nutrition labels -->
+    <string name="nutrition_protein">蛋白质</string>
+    <string name="nutrition_fat">脂肪</string>
+    <string name="nutrition_carbs">碳水化合物</string>
+    <string name="nutrition_calories_value">kcal：%1$s</string>
+    <string name="nutrition_protein_value">蛋白质：%1$s</string>
+    <string name="nutrition_fat_value">脂肪：%1$s</string>
+    <string name="nutrition_carbs_value">碳水化合物：%1$s</string>
+
+    <!-- Recipe meta line (servings · prep · cook) -->
+    <string name="recipe_meta_prep">准备 %1$s</string>
+    <string name="recipe_meta_cook">烹饪 %1$s</string>
+
+    <!-- Single-recipe export (detail screen share sheet) -->
+    <string name="recipe_export">导出</string>
+    <string name="recipe_export_title">导出菜谱</string>
+    <string name="recipe_export_markdown_title">Markdown（.md）</string>
+    <string name="recipe_export_markdown_desc">带内嵌照片的可读文本文件 — 适合 Obsidian 等笔记应用。</string>
+    <string name="recipe_export_json_title">菜谱文件（.json）</string>
+    <string name="recipe_export_json_desc">schema.org 格式 — openCook 及其他菜谱应用可读。</string>
+    <string name="recipe_export_done">菜谱已导出。</string>
+    <string name="recipe_export_failed">导出失败。</string>
+    <!-- Labels inside the exported Markdown document -->
+    <string name="recipe_export_md_servings">份数</string>
+    <string name="recipe_export_md_category">分类</string>
+    <string name="recipe_export_md_prep">准备</string>
+    <string name="recipe_export_md_cook">烹饪</string>
+    <string name="recipe_export_md_total">总计</string>
+    <string name="recipe_export_md_ingredients_for">食材（%1$s 人份）</string>
+    <string name="recipe_export_md_nutrient">营养成分</string>
+    <string name="recipe_export_md_value">数值</string>
+    <string name="recipe_export_md_calories">热量</string>
+    <string name="recipe_export_md_fiber">膳食纤维</string>
+    <string name="recipe_export_md_sugar">糖</string>
+    <string name="recipe_export_md_from_cookbook">来自“%1$s”</string>
+    <string name="recipe_export_md_footer">由 openCook 于 %1$s 导出</string>
+
+    <!-- Drag-to-recategorize (shopping list + pantry) -->
+    <string name="shopping_category_learned">%1$s → %2$s — 已为家庭记住</string>
+
+    <!-- Grocery aisles (shopping list grouping) -->
+    <string name="grocery_cat_produce">果蔬</string>
+    <string name="grocery_cat_meat_fish">肉类与海鲜</string>
+    <string name="grocery_cat_dairy">乳制品与蛋类</string>
+    <string name="grocery_cat_bakery">烘焙</string>
+    <string name="grocery_cat_frozen">冷冻</string>
+    <string name="grocery_cat_drinks">饮品</string>
+    <string name="grocery_cat_spices">香料、油与酱料</string>
+    <string name="grocery_cat_pantry">干货与粮油</string>
+    <string name="grocery_cat_other">其他</string>
+
+    <!-- Onboarding validation / connection errors -->
+    <string name="onboarding_error_invalid_address">地址无效</string>
+    <string name="onboarding_error_name_required">请输入名称</string>
+    <string name="onboarding_error_pin_wrong">PIN 码错误。</string>
+    <string name="onboarding_error_no_server">未选择服务器。</string>
+    <string name="onboarding_error_unreachable">无法连接服务器。</string>
+
+    <!-- Settings sync messages -->
+    <string name="settings_msg_size_update_failed">无法更新服务器 — 将在下次同步时重试。</string>
+    <string name="settings_msg_synced">已同步（收到 %1$d 项）</string>
+    <string name="settings_msg_server_attached">服务器已添加 — 正在将本家庭同步到该服务器</string>
+    <string name="settings_msg_attach_failed">无法连接该服务器</string>
+    <string name="settings_msg_no_household">无家庭 — 请先加入一个。</string>
+    <string name="settings_msg_household_missing">服务器上找不到该家庭 — 可能已重新设置。请重新加入。</string>
+    <string name="settings_msg_sync_failed">同步失败：%1$s</string>
+    <string name="settings_msg_sync_failed_generic">同步失败</string>
+
+    <!-- Admin error messages -->
+
+    <!-- Review save: duplicate-name feedback -->
+    <string name="review_conflict_title">“%1$s”已存在</string>
+    <string name="review_conflict_body_scan">你正在扫描的另一道菜谱也叫这个名字 — 很可能你把同一页拍了两次。</string>
+    <string name="review_conflict_body">另一道菜谱已使用此名称。</string>
+    <string name="review_conflict_replace">替换现有菜谱</string>
+    <string name="review_conflict_discard">丢弃这份草稿</string>
+    <string name="review_conflict_rename">重命名</string>
+    <string name="review_conflict_replaced">“%1$s”已合并到现有菜谱中。</string>
+    <string name="review_conflict_discarded">草稿已丢弃。</string>
+
+    <!-- Recipe content language (AI extraction, categories, grocery keywords) -->
+    <string name="settings_content_language">菜谱语言</string>
+    <string name="settings_content_language_hint">用于照片扫描、分类和购物清单分组的语言。</string>
+    <string name="settings_content_language_system">跟随系统</string>
+    <string name="lang_german">Deutsch</string>
+    <string name="lang_english">English</string>
+    <string name="lang_french">Français</string>
+    <string name="lang_chinese">中文</string>
+
+    <!-- Recipe categories (stored as keys, shown localized) -->
+    <string name="cat_pasta">面食</string>
+    <string name="cat_meat">肉类</string>
+    <string name="cat_fish">海鲜</string>
+    <string name="cat_soup">汤</string>
+    <string name="cat_vegetarian">素食</string>
+    <string name="cat_salad">沙拉</string>
+    <string name="cat_dessert">甜点</string>
+    <string name="cat_other">其他</string>
+
+    <!-- Tag editor (details step) -->
+    <string name="review_tags">标签</string>
+    <string name="review_tags_add_hint">添加标签（逗号分隔多个）</string>
+    <string name="review_tags_add">添加标签</string>
+    <string name="review_tag_remove">移除标签 %1$s</string>
+
+    <!-- Meal types ("suitable for", stored as keys, shown localized) -->
+    <string name="recipe_mealtypes_label">适合</string>
+    <string name="mealtype_breakfast">早餐</string>
+    <string name="mealtype_lunch">午餐</string>
+    <string name="mealtype_snack">加餐</string>
+    <string name="mealtype_dinner">晚餐</string>
+    <!-- Short forms for the meal-plan slot column (44dp) — the long labels don't fit there. -->
+    <string name="mealtype_short_breakfast">早餐</string>
+    <string name="mealtype_short_lunch">午餐</string>
+    <string name="mealtype_short_snack">加餐</string>
+    <string name="mealtype_short_dinner">晚餐</string>
+    <!-- Household setting: which meals are planned at all -->
+    <string name="household_planned_meals">计划的餐次</string>
+    <string name="household_planned_meals_hint">至少要保留一个餐次处于启用状态。</string>
+    <string name="household_multi_dish">每餐多道菜</string>
+    <!-- Week planner: slots -->
+    <string name="mealplan_slot_add">计划</string>
+    <string name="shopping_already_on_list">已在购物清单上 — 未添加</string>
+    <string name="mealplan_add_missing">将缺少的食材加入购物清单</string>
+    <string name="mealplan_slot_no_recipes">还没有 %1$s 菜谱</string>
+
+    <!-- Generic -->
+    <string name="action_ok">确定</string>
+
+    <!-- Ingredient availability badge -->
+    <string name="availability_ready">齐备</string>
+    <string name="availability_ready_desc">所有食材都有</string>
+    <string name="availability_missing_desc">缺少 %1$d 种食材</string>
+    <string name="availability_missing_title">缺少的食材</string>
+
+    <!-- Meal-plan recipe search -->
+    <string name="mealplan_search_empty_title">未找到</string>
+    <string name="mealplan_search_empty_message">换一个搜索词试试。</string>
+
+    <!-- Backup & restore (local, on-device) -->
+    <string name="settings_backup">备份与恢复</string>
+    <string name="settings_backup_subtitle">将菜谱保存到文件</string>
+    <string name="settings_backup_last">上次备份：%1$s</string>
+    <string name="backup_title">备份与恢复</string>
+    <string name="backup_intro">备份以可读的 ZIP 文件保存你的菜谱、照片、购物清单、食材库存和饮食计划。它不包含家庭代码，也不包含 PIN 码，因此你可以将它存放在任何地方，并恢复到任何家庭。</string>
+    <string name="backup_create">创建备份</string>
+    <string name="backup_create_hint">将 ZIP 文件写入你选择的位置</string>
+    <string name="backup_restore">恢复备份</string>
+    <string name="backup_restore_hint">将备份文件的内容重新添加回来</string>
+    <string name="backup_restore_action">恢复</string>
+    <string name="backup_restore_confirm_title">恢复此备份？</string>
+    <string name="backup_restore_confirm_summary">备份自 %1$s\n%2$d 道菜谱 · %3$d 张照片</string>
+    <string name="backup_restore_confirm_household">来自家庭：%1$s</string>
+    <string name="backup_restore_confirm_hint">不会删除任何内容。缺少的条目会被加回，备份后你创建的内容会保留。</string>
+    <string name="backup_export_done">备份已写入：%1$d 道菜谱，%2$d 张照片。</string>
+    <string name="backup_restore_done">已恢复：%1$d 道菜谱，%2$d 张照片。</string>
+    <string name="backup_not_readable_title">不是备份文件</string>
+    <string name="backup_not_readable_text">此文件不是 openCook 备份，或已损坏。</string>
+    <string name="backup_error_too_new">此备份由更新版本的 openCook 写入。请先更新应用。</string>
+    <string name="backup_error_unsafe">此文件看起来不安全，未打开。</string>
+    <string name="backup_error_generic">失败：%1$s</string>
+    <string name="backup_ok">确定</string>
+    <string name="backup_phase_recipes">正在保存菜谱…</string>
+    <string name="backup_phase_images">正在保存照片…</string>
+    <string name="backup_phase_lists">正在保存列表…</string>
+    <string name="backup_phase_restore_images">正在恢复照片…</string>
+    <string name="backup_phase_restore_recipes">正在恢复菜谱…</string>
+    <string name="backup_auto_section">自动备份</string>
+    <string name="backup_auto_title">自动备份</string>
+    <string name="backup_auto_hint">充电时每天备份到你选择的文件夹</string>
+    <string name="backup_auto_folder_unknown">已选文件夹</string>
+    <string name="backup_auto_folder_hint">保留最新的 %1$d 份备份</string>
+    <string name="backup_auto_last_error">上次自动备份失败：%1$s</string>
+    <!-- Settings hub & sub-pages -->
+    <string name="settings_hub_household_summary">%1$s · %2$d 人 · %3$s</string>
+    <string name="settings_hub_household_local_only">仅此设备 — 连接服务器或其他手机</string>
+    <string name="settings_hub_appearance_summary">%1$s · %2$s</string>
+    <string name="settings_hub_about_summary">版本 %1$s · GPLv3</string>
+    <string name="settings_hub_sync_server_and_peers">服务器和 Wi-Fi 上的手机</string>
+    <string name="settings_hub_sync_server_only">经由你的服务器</string>
+    <string name="settings_hub_sync_peers_only">Wi-Fi 上的手机间同步</string>
+    <string name="settings_hub_sync_off">未同步 — 仅此设备</string>
+    <string name="settings_sync_section">同步</string>
+    <string name="settings_sync_intro">这部手机的菜谱、清单和计划同步到哪里。服务器和手机间同步会配合工作 — 哪个可达就用哪个。</string>
+    <string name="settings_household_leave_hint">从此设备移除所有家庭数据</string>
+    <string name="settings_dynamic_color_hint">从壁纸提取配色</string>
+    <string name="settings_dynamic_color_on">Material You</string>
+    <string name="settings_dynamic_color_off">openCook 配色</string>
+    <string name="settings_font_size">文字大小</string>
+    <string name="settings_font_size_small">小</string>
+    <string name="settings_font_size_default">默认</string>
+    <string name="settings_font_size_large">大</string>
+    <string name="settings_font_size_larger">更大</string>
+    <string name="settings_font_size_largest">最大</string>
+    <string name="settings_about">关于 openCook</string>
+    <string name="about_intro">openCook 是自由软件。它无需账号、无需云端、不作追踪 — 你的菜谱留在你自己的设备上。</string>
+    <string name="about_version">版本</string>
+    <string name="about_license">许可证</string>
+    <string name="about_license_subtitle">GNU General Public License v3.0</string>
+    <string name="about_source">源代码</string>
+    <string name="about_source_subtitle">github.com/oliexdev/openCook</string>
+    <string name="about_privacy">隐私</string>
+    <string name="about_privacy_subtitle">无账号、无云端、无追踪。同步只在你自己的网络中进行。</string>
+    <string name="about_support">支持本项目</string>
+    <string name="about_support_subtitle">成为 GitHub 赞助者</string>
+</resources>

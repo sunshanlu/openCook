@@ -19,6 +19,8 @@
 package com.food.opencook.data.recipeimport
 
 import com.food.opencook.data.remote.dto.IngredientDto
+import com.food.opencook.util.Numbers
+import com.food.opencook.util.Scripts
 
 /**
  * Best-effort parser for a free-text ingredient line ("600 g Hackfleisch, halb und halb",
@@ -50,9 +52,17 @@ object IngredientLineParser {
     @Volatile
     private var UNITS: Set<String> = DEFAULT_UNITS_DE
 
+    /** Leading-quantity matcher; rebuilt by [setUnits] because its Chinese branch is compiled
+     *  from the active unit list — see [buildLeadingQty]. */
+    @Volatile
+    private var LEADING_QTY: Regex = buildLeadingQty(UNITS)
+
     /** Replace the recognized units (called by `LocalizedLists` on language change). */
     fun setUnits(units: Set<String>) {
-        if (units.isNotEmpty()) UNITS = units
+        if (units.isNotEmpty()) {
+            UNITS = units
+            LEADING_QTY = buildLeadingQty(units)
+        }
     }
 
     /** Active units — exposed so tests can snapshot and restore around [setUnits]. */
@@ -63,14 +73,35 @@ object IngredientLineParser {
         '⅛' to 0.125, '⅜' to 0.375, '⅝' to 0.625, '⅞' to 0.875,
     )
 
-    // "1 1/2" (mixed) | "1/2" (fraction) | "1,5"/"1.5"/"600" with optional "2-3" range.
-    private val LEADING_QTY = Regex(
-        """^(\d+\s+\d+/\d+|\d+/\d+|\d+(?:[.,]\d+)?(?:\s*[-–]\s*\d+(?:[.,]\d+)?)?)\s*""",
-    )
+    /**
+     * Leading quantity at the start of an ingredient line:
+     *  - a Chinese numeral, but **only when immediately followed by a known unit**. Chinese needs
+     *    a measure word between a numeral and its noun (两个鸡蛋 = "two 个 eggs"), so requiring the
+     *    unit is what keeps a numeral-headed *noun* from reading as a count: 三文鱼 is salmon, never
+     *    3 文鱼. The vague-quantifier guard (一点/一些/一起) stays inside [Numbers.CN_NUMERAL_REGEX]
+     *    as a second defence.
+     *  - "1 1/2" (mixed) | "1/2" (fraction) | "1,5"/"600" with optional "2-3" range.
+     *
+     * The Chinese branch is compiled from the active [units], so this is rebuilt by [setUnits].
+     * When that list holds no units, the branch is built to match nothing *deliberately*: with no
+     * measure word available there is nothing a numeral could be a quantity of, and reading one
+     * anyway is the bug this guards. Before `LocalizedLists` installs Chinese units the default
+     * Latin list applies and likewise contains none, so Chinese lines keep their whole name.
+     */
+    private fun buildLeadingQty(units: Set<String>): Regex {
+        val unitAlt = units.filter { it.isNotBlank() }
+            .sortedByDescending { it.length }
+            .joinToString("|") { Regex.escape(it) }
+        // `(?!x)x` can never match, so `^(cn|…)` behaves as if the branch were absent.
+        val cnNumeral = if (unitAlt.isEmpty()) "(?!x)x" else "${Numbers.CN_NUMERAL_REGEX}(?=$unitAlt)"
+        return Regex(
+            """^($cnNumeral|\d+\s+\d+/\d+|\d+/\d+|\d+(?:[.,]\d+)?(?:\s*[-–]\s*\d+(?:[.,]\d+)?)?)\s*""",
+        )
+    }
 
     fun parse(raw: String): IngredientDto {
-        val s = raw.trim()
-        if (s.isEmpty()) return IngredientDto(null, null, raw.trim())
+        val s = Numbers.normalizeFullWidth(raw).trim()
+        if (s.isEmpty()) return IngredientDto(null, null, s)
 
         // Leading unicode fraction, e.g. "½ TL Salz".
         UNICODE_FRACTIONS[s.firstOrNull()]?.let { value ->
@@ -87,6 +118,9 @@ object IngredientLineParser {
 
     private fun parseQuantity(token: String): Double? {
         val t = token.trim()
+        // A Chinese numeral token (半 / 两 / 一–十) is read by the numeral layer, which owns the
+        // 一点/一些 guard; the ASCII branch below handles the rest.
+        Numbers.chineseNumeralValue(t)?.let { return it }
         return when {
             t.contains(' ') && t.contains('/') -> { // mixed "1 1/2"
                 val (whole, frac) = t.split(Regex("\\s+"), limit = 2)
@@ -106,24 +140,42 @@ object IngredientLineParser {
         return nn / dd
     }
 
-    /** Longest unit spelling we try to match, in whitespace-separated words ("c. à soupe"). */
-    private const val MAX_UNIT_WORDS = 3
+    /**
+     * Longest decoration a unit can carry in the text, in characters. [normalizeUnit] strips
+     * decorations by chained suffix removal, and the longest run those five calls can strip is
+     * ".(en)(n)/n." = 11 chars (final "." 1, "(en)" 4, "(n)" 3, "/n" 2, leading "." 1). The
+     * prefix scan adds this to the longest known unit, so a decorated spelling ("Zehe/n", "Stk.")
+     * is never truncated short of the real unit. Re-derive if [normalizeUnit]'s suffix set changes.
+     */
+    private const val UNIT_DECORATION_CHARS = 11
 
     /**
-     * Split "<unit> <name>"; unit only when the leading token(s) form a known one.
-     * Longest match first: French measures are usually several words ("c. à soupe",
-     * "cuillère à café"), so a single-token test would leave them in the name.
-     * A unit is only taken when something is left over to be the ingredient name.
+     * Split "<unit><name>"; a unit is taken only when a non-blank name is left over.
+     *
+     * The unit is found by **prefix-matching the known unit list**, not by splitting on
+     * whitespace — so a unit glued to a CJK name ("600克面粉" → "克" + "面粉") resolves, and
+     * French multi-word units ("c. à soupe") still match because the whole prefix is compared.
+     * The prefix scan tries every length, so a unit carrying a plural/abbreviation decoration
+     * ("Zehe/n", "Stk.") is matched with the decoration included. A prefix only counts as a
+     * unit when what follows is a word boundary: end of string, whitespace (Latin languages), or
+     * a CJK character (a name glued directly on, no space).
      */
     private fun splitUnit(rest: String): Pair<String?, String> {
         if (rest.isBlank()) return null to rest
-        val parts = rest.trim().split(Regex("\\s+"))
-        for (n in minOf(MAX_UNIT_WORDS, parts.size - 1) downTo 1) {
-            val candidate = parts.take(n).joinToString(" ")
-            val norm = candidate.lowercase()
-                .removeSuffix(".").removeSuffix("/n").removeSuffix("(n)").removeSuffix("(en)").removeSuffix(".")
-            if (norm in UNITS) return candidate to parts.drop(n).joinToString(" ")
+        val cap = minOf(rest.length, (UNITS.maxOfOrNull { it.length } ?: 0) + UNIT_DECORATION_CHARS)
+        for (n in 1..cap) {
+            val candidate = rest.substring(0, n)
+            if (normalizeUnit(candidate) !in UNITS) continue
+            val after = rest.getOrNull(n)
+            val boundary = after == null || after.isWhitespace() || Scripts.isCjk(after)
+            if (!boundary) continue
+            val name = rest.substring(n).trim()
+            if (name.isNotEmpty()) return candidate to name
         }
         return null to rest
     }
+
+    /** The unit spelling as the unit list stores it: lower-case, without an attached plural form. */
+    private fun normalizeUnit(candidate: String): String = candidate.lowercase()
+        .removeSuffix(".").removeSuffix("/n").removeSuffix("(n)").removeSuffix("(en)").removeSuffix(".")
 }

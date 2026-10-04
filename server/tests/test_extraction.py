@@ -11,6 +11,7 @@ from app.extraction import (
     _assign_boxes,
     _Box,
     _clean_step,
+    _clean_unit,
     _fix_title_case,
     _iso_duration,
     _normalize_category,
@@ -109,6 +110,85 @@ def test_french_catalog_maps_french_words():
     # French measures stay in the unit vocabulary, English ones still merge in.
     assert "c. à soupe" in fr.units
     assert "tbsp" in fr.units
+
+
+def test_chinese_catalog_maps_chinese_words():
+    zh = load_i18n("zh")
+    assert _normalize_category("面食", zh.category_aliases) == "pasta"
+    assert _normalize_category("肉类", zh.category_aliases) == "meat"
+    assert _normalize_category("海鲜", zh.category_aliases) == "fish"
+    assert _normalize_category("甜点", zh.category_aliases) == "dessert"
+    assert _normalize_category("甜品", zh.category_aliases) == "dessert"
+    # English's meal_type_aliases is empty; Chinese must supply its own.
+    assert _normalize_meal_types(["早餐", "午餐", "加餐", "晚餐"], zh.meal_type_aliases) == [
+        "breakfast",
+        "lunch",
+        "snack",
+        "dinner",
+    ]
+
+
+def test_chinese_units_are_kept_not_folded_into_the_name():
+    zh = load_i18n("zh")
+    for unit in ("克", "千克", "公斤", "毫升", "升", "汤匙", "茶匙", "杯", "瓣", "斤", "两"):
+        assert unit in zh.units, f"{unit} missing from zh units"
+    # A unit the model put in its own field must survive the bogus-unit cleaner,
+    # i.e. 克/毫升 are judged real units rather than folded into the name.
+    assert _clean_unit("克", "面粉", zh.units) == "克"
+    assert _clean_unit("毫升", "牛奶", zh.units) == "毫升"
+
+
+def test_chinese_duration_words_resolve():
+    zh = load_i18n("zh")
+    assert _iso_duration("45分钟", zh) == "PT45M"
+    assert _iso_duration("2小时", zh) == "PT120M"
+
+
+def test_space_less_cjk_compound_duration_keeps_its_hour():
+    """A Chinese time is one run of characters ("1小时30分钟"), not words split by spaces.
+
+    The unit matcher ended with \\b, which fails here: in Python's Unicode-aware re a digit
+    counts as a word character, so the "3" directly after 小时 killed the hour match and a
+    90-minute braise was stored as 30 minutes. The spaced form never showed it.
+    """
+    zh = load_i18n("zh")
+    assert _iso_duration("1小时30分钟", zh) == "PT90M"
+    assert _iso_duration("1 小时 30 分钟", zh) == "PT90M"  # spaced form keeps working
+    assert _iso_duration("45分钟", zh) == "PT45M"
+    assert _iso_duration("2小时", zh) == "PT120M"
+    assert _iso_duration("1小时即可", zh) == "PT60M"  # glued to following prose
+
+    # The boundary the guard exists for still holds: a Latin word is not its leading letter.
+    de = load_i18n("de")
+    assert _iso_duration("10 Hähnchen", de) is None
+    assert _iso_duration("200 ml", de) is None
+
+
+def test_prompt_unit_example_is_language_neutral():
+    old_english_only = "(g, kg, ml, l, tbsp, tsp, cup, can, package, slice, clove, pinch, oz, lb)"
+    for lang in ("en", "zh"):
+        assert old_english_only not in load_i18n(lang).text_prompt
+    # For Chinese, the prompt must name Chinese units so 克/毫升 are not judged
+    # "not a real unit" and filed into the ingredient name.
+    zh_prompt = load_i18n("zh").text_prompt
+    assert "克" in zh_prompt and "毫升" in zh_prompt
+    # The English baseline is generalized, not left enumerating English units only.
+    assert "any language" in load_i18n("en").text_prompt.lower()
+
+
+def test_chinese_prompt_keeps_the_stable_extraction_contract():
+    zh = load_i18n("zh")
+    assert zh.text_prompt != load_i18n("en").text_prompt
+    # The JSON shape, field names and stable category/meal keys survive translation.
+    for token in (
+        '"recipes"', '"title"', '"ingredients"', '"steps"', '"category"', '"mealTypes"',
+        "pasta", "meat", "fish", "soup", "vegetarian", "salad", "dessert", "other",
+        "breakfast", "lunch", "snack", "dinner",
+    ):
+        assert token in zh.text_prompt, f"text_prompt lost {token}"
+    # box_prompt's response shape stays intact too.
+    for token in ("dish_photos", "recipe_title", "box"):
+        assert token in zh.box_prompt, f"box_prompt lost {token}"
 
 
 def test_to_schema_org_coerces_non_numeric_quantity():

@@ -36,6 +36,46 @@ class NumbersTest {
         assertNull(Numbers.parseQuantity(null))
     }
 
+    /** A Chinese numeral is a quantity only as the **whole** token: 半 = 0.5, 两 = 2, 十 = 10,
+     *  一 = 1. Embedded in a longer word it is a noun morpheme, never a count — 三文鱼 is salmon,
+     *  not 3 文鱼. A vague quantifier must NOT yield a quantity either; quantity extraction runs
+     *  before noise stripping, so a naive 一→1 would lock "一点盐" in as "1 salt". */
+    @Test
+    fun parseQuantityReadsChineseNumeralsAndFullWidthDigits() {
+        assertEquals(3.0, Numbers.parseQuantity("三")!!, 0.001)
+        assertEquals(2.0, Numbers.parseQuantity("两")!!, 0.001)
+        assertEquals(0.5, Numbers.parseQuantity("半")!!, 0.001)
+        assertEquals(1.0, Numbers.parseQuantity("一")!!, 0.001)
+        assertEquals(10.0, Numbers.parseQuantity("十")!!, 0.001)
+
+        // Digits may still sit inside a larger string ("400 g"); only Chinese numerals are
+        // whole-token, because a numeral character inside a word is a morpheme (三文鱼, 五花肉).
+        assertEquals(600.0, Numbers.parseQuantity("600克面粉")!!, 0.001)
+        assertNull(Numbers.parseQuantity("两个鸡蛋"))
+        assertNull(Numbers.parseQuantity("半斤五花肉"))
+        assertNull(Numbers.parseQuantity("一斤"))
+        assertNull(Numbers.parseQuantity("十个"))
+        assertNull(Numbers.parseQuantity("三文鱼"))
+
+        // The trap: 一 is a morpheme in these fixed vague words, not the number one.
+        assertNull(Numbers.parseQuantity("一点盐"))
+        assertNull(Numbers.parseQuantity("一些糖"))
+        assertNull(Numbers.parseQuantity("一起"))
+
+        // Compound numerals are deliberately unsupported — not half-read as their first digit.
+        assertNull(Numbers.parseQuantity("二十三"))
+        assertNull(Numbers.parseQuantity("六百"))
+
+        // 一打 ("one dozen") is a word, not the lone numeral 一 — no quantity.
+        assertNull(Numbers.parseQuantity("一打"))
+
+        // Full-width digits/punctuation normalize before parsing; parens fold to ASCII.
+        assertEquals(600.0, Numbers.parseQuantity("６００")!!, 0.001)
+        assertEquals(1.5, Numbers.parseQuantity("１，５")!!, 0.001)
+        assertEquals(600.0, Numbers.parseQuantity("（６００）")!!, 0.001)
+        assertEquals("(600)中筋", Numbers.normalizeFullWidth("（６００）中筋"))
+    }
+
     @Test
     fun formatQuantityDropsTrailingZero() {
         assertEquals("400", Numbers.formatQuantity(400.0))
@@ -48,6 +88,14 @@ class NumbersTest {
         assertEquals("400 g Nudeln", Numbers.displayIngredient(400.0, "g", "Nudeln"))
         assertEquals("Salz", Numbers.displayIngredient(null, null, "Salz"))
         assertEquals("1 Bund Basilikum", Numbers.displayIngredient(1.0, "Bund", "Basilikum"))
+    }
+
+    /** A CJK amount reads without intervening spaces; Latin amounts keep them. */
+    @Test
+    fun displayIngredientOmitsSpacesForCjk() {
+        assertEquals("200克面粉", Numbers.displayIngredient(200.0, "克", "面粉"))
+        assertEquals("1个鸡蛋", Numbers.displayIngredient(1.0, "个", "鸡蛋"))
+        assertEquals("400 g Nudeln", Numbers.displayIngredient(400.0, "g", "Nudeln"))
     }
 
     @Test
