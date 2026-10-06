@@ -1,7 +1,7 @@
 import json
 import math
 import re
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, StringConstraints, field_validator
 
@@ -67,7 +67,24 @@ class Source(Model):
     cover_url: str | None = None
 
 
+class Classification(Model):
+    note_id: Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{24}$")]
+    verdict: Literal["tutorial", "non_tutorial", "unknown"]
+    reason: Text
+
+
+def parse_classification(text: str, expected: str) -> Classification:
+    result = parse_json_model(text, Classification)
+    if result.note_id != expected:
+        raise TaskError("reference_mismatch", "分类结果的笔记 ID 与目标不同")
+    return result
+
+
 def parse_answer(text: str) -> Extraction:
+    return parse_json_model(text, Extraction)
+
+
+def parse_json_model(text: str, model):
     """Only parse actual JSON (optionally fenced); never reconstruct missing fields."""
     payload = text.strip()
     if payload.startswith("```"):
@@ -89,6 +106,26 @@ def parse_answer(text: str) -> Extraction:
 
     try:
         obj = json.loads(payload, parse_constant=reject_constant, object_pairs_hook=unique_keys)
-        return Extraction.model_validate(obj)
+        return model.model_validate(obj)
     except (ValueError, TypeError) as exc:
-        raise TaskError("json_invalid", f"菜谱 JSON 校验失败：{exc}") from exc
+        raise TaskError("json_invalid", f"JSON 校验失败：{exc}") from exc
+
+
+class BoundClassification(Classification):
+    request_id: Text
+
+
+class BoundExtraction(Model):
+    note_id: Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{24}$")]
+    request_id: Text
+    extraction: Extraction
+
+
+def parse_bound_answer(text: str, stage: str, note: str, request: str):
+    model = BoundClassification if stage == "classify" else BoundExtraction
+    result = parse_json_model(text, model)
+    if result.note_id != note or result.request_id != request:
+        raise TaskError("reference_mismatch", "回答的笔记 ID 或请求标识与当前提交不同")
+    if stage == "classify":
+        return Classification.model_validate(result.model_dump(exclude={"request_id"}))
+    return result.extraction

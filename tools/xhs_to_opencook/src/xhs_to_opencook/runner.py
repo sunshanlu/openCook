@@ -7,11 +7,11 @@ from pathlib import Path
 from playwright.sync_api import Error as PlaywrightError
 
 from .browser import SiteBrowser
+from .chat import ChatSession
 from .errors import BrowserUnsupported, TaskError
 from .export import convert, cover_jpeg, estimates, write_outputs
 from .links import note_id, read_links, validate_url
-from .models import Extraction, Source, parse_answer
-from .prompts import recipe_prompt, repair_prompt
+from .models import Extraction, Source
 from .storage import Store, atomic_write, now, state_lock, write_json
 
 
@@ -28,7 +28,6 @@ def run(args, *, browser_factory=SiteBrowser, sleeper=time.sleep) -> int:
     seen = set()
     seen_urls = set()
     browser = None
-    last_query = None
     exit_code = 0
     with state_lock(state), ExitStack() as stack:
         store = Store(state)
@@ -37,10 +36,33 @@ def run(args, *, browser_factory=SiteBrowser, sleeper=time.sleep) -> int:
         def get_browser():
             nonlocal browser
             if browser is None:
-                browser = stack.enter_context(browser_factory(
-                    state / "chrome", timeout=args.timeout, interactive=not args.non_interactive,
-                ))
+                browser = stack.enter_context(
+                    browser_factory(
+                        state / "chrome",
+                        timeout=args.timeout,
+                        interactive=not args.non_interactive,
+                    )
+                )
             return browser
+
+        chats = ChatSession(
+            store,
+            get_browser,
+            capacity=getattr(args, "chat_batch_size", 50),
+            interval=args.interval,
+            timeout=args.timeout,
+            sleeper=sleeper,
+        )
+        pending = chats.pending()
+        if pending:
+            if pending["stage"] != "extract":
+                raise BrowserUnsupported("必须先恢复分类阶段未决请求")
+            pending_url = pending["source"]["url"]
+            if pending_url not in links and not any(
+                note_id(u) == pending["note_id"] for u in links
+            ):
+                raise BrowserUnsupported("未决请求不在当前链接清单；请恢复原命令")
+            links.sort(key=lambda u: note_id(u) != pending["note_id"] and u != pending_url)
 
         def archive_raw(record):
             relative = record.get("raw_directory")
@@ -92,11 +114,18 @@ def run(args, *, browser_factory=SiteBrowser, sleeper=time.sleep) -> int:
                         except (ValueError, KeyError):
                             record = None
                             task["cache_warning"] = "缓存校验失败，将重新处理"
-                    if record and record.get("status") == "success" and not args.refresh:
+                    if (
+                        record
+                        and record.get("status") == "success"
+                        and not args.refresh
+                        and not (pending and pending["note_id"] == identity)
+                    ):
                         seen.add(identity)
                         accept(record)
                         task.update(
-                            status="cached", note_id=identity, names=record["export_names"],
+                            status="cached",
+                            note_id=identity,
+                            names=record["export_names"],
                             estimates=estimates(Extraction.model_validate(record["extraction"])),
                             image_error=record.get("image_error"),
                             conversation_id=record.get("conversation_id"),
@@ -105,13 +134,20 @@ def run(args, *, browser_factory=SiteBrowser, sleeper=time.sleep) -> int:
                         continue
 
                     failure = None
-                    repaired = False
                     for attempt in (1, 2):
                         task["attempts"] = attempt
                         attempt_dir = None
                         try:
                             driver = get_browser()
-                            source = driver.open_source(url)
+                            source = (
+                                Source.model_validate(pending["source"])
+                                if pending
+                                and (
+                                    note_id(url) == pending["note_id"]
+                                    or url == pending["source"]["url"]
+                                )
+                                else driver.open_source(url)
+                            )
                             identity = source.note_id
                             task["note_id"] = identity
                             task["source"] = source.model_dump()
@@ -122,8 +158,10 @@ def run(args, *, browser_factory=SiteBrowser, sleeper=time.sleep) -> int:
                             # A previously unknown short URL may resolve to an existing success.
                             resolved_cache = store.get(identity)
                             if (
-                                resolved_cache and resolved_cache.get("status") == "success"
+                                resolved_cache
+                                and resolved_cache.get("status") == "success"
                                 and not args.refresh
+                                and not (pending and pending["note_id"] == identity)
                             ):
                                 Source.model_validate(resolved_cache["source"])
                                 Extraction.model_validate(resolved_cache["extraction"])
@@ -134,22 +172,8 @@ def run(args, *, browser_factory=SiteBrowser, sleeper=time.sleep) -> int:
                             latest_raw = attempt_dir
                             write_json(attempt_dir / "source.json", source.model_dump())
                             driver.raw_directory = attempt_dir
-                            if last_query is not None:
-                                sleeper(max(0, args.interval - (time.monotonic() - last_query)))
-                            driver.new_chat()
-                            answer = driver.ask(recipe_prompt(source), source)
-                            atomic_write(attempt_dir / "answer.txt", answer.encode())
-                            try:
-                                extraction = parse_answer(answer)
-                            except TaskError as invalid:
-                                if repaired:
-                                    raise
-                                repaired = True
-                                corrected = driver.ask(
-                                    repair_prompt(str(invalid)), source, repair=True,
-                                )
-                                atomic_write(attempt_dir / "repair.txt", corrected.encode())
-                                extraction = parse_answer(corrected)
+                            extraction = chats.process(source, "extract", attempt_dir)
+                            task["attempts"] = max(attempt, chats.current["attempt"])
                             image_path, image_error = None, None
                             if source.cover_url:
                                 try:
@@ -163,8 +187,10 @@ def run(args, *, browser_factory=SiteBrowser, sleeper=time.sleep) -> int:
                             # Refresh can change dish count/names; that is a new name-based import.
                             names = [r["name"] for r in convert(source, extraction)]
                             record = {
-                                "status": "success", "source": source.model_dump(),
-                                "extraction": extraction.model_dump(), "export_names": names,
+                                "status": "success",
+                                "source": source.model_dump(),
+                                "extraction": extraction.model_dump(),
+                                "export_names": names,
                                 "cover_path": str(image_path) if image_path else None,
                                 "image_error": image_error,
                                 "conversation_id": driver.conversation_id,
@@ -172,20 +198,37 @@ def run(args, *, browser_factory=SiteBrowser, sleeper=time.sleep) -> int:
                             }
                             write_json(attempt_dir / "result.json", record)
                             store.save(identity, record)
+                            chats.accept()
+                            pending = None
                             task["status"] = "success"
                             break
                         except (TaskError, PlaywrightError) as exc:
-                            failure = exc if isinstance(exc, TaskError) else TaskError(
-                                "browser_error", "浏览器页面操作失败：" + str(exc),
+                            task["attempts"] = max(
+                                task["attempts"], getattr(chats, "last_attempt", 1)
+                            )
+                            failure = (
+                                exc
+                                if isinstance(exc, TaskError)
+                                else TaskError(
+                                    "browser_error",
+                                    "浏览器页面操作失败：" + str(exc),
+                                )
                             )
                             if attempt_dir:
                                 driver.diagnostics(attempt_dir / "diagnostics")
-                                write_json(attempt_dir / "error.json", {
-                                    "code": failure.code, "message": str(failure),
-                                    "conversation_id": driver.conversation_id,
-                                })
-                            if (browser is not None and isinstance(exc, PlaywrightError)
-                                    and "has been closed" in str(exc)):
+                                write_json(
+                                    attempt_dir / "error.json",
+                                    {
+                                        "code": failure.code,
+                                        "message": str(failure),
+                                        "conversation_id": driver.conversation_id,
+                                    },
+                                )
+                            if (
+                                browser is not None
+                                and isinstance(exc, PlaywrightError)
+                                and "has been closed" in str(exc)
+                            ):
                                 # Release the old context before reopening its dedicated profile.
                                 browser.__exit__(None, None, None)
                                 browser = None
@@ -194,8 +237,6 @@ def run(args, *, browser_factory=SiteBrowser, sleeper=time.sleep) -> int:
                             if attempt == 2:
                                 raise failure from None
                             print(f"  {failure.code}，重试一次", flush=True)
-                        finally:
-                            last_query = time.monotonic()
                     if task["status"] == "skipped":
                         continue
                     if not record or record.get("status") != "success":
@@ -203,7 +244,8 @@ def run(args, *, browser_factory=SiteBrowser, sleeper=time.sleep) -> int:
                     seen.add(identity)
                     accept(record)
                     task.update(
-                        names=record["export_names"], conversation_id=record.get("conversation_id"),
+                        names=record["export_names"],
+                        conversation_id=record.get("conversation_id"),
                         estimates=estimates(Extraction.model_validate(record["extraction"])),
                         image_error=record.get("image_error"),
                         raw_directory=f"raw/{identity}",
@@ -219,7 +261,8 @@ def run(args, *, browser_factory=SiteBrowser, sleeper=time.sleep) -> int:
                             failed["raw_directory"] = str(latest_raw.relative_to(state))
                             archive_raw(failed)
                             task["raw_directory"] = f"raw/{identity}"
-                        store.save(identity, failed)
+                        if not (store.get(identity) or {}).get("status") == "success":
+                            store.save(identity, failed)
                     print(f"  {exc.code}: {exc}", file=sys.stderr, flush=True)
                     if isinstance(exc, BrowserUnsupported) or exc.code == "login_required":
                         report["status"] = "blocked"
@@ -227,6 +270,9 @@ def run(args, *, browser_factory=SiteBrowser, sleeper=time.sleep) -> int:
                         break
                 finally:
                     # Every completed item also produces usable partial outputs.
+                    report.update(
+                        chat_batches=chats.batches(), pending_requests=chats.pending_rows()
+                    )
                     write_outputs(output, results, report)
             if report["status"] == "running":
                 report["status"] = "partial" if exit_code else "complete"
@@ -236,11 +282,14 @@ def run(args, *, browser_factory=SiteBrowser, sleeper=time.sleep) -> int:
                 if task["status"] == "running":
                     task["status"] = "interrupted"
             if latest_raw:
-                interrupted = {"status": "interrupted", "raw_directory": str(
-                    latest_raw.relative_to(state),
-                )}
+                interrupted = {
+                    "status": "interrupted",
+                    "raw_directory": str(
+                        latest_raw.relative_to(state),
+                    ),
+                }
                 archive_raw(interrupted)
-                if identity:
+                if identity and (store.get(identity) or {}).get("status") != "success":
                     store.save(identity, interrupted)
             exit_code = 130
         except (PlaywrightError, OSError) as exc:

@@ -59,6 +59,19 @@ class Store:
         self.db.execute(
             "CREATE TABLE IF NOT EXISTS aliases (url TEXT PRIMARY KEY, id TEXT NOT NULL)"
         )
+        for table in (
+            "profiles",
+            "classifications",
+            "extraction_runs",
+            "chat_batches",
+            "chat_requests",
+        ):
+            self.db.execute(
+                f"CREATE TABLE IF NOT EXISTS {table} (id TEXT PRIMARY KEY, value TEXT NOT NULL)"
+            )
+        self.db.execute("""CREATE TABLE IF NOT EXISTS profile_notes (
+            profile_id TEXT NOT NULL, note_id TEXT NOT NULL, value TEXT NOT NULL,
+            PRIMARY KEY(profile_id, note_id))""")
         self.db.commit()
 
     def close(self):
@@ -109,3 +122,103 @@ class Store:
         path = self.directory / "raw" / note / f"{stamp}-{attempt}"
         path.mkdir(parents=True)
         return path
+
+    def stage_get(self, table: str, identity: str):
+        if table not in {
+            "profiles",
+            "classifications",
+            "extraction_runs",
+            "chat_batches",
+            "chat_requests",
+        }:
+            raise ValueError("unsupported table")
+        row = self.db.execute(f"SELECT value FROM {table} WHERE id=?", (identity,)).fetchone()
+        if not row:
+            return None
+        try:
+            value = json.loads(row[0])
+            return value if isinstance(value, dict) else None
+        except ValueError:
+            return None
+
+    def stage_save(self, table: str, identity: str, value: dict):
+        if table not in {
+            "profiles",
+            "classifications",
+            "extraction_runs",
+            "chat_batches",
+            "chat_requests",
+        }:
+            raise ValueError("unsupported table")
+        value = {**value, "updated_at": now()}
+        self.db.execute(
+            f"INSERT OR REPLACE INTO {table} VALUES (?, ?)",
+            (
+                identity,
+                json.dumps(value, ensure_ascii=False, allow_nan=False),
+            ),
+        )
+        self.db.commit()
+
+    def collect_note(self, profile: str, note: dict):
+        note = {k: v for k, v in note.items() if k != "profile_ids"}
+        identity = note["note_id"]
+        row = self.db.execute(
+            "SELECT value FROM profile_notes WHERE profile_id=? AND note_id=?",
+            (profile, identity),
+        ).fetchone()
+        previous = json.loads(row[0]) if row else {}
+        if not note.get("type") and previous.get("type"):
+            note["type"] = previous["type"]
+        value = {
+            **previous,
+            **note,
+            "first_seen": previous.get("first_seen", now()),
+            "last_seen": now(),
+        }
+        self.db.execute(
+            "INSERT OR REPLACE INTO profile_notes VALUES (?, ?, ?)",
+            (
+                profile,
+                identity,
+                json.dumps(value, ensure_ascii=False, allow_nan=False),
+            ),
+        )
+        self.alias(note["url"], identity)
+
+    def collected(self, profiles: list[str]) -> list[dict]:
+        result = {}
+        for profile in profiles:
+            rows = self.db.execute(
+                "SELECT note_id, value FROM profile_notes WHERE profile_id=? "
+                "ORDER BY json_extract(value, '$.first_seen'), note_id",
+                (profile,),
+            )
+            for identity, value in rows:
+                note = json.loads(value)
+                if identity not in result:
+                    result[identity] = {**note, "profile_ids": []}
+                elif note["last_seen"] > result[identity]["last_seen"]:
+                    result[identity].update({k: v for k, v in note.items() if k != "profile_ids"})
+                result[identity]["profile_ids"].append(profile)
+        return list(result.values())
+
+    def stage_rows(self, table: str) -> list[dict]:
+        if table not in {"chat_batches", "chat_requests"}:
+            raise ValueError("unsupported table")
+        return [
+            json.loads(row[0])
+            for row in self.db.execute(f"SELECT value FROM {table} ORDER BY rowid")
+        ]
+
+    def replace_chat_request(self, previous: dict, following: dict):
+        """Atomically retire an invalid answer and reserve its immediate correction."""
+        with self.db:
+            for request in (previous, following):
+                self.db.execute(
+                    "INSERT OR REPLACE INTO chat_requests VALUES (?, ?)",
+                    (
+                        request["request_id"],
+                        json.dumps(request, ensure_ascii=False, allow_nan=False),
+                    ),
+                )

@@ -21,16 +21,33 @@ def positive(value: str) -> float:
     return number
 
 
+def positive_integer(value: str) -> int:
+    try:
+        number = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("must be a positive integer") from exc
+    if number <= 0:
+        raise argparse.ArgumentTypeError("must be a positive integer")
+    return number
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="小红书点点视频菜谱 → openCook")
     commands = parser.add_subparsers(dest="command", required=True)
-    for name in ("login", "run"):
+    for name in ("login", "run", "pipeline", "collect", "classify", "extract", "export"):
         command = commands.add_parser(name)
         command.add_argument("--state-dir", type=Path, default=state_directory())
-        if name == "run":
-            command.add_argument("--links", type=Path, required=True)
+        if name != "login":
+            command.add_argument(
+                "--links" if name == "run" else "--profiles", type=Path, required=True
+            )
             command.add_argument("--output", type=Path, required=True)
-            command.add_argument("--refresh", action="store_true")
+            if name in {"run", "pipeline", "extract"}:
+                command.add_argument("--refresh", action="store_true")
+            if name in {"pipeline", "classify"}:
+                command.add_argument("--reclassify", action="store_true")
+            if name in {"run", "pipeline", "classify", "extract"}:
+                command.add_argument("--chat-batch-size", type=positive_integer, default=50)
             command.add_argument("--timeout", type=positive, default=180)
             command.add_argument("--interval", type=positive, default=10)
             command.add_argument("--non-interactive", action="store_true")
@@ -41,9 +58,13 @@ def main() -> int:
                 browser.login()
             print("登录状态已保存。")
             return 0
-        from .runner import run
+        if args.command == "run":
+            from .runner import run
 
-        return run(args)
+            return run(args)
+        from .workflow import run_workflow
+
+        return run_workflow(args)
     except (KeyboardInterrupt, EOFError):
         print("\n已停止；已完成记录可在下次运行时复用。", file=sys.stderr)
         return 130

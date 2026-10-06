@@ -23,7 +23,9 @@ def validate_url(url: str) -> str:
             raise ValueError("unsupported URL")
     except ValueError as exc:
         raise TaskError(
-            "link_invalid", "仅支持 https 小红书笔记链接和 xhslink.com 短链接", retryable=False,
+            "link_invalid",
+            "仅支持 https 小红书笔记链接和 xhslink.com 短链接",
+            retryable=False,
         ) from exc
     return url
 
@@ -37,3 +39,21 @@ def read_links(path: Path) -> list[str]:
     return [
         line.strip() for line in path.read_text(encoding="utf-8-sig").splitlines() if line.strip()
     ]
+
+
+def profile_id(url: str) -> str:
+    validate_url(url)
+    parts = urlsplit(url)
+    match = re.fullmatch(r"/user/profile/([0-9a-f]{24})/?", parts.path)
+    if parts.hostname not in {"xiaohongshu.com", "www.xiaohongshu.com"} or not match:
+        raise TaskError("profile_invalid", "需要完整的博主主页链接", retryable=False)
+    return match.group(1)
+
+
+def read_profiles(path: Path) -> dict[str, str]:
+    profiles = {}
+    for url in read_links(path):
+        profiles.setdefault(profile_id(url), url)
+    if not profiles:
+        raise TaskError("input_empty", "博主链接文件为空", retryable=False)
+    return profiles

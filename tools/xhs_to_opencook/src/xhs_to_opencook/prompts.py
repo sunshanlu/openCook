@@ -2,6 +2,31 @@ import json
 
 from .models import Extraction, Source
 
+CLASSIFICATION_VERSION = 2
+
+
+def classification_prompt(source: Source) -> str:
+    return f"""请打开并引用这个视频笔记：{source.url}
+目标笔记ID：{source.note_id}；作者：{source.author}；标题：{source.title}
+仅根据这个笔记的视频和作者配文判断：是否为食物或饮品的制作教程？
+有制作过程，能提取食材和操作步骤则 verdict=tutorial，包括烘焙、饮品、酱料、腌菜、
+多道菜合集；用量不全仍算教程。只有成品展示、吃播、探店、商品推荐、食材知识，
+没有制作教程则 verdict=non_tutorial。无法读取视频或依据不足必须 verdict=unknown，
+不得仅凭标题推断，不得把读取失败当作非教程。reason 简要说明依据，
+note_id 必须原样输出目标 ID。reason 不超过40个汉字，不列举食材和做法。
+只输出判断结果的紧凑单行 JSON，完整闭合引号和括号，不要 Markdown。
+结果格式如下（替换 verdict 和 reason 为实际判断，不要输出格式说明）：
+{{"note_id":"{source.note_id}","verdict":"tutorial","reason":"简短判断依据"}}"""
+
+
+def classification_repair_prompt(error: str) -> str:
+    return (
+        "上一条分类 JSON 无效。请修正同一视频的完整 JSON，包含 note_id、verdict、reason。"
+        "verdict 只能为 tutorial/non_tutorial/unknown；无法读取或依据不足使用 unknown。"
+        "不要提取菜谱，不要编造判断依据。reason 不超过40个汉字，输出紧凑完整JSON。错误："
+        + error[:3000]
+    )
+
 
 def recipe_prompt(source: Source) -> str:
     schema = json.dumps(Extraction.model_json_schema(), ensure_ascii=False, separators=(",", ":"))
@@ -35,6 +60,41 @@ def repair_prompt(error: str) -> str:
         "不要新增原视频未出现的食材或做法；只估算缺失和模糊用量，保留 estimated 标记。"
         "时间字段只能为null或纯PT数字H/M/S。若错误包含time，把相应时间字段改为null；"
         "尤其含一夜、+或文字的时间禁止放入time字段，保留在steps/notes。"
-        "不要把回答放进文本字段，不要省略已给出的菜谱或步骤。校验错误：\n"
-        + error[:3000]
+        "不要把回答放进文本字段，不要省略已给出的菜谱或步骤。校验错误：\n" + error[:3000]
+    )
+
+
+def bound_prompt(source: Source, stage: str, request: str, error: str | None = None) -> str:
+    binding = (
+        f"本次唯一请求标识 request_id={request}；目标 note_id={source.note_id}。"
+        "仅处理当前引用的视频，忽略历史视频、历史回答和历史配方。"
+        "必须原样回显这两个标识。\n"
+    )
+    if stage == "classify":
+        prompt = classification_repair_prompt(error) if error else classification_prompt(source)
+        if not error:
+            prompt = prompt.split("结果格式如下", 1)[0]
+        example = json.dumps(
+            {
+                "note_id": source.note_id,
+                "request_id": request,
+                "verdict": "tutorial",
+                "reason": "简短判断依据",
+            },
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+        return binding + prompt + "\n最终只输出以下结构的完整JSON（替换实际判断）：" + example
+    prompt = repair_prompt(error) if error else recipe_prompt(source)
+    return (
+        binding
+        + prompt
+        + (
+            '\n将菜谱JSON放入内部外层包装，最终格式为：{"note_id":"'
+            + source.note_id
+            + '","request_id":"'
+            + request
+            + '","extraction":{"recipes":[...]}}。'
+            "extraction须符合上述菜谱格式；不要把包装字段写入菜谱。"
+        )
     )

@@ -2,6 +2,7 @@ import json
 from types import SimpleNamespace
 
 import pytest
+from chat_adapter import install
 from playwright.sync_api import Error as PlaywrightError
 
 from xhs_to_opencook.errors import BrowserUnsupported, TaskError
@@ -19,6 +20,7 @@ class FakeBrowser:
         self.cover_failure = False
 
     def __enter__(self):
+        install(self)
         return self
 
     def __exit__(self, *args):
@@ -52,8 +54,13 @@ class FakeBrowser:
 @pytest.fixture
 def setup(tmp_path, source, answer, image_bytes):
     args = SimpleNamespace(
-        links=tmp_path / "links.txt", output=tmp_path / "output", state_dir=tmp_path / "state",
-        timeout=180, interval=10, non_interactive=True, refresh=False,
+        links=tmp_path / "links.txt",
+        output=tmp_path / "output",
+        state_dir=tmp_path / "state",
+        timeout=180,
+        interval=10,
+        non_interactive=True,
+        refresh=False,
     )
     args.links.write_text(source.url)
     driver = FakeBrowser(source, answer, image_bytes)
@@ -76,8 +83,10 @@ def test_duplicates_shortlinks_failure_continues_and_offline_cache(setup):
     assert report["tasks"][1]["estimates"][0]["estimated"] is True
     assert list((args.output / "raw").rglob("answer.txt"))
     args.links.write_text(f"https://xhslink.com/a/alias\n{url}")
+
     def unexpected_browser(*a, **kw):
         pytest.fail("successful cache must not start Chrome")
+
     assert run(args, browser_factory=unexpected_browser) == 0
     assert json.loads((args.output / "report.json").read_text())["tasks"][0]["status"] == "cached"
     args.refresh = True
@@ -118,9 +127,11 @@ def test_adapter_failure_stops_batch(setup):
 def test_interrupt_archives_partial_and_resumes(setup):
     args, driver = setup
     original = driver.ask
+
     def interrupt(*a, **kw):
         (driver.raw_directory / "answer-partial.txt").write_text("partial")
         raise KeyboardInterrupt
+
     driver.ask = interrupt
     code, report = execute(args, driver)
     assert code == 130 and report["tasks"][0]["status"] == "interrupted"
@@ -155,22 +166,28 @@ def test_names_collision_persisted(setup):
     assert json.loads((args.output / "recipes.json").read_text())[0]["name"] == names[1]
 
 
-def test_closed_browser_reopened_once(setup):
+def test_closed_browser_stops_then_reconciles_on_resume(setup):
     args, driver = setup
     original = driver.ask
     calls = []
+
     def ask(*a, **kw):
         calls.append(1)
         if len(calls) == 1:
             raise PlaywrightError("Target page, context or browser has been closed")
         return original(*a, **kw)
+
     driver.ask = ask
     factories = []
+
     def factory(*a, **kw):
         factories.append(1)
         return driver
+
+    assert run(args, browser_factory=factory, sleeper=lambda _: None) == 1
+    assert len(factories) == 1 and len(calls) == 1
     assert run(args, browser_factory=factory, sleeper=lambda _: None) == 0
     assert len(factories) == 2 and len(calls) == 2
     report = json.loads((args.output / "report.json").read_text())
-    assert report["tasks"][0]["attempts"] == 2
+    assert report["tasks"][0]["attempts"] == 1
     assert report["tasks"][0]["raw_directory"].startswith("raw/")

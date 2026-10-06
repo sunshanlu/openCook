@@ -6,10 +6,10 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 from playwright.sync_api import Error as PlaywrightError
-from playwright.sync_api import Page, sync_playwright
+from playwright.sync_api import Page, expect, sync_playwright
 
 from .errors import BrowserUnsupported, TaskError
-from .links import note_id, validate_url
+from .links import note_id, profile_id, validate_url
 from .models import Source
 from .storage import atomic_write, write_json
 
@@ -29,14 +29,19 @@ class SiteBrowser:
         self.playwright = None
         self.raw_directory = None
         self.verified_note_id = None
+        self.history_messages = {}
 
     def __enter__(self):
         self.profile.mkdir(parents=True, exist_ok=True, mode=0o700)
         self.playwright = sync_playwright().start()
         try:
             self.context = self.playwright.chromium.launch_persistent_context(
-                str(self.profile), channel="chrome", headless=False,
-                viewport={"width": 1440, "height": 1000},
+                str(self.profile),
+                channel="chrome",
+                headless=False,
+                # Headed Chrome must use its real content area. An emulated viewport
+                # taller than the native window puts the bottom composer off screen.
+                no_viewport=True,
             )
             self.context.set_default_timeout(8000)
             self.page = self.context.pages[0] if self.context.pages else self.context.new_page()
@@ -105,7 +110,8 @@ class SiteBrowser:
         while time.monotonic() < deadline:
             self.ensure_access(self.page)
             resolved = note_id(self.page.url)
-            data = self.page.evaluate("""expected => {
+            data = self.page.evaluate(
+                """expected => {
                 const map = window.__INITIAL_STATE__?.note?.noteDetailMap || {};
                 for (const item of Object.values(map)) {
                     const n = item?.note;
@@ -117,7 +123,9 @@ class SiteBrowser:
                         author: n.user?.nickname, cover_url: cover || null, type: n.type};
                 }
                 return null;
-            }""", expected or resolved)
+            }""",
+                expected or resolved,
+            )
             if data and resolved and data.get("note_id") == resolved:
                 validate_url(self.page.url)
                 if expected and expected != resolved:
@@ -135,6 +143,45 @@ class SiteBrowser:
         if not note_id(self.page.url):
             raise TaskError("link_invalid", "短链接未解析到视频笔记", retryable=False)
         raise BrowserUnsupported("未找到当前笔记数据；请更新页面适配后再运行批量任务")
+
+    def wait_editor_ready(self):
+        """Wait for the live composer, including replacement after chat navigation."""
+        page = self.chat_page
+        page.bring_to_front()
+        print("  等待点点输入框加载并可编辑…", flush=True)
+        deadline = time.monotonic() + 60
+        editor = page.locator(EDITOR)
+        try:
+            while time.monotonic() < deadline:
+                self.ensure_access(page)
+                remaining = max(1, int((deadline - time.monotonic()) * 1000))
+                editor.wait_for(state="visible", timeout=remaining)
+                expect(editor).to_be_editable(timeout=remaining)
+                handle = editor.element_handle()
+                page.wait_for_timeout(500)
+                # A navigation can replace the visible input during the settle delay.
+                if editor.count() != 1 or not editor.is_editable():
+                    continue
+                if not handle.evaluate("el => el.isConnected"):
+                    continue
+                if editor.evaluate("""el => {
+                    const box = el.getBoundingClientRect();
+                    const composer = el.closest('.wendian-wrapper');
+                    const button = composer?.querySelector('.submit-button-wrapper');
+                    const send = button?.getBoundingClientRect();
+                    const inView = rect => rect && rect.width > 0 && rect.height > 0 &&
+                        rect.top >= 0 && rect.left >= 0 && rect.bottom <= innerHeight &&
+                        rect.right <= innerWidth;
+                    const hit = document.elementFromPoint(
+                        box.left + box.width / 2, box.top + box.height / 2);
+                    return inView(box) && inView(send) && hit === el;
+                }"""):
+                    return editor
+                page.wait_for_timeout(250)
+        except (PlaywrightError, AssertionError) as exc:
+            self.ensure_access(page)
+            raise BrowserUnsupported("点点输入框未加载完成或不可编辑；未填写、未发送") from exc
+        raise BrowserUnsupported("点点输入框未在可见窗口内稳定就绪；未填写、未发送")
 
     def new_chat(self):
         if self.chat_page and not self.chat_page.is_closed():
@@ -155,122 +202,416 @@ class SiteBrowser:
             new_button.first.click()
         # Navigating to /ai_chat alone may restore the latest conversation.
         try:
-            self.chat_page.wait_for_function("""() =>
+            self.chat_page.wait_for_function(
+                """() =>
                 !new URL(location.href).searchParams.get('conversationId') &&
                 document.querySelectorAll('.ai-message, .user-message__text-wrapper').length === 0
-            """, timeout=10000)
+            """,
+                timeout=10000,
+            )
         except PlaywrightError as exc:
             raise BrowserUnsupported("无法确认新建了空白对话；停止以防混入其他视频") from exc
         self.conversation_id = None
         self.verified_note_id = None
+        self.wait_editor_ready()
+
+    def collect_profile(self, url: str, save_batch) -> dict:
+        """Observe only pagination triggered by ordinary page navigation and scrolling."""
+        identity = profile_id(url)
+        page = self.context.new_page()
+        pagination = {"observed": False, "has_more": None, "error": None}
+        pending = []
+
+        def observe(response):
+            parts = urlsplit(response.url)
+            if (
+                parts.hostname not in {"www.xiaohongshu.com", "edith.xiaohongshu.com"}
+                or parts.path != "/api/sns/web/v1/user_posted"
+                or parse_qs(parts.query).get("user_id") != [identity]
+            ):
+                return
+            try:
+                payload = response.json()
+                data = payload.get("data", {})
+                if (
+                    not response.ok
+                    or payload.get("success") is False
+                    or not isinstance(data.get("notes"), list)
+                    or not isinstance(data.get("has_more"), bool)
+                ):
+                    pagination["error"] = "主页分页响应失败或结构改变"
+                    return
+                batch = []
+                for note in data["notes"]:
+                    card = note.get("note_card", note)
+                    nid = note.get("note_id", card.get("note_id"))
+                    token = note.get("xsec_token", card.get("xsec_token"))
+                    if not nid or not note_id(f"https://www.xiaohongshu.com/explore/{nid}"):
+                        pagination["error"] = "主页分页缺少有效笔记 ID"
+                        return
+                    from urllib.parse import urlencode
+
+                    link = f"https://www.xiaohongshu.com/user/profile/{identity}/{nid}"
+                    if token:
+                        link += "?" + urlencode({"xsec_token": token, "xsec_source": "pc_user"})
+                    batch.append(
+                        {
+                            "note_id": nid,
+                            "url": link,
+                            "type": card.get("type"),
+                            "title": card.get("display_title", card.get("title", "")),
+                        }
+                    )
+                pending.extend(batch)
+                pagination.update(observed=True, has_more=data["has_more"])
+            except (ValueError, TypeError, AttributeError, PlaywrightError):
+                pagination["error"] = "无法读取主页分页响应"
+
+        page.on("response", observe)
+        seen = set()
+        stagnant = 0
+        try:
+            page.goto(url, wait_until="domcontentloaded", timeout=45000)
+            page.wait_for_timeout(2000)
+            self.ensure_access(page)
+            while True:
+                self.ensure_access(page)
+                if profile_id(page.url) != identity:
+                    raise TaskError("profile_invalid", "主页跳转到其他博主", retryable=False)
+                active_tab = page.evaluate("""() => {
+                    const tab = window.__INITIAL_STATE__?.user?.activeTab;
+                    return (tab?._value ?? tab)?.query ?? null;
+                }""")
+                if active_tab is not None and active_tab != "note":
+                    raise BrowserUnsupported("主页已切换到非笔记标签；停止以免采集收藏内容")
+                cards = page.locator("section.note-item").evaluate_all("""els => els.map(e => ({
+                    note_id: e.dataset.noteId, url: e.querySelector('a.cover')?.href,
+                    type: e.querySelector('.play-icon') ? 'video' : null,
+                    title: e.querySelector('.title')?.innerText || ''
+                }))""")
+                batch = {n["note_id"]: n for n in pending}
+                pending.clear()
+                for card in cards:
+                    nid = card.get("note_id")
+                    if nid and card.get("url") and note_id(card["url"]) == nid:
+                        previous = batch.get(nid, {})
+                        batch[nid] = {
+                            **previous,
+                            **card,
+                            "type": card["type"] or previous.get("type"),
+                        }
+                if batch:
+                    save_batch(list(batch.values()))
+                new = set(batch) - seen
+                seen.update(batch)
+                print(f"  已观察 {len(seen)} 条笔记", flush=True)
+                stagnant = 0 if new else stagnant + 1
+                if pagination["error"]:
+                    return {
+                        "status": "incomplete",
+                        "reason": pagination["error"],
+                        "observed_notes": len(seen),
+                    }
+                if pagination["observed"] and pagination["has_more"] is False:
+                    return {
+                        "status": "complete",
+                        "end_signal": "user_posted.has_more=false",
+                        "observed_notes": len(seen),
+                    }
+                if stagnant >= 3:
+                    return {
+                        "status": "incomplete",
+                        "reason": "连续三轮无新增，未确认末页",
+                        "observed_notes": len(seen),
+                    }
+                page.evaluate("""() => {
+                    window.scrollTo(0, Math.max(document.body.scrollHeight,
+                        document.documentElement.scrollHeight));
+                }""")
+                page.wait_for_timeout(2500)
+        finally:
+            page.remove_listener("response", observe)
+            if self.raw_directory and not page.is_closed():
+                with suppress(PlaywrightError):
+                    page.screenshot(path=str(self.raw_directory / "profile.png"), timeout=5000)
+            with suppress(PlaywrightError):
+                page.close()
 
     def diagnostics(self, directory: Path):
         directory.mkdir(parents=True, exist_ok=True)
         for name, page in (("note", self.page), ("chat", self.chat_page)):
             if page and not page.is_closed():
                 with suppress(PlaywrightError):
-                    page.screenshot(path=str(directory / f"{name}.png"), full_page=True)
+                    page.screenshot(
+                        path=str(directory / f"{name}.png"), full_page=False, timeout=5000
+                    )
                     (directory / f"{name}.html").write_text(page.content(), encoding="utf-8")
 
-    def ask(self, prompt: str, source: Source, *, repair: bool = False) -> str:
+    def restore_chat(self, conversation_id: str):
+        if self.chat_page and not self.chat_page.is_closed():
+            self.chat_page.close()
+        self.chat_page = self.context.new_page()
+        self.history_messages = {}
+
+        def observe_history(response):
+            if urlsplit(response.url).path != "/api/sns/web/v1/dqa/history/detail":
+                return
+            try:
+                if not response.ok:
+                    return
+                for item in response.json().get("data", {}).get("items", []):
+                    message = item.get("message", {})
+                    question = message.get("question", "")
+                    if message.get("id") and question:
+                        self.history_messages[question] = {
+                            "server_message_id": message["id"],
+                            "text": message.get("simple_data", {})
+                            .get("base_info", {})
+                            .get("text", ""),
+                            "observed_url": response.url,
+                        }
+            except (ValueError, TypeError, PlaywrightError):
+                pass
+
+        self.chat_page.on("response", observe_history)
+        self.chat_page.goto(
+            CHAT + "?conversationId=" + conversation_id, wait_until="domcontentloaded"
+        )
+        self.ensure_access(self.chat_page)
+        self.wait_editor_ready()
+        self.chat_page.wait_for_selector("[data-round-id]", timeout=20000)
+        current = parse_qs(urlsplit(self.chat_page.url).query).get("conversationId", [None])[0]
+        if current != conversation_id:
+            raise BrowserUnsupported("历史会话恢复后 ID 不匹配；停止提交")
+        self.conversation_id = conversation_id
+        self.verified_note_id = None
+
+    def request_snapshot(self, request: dict) -> dict:
+        self.ensure_access(self.chat_page)
+        snapshot = self.chat_page.evaluate(
+            """request => {
+            const cid = new URL(location.href).searchParams.get('conversationId');
+            const rounds = [...document.querySelectorAll('[data-round-id]')];
+            const matches = rounds.filter(el => {
+                const user = el.querySelector('.user-message__text-wrapper');
+                return user?.innerText.includes(request.request_id);
+            });
+            if (matches.length !== 1) return {conversation_id:cid, matches:matches.length};
+            const round = matches[0];
+            const ai = round.querySelector('.ai-message');
+            const content = ai?.querySelector('.xhs-ai-md-container');
+            const codes = content ? [...content.querySelectorAll('pre code')] : [];
+            const text = codes.length === 1 ? codes[0].textContent : content?.innerText;
+            const user = round.querySelector('.user-message__text-wrapper')?.innerText || '';
+            return {conversation_id:cid, matches:1, round_id:round.dataset.roundId,
+                user_text:user, text:text || '', finished:!!ai?.classList.contains(
+                'ai-message-finished'), error:!!ai?.querySelector('.interrupt, [class*="timeout"]'),
+                context_limit:
+                /上下文.{0,12}(上限|限制|过长)|对话.{0,8}(长度|太长)/.test(text || '')};
+        }""",
+            request,
+        )
+        if (
+            request.get("conversation_id")
+            and snapshot.get("conversation_id") != request["conversation_id"]
+        ):
+            if self.raw_directory:
+                write_json(
+                    self.raw_directory / "conversation-mismatch.json",
+                    {
+                        "expected_conversation_id": request["conversation_id"],
+                        "actual_conversation_id": snapshot.get("conversation_id"),
+                        "request_id": request["request_id"],
+                        "observed_at": time.time(),
+                    },
+                )
+            raise BrowserUnsupported("当前会话与持久请求不匹配")
+        if snapshot.get("matches", 0) > 1:
+            raise BrowserUnsupported("同一请求标识对应多个消息，无法安全恢复")
+        if snapshot.get("matches") == 1:
+            if request.get("prompt") and snapshot["user_text"] != request["prompt"]:
+                raise BrowserUnsupported("当前用户消息与已保存的提交文本不一致")
+            if request["note_id"] not in snapshot["user_text"]:
+                raise BrowserUnsupported("当前用户消息未绑定目标笔记")
+            if request.get("round_id") and snapshot["round_id"] != request["round_id"]:
+                history = self.history_messages.get(snapshot["user_text"])
+                if (
+                    not snapshot["round_id"].startswith("history-")
+                    or not history
+                    or snapshot["user_text"] != request.get("prompt")
+                    or (
+                        request.get("server_message_id")
+                        and request["server_message_id"] != history["server_message_id"]
+                    )
+                ):
+                    raise BrowserUnsupported("历史请求消息关联无法通过页面加载数据确认")
+                snapshot["history_binding"] = history
+                snapshot["original_round_id"] = request["round_id"]
+        return snapshot
+
+    def confirm_idle(self) -> bool:
+        # The live composer switches its icon from arrow_top to pause while generating.
+        return self.chat_page.evaluate("""() => {
+            const rounds = [...document.querySelectorAll('[data-round-id]')];
+            if (!rounds.length) return true;
+            const ai = rounds[rounds.length-1].querySelector('.ai-message');
+            const icons = [...document.querySelectorAll(
+                '.input-container .submit-button-wrapper use')];
+            const send = icons.some(el => (el.getAttribute('href') || '').endsWith('#arrow_top'));
+            return !!ai?.classList.contains('ai-message-finished') && send;
+        }""")
+
+    def stop_generation(self) -> bool:
+        # Fail closed until the stop control has been verified for this page version.
+        return self.confirm_idle()
+
+    def begin_request(self, prompt: str, source: Source, request: dict, persist):
         page = self.chat_page
         self.ensure_access(page)
-        editor = page.locator(EDITOR)
-        editor.wait_for(state="visible", timeout=20000)
-        if repair:
-            current = parse_qs(urlsplit(page.url).query).get("conversationId", [None])[0]
-            if self.verified_note_id != source.note_id or current != self.conversation_id:
-                raise TaskError("reference_mismatch", "修正请求的对话或视频来源发生变化")
-        else:
-            # The real site only attaches note cards on paste, not textarea.fill().
-            # Observe the response generated by that UI action; do not call private APIs.
-            try:
-                with page.expect_response(
-                    lambda r: urlsplit(r.url).path == "/api/sns/agentspark/web/note/detail",
-                    timeout=20000,
-                ) as fetched:
-                    editor.evaluate("""(el, url) => {
-                        const data = new DataTransfer();
-                        data.setData('text/plain', url);
-                        el.dispatchEvent(new ClipboardEvent('paste', {
-                            clipboardData: data, bubbles: true, cancelable: true
-                        }));
-                    }""", source.url)
-                response = fetched.value
-                payload = response.json()
-                data = payload.get("data", payload)
-                details = data.get("content_detail_list", data.get("contentDetailList", []))
-                ids = [entry.get("id") for entry in details]
-                if not response.ok or ids != [source.note_id]:
-                    raise TaskError("reference_mismatch", "点点引用响应未对应唯一的目标视频")
-                card = page.locator('.xhs-ai-selected-note-card:visible')
-                card.wait_for(state="visible", timeout=10000)
-                if card.count() != 1:
-                    raise TaskError("reference_mismatch", "输入中包含零个或多个笔记引用")
-                self.verified_note_id = source.note_id
-                if self.raw_directory:
-                    write_json(self.raw_directory / "reference.json", {
-                        "expected_note_id": source.note_id, "selected_note_ids": ids,
-                        "card_title": card.inner_text(), "verified_at": time.time(),
-                    })
-            except TaskError:
-                raise
-            except (PlaywrightError, ValueError, TypeError, AttributeError) as exc:
-                self.ensure_access(page)
-                raise TaskError("reference_mismatch", "链接未形成可确认的视频引用") from exc
-
-        before = page.locator(".ai-message").count()
-        users_before = page.locator(".user-message__text-wrapper").count()
+        editor = self.wait_editor_ready()
+        if not self.confirm_idle():
+            raise BrowserUnsupported("上一轮生成未确认结束；停止新提交")
+        current = parse_qs(urlsplit(page.url).query).get("conversationId", [None])[0]
+        if request.get("conversation_id") and current != request["conversation_id"]:
+            raise BrowserUnsupported("发送前会话 ID 与批次不同")
+        # Only removable cards in the composer are current input references.
+        composer = editor.locator('xpath=ancestor::*[contains(@class,"wendian-wrapper")][1]')
+        if composer.count() != 1:
+            raise BrowserUnsupported("无法定位唯一输入引用区")
+        removers = composer.locator(".xhs-ai-selected-note-remove:visible")
+        while removers.count():
+            removers.first.click()
+        editor.fill("")
+        try:
+            with page.expect_response(
+                lambda r: urlsplit(r.url).path == "/api/sns/agentspark/web/note/detail",
+                timeout=20000,
+            ) as fetched:
+                editor.evaluate(
+                    """(el, url) => {
+                    const data = new DataTransfer(); data.setData('text/plain', url);
+                    el.dispatchEvent(new ClipboardEvent('paste', {
+                        clipboardData:data, bubbles:true, cancelable:true}));
+                }""",
+                    source.url,
+                )
+            response = fetched.value
+            payload = response.json()
+            data = payload.get("data", payload)
+            details = data.get("content_detail_list", data.get("contentDetailList", []))
+            ids = [entry.get("id") for entry in details]
+            card = composer.locator(".xhs-ai-selected-note-card:visible")
+            card.wait_for(state="visible", timeout=10000)
+            if not response.ok or ids != [source.note_id] or card.count() != 1:
+                raise TaskError("reference_mismatch", "当前输入引用未对应唯一目标视频")
+            if card.count() != 1:
+                raise TaskError("reference_mismatch", "等待引用稳定后目标卡片不唯一")
+            self.verified_note_id = source.note_id
+            evidence = {
+                "expected_note_id": source.note_id,
+                "selected_note_ids": ids,
+                "card_title": card.inner_text(),
+                "verified_at": time.time(),
+            }
+            if self.raw_directory:
+                write_json(self.raw_directory / "reference.json", evidence)
+        except TaskError:
+            raise
+        except (PlaywrightError, ValueError, TypeError, AttributeError) as exc:
+            self.ensure_access(page)
+            raise TaskError("reference_mismatch", "链接未形成可确认的视频引用") from exc
         editor.fill(prompt)
+        page.wait_for_timeout(500)
+        if editor.input_value() != prompt:
+            raise BrowserUnsupported("输入文本尚未稳定；停止提交")
+        submit = composer.locator(".submit-button-wrapper:visible")
+        if submit.count() != 1:
+            raise BrowserUnsupported("无法确认唯一发送控件")
+        page.wait_for_function(
+            """() => {
+            const editor = [...document.querySelectorAll('textarea[name="aiSearchTextarea"]')]
+                .find(el => el.getAttribute('aria-hidden') !== 'true');
+            const wrapper = editor?.closest('.wendian-wrapper');
+            const button = wrapper?.querySelector('.submit-button-wrapper');
+            return button && !button.classList.contains('disabled') &&
+                !button.classList.contains('submitting');
+        }""",
+            timeout=15000,
+        )
+        # Durable intent BEFORE Enter. A crash here requires history reconciliation.
+        request.update(status="sending", prompt=prompt, reference=evidence, sent_at=time.time())
+        persist(request)
         editor.press("Enter")
+        deadline = time.monotonic() + 15
+        while time.monotonic() < deadline:
+            snapshot = self.request_snapshot(request)
+            if snapshot.get("matches") == 1 and snapshot.get("conversation_id"):
+                request.update(
+                    status="submitted",
+                    conversation_id=snapshot["conversation_id"],
+                    round_id=snapshot["round_id"],
+                )
+                self.conversation_id = snapshot["conversation_id"]
+                persist(request)
+                return
+            page.wait_for_timeout(250)
+        raise BrowserUnsupported("提交状态无法关联到唯一用户消息；保存请求并停止，禁止直接重发")
+
+    def wait_request(self, request: dict, timeout: float, persist) -> str:
         started = time.monotonic()
-        saw_answer = False
-        previous = None
-        finished_since = None
-        turn = "repair" if repair else "answer"
-        while time.monotonic() - started < self.timeout:
-            paused_at = time.monotonic()
-            if self.ensure_access(page):
-                started += time.monotonic() - paused_at
-            snapshot = page.evaluate("""before => {
-                const messages = [...document.querySelectorAll('.ai-message')];
-                const last = messages[messages.length - 1];
-                const content = last?.querySelector('.xhs-ai-md-container');
-                // A fenced JSON code block exposes only its actual code, not copy controls.
-                const codes = content ? [...content.querySelectorAll('pre code')] : [];
-                const text = codes.length === 1 ? codes[0].textContent : content?.innerText;
-                const error = last?.querySelector('.interrupt, [class*="timeout"]');
-                return {count: messages.length, finished: !!last?.classList.contains(
-                    'ai-message-finished'), text: text || '', error: !!error,
-                    users: document.querySelectorAll('.user-message__text-wrapper').length};
-            }""", before)
-            if snapshot["count"] > before and snapshot["users"] > users_before:
-                saw_answer = True
+        previous, finished_since = None, None
+        while time.monotonic() - started < timeout:
+            snapshot = self.request_snapshot(request)
+            if snapshot.get("matches") == 1:
+                if not request.get("round_id"):
+                    request.update(
+                        round_id=snapshot["round_id"],
+                        conversation_id=snapshot["conversation_id"],
+                        status="submitted",
+                    )
+                    self.conversation_id = snapshot["conversation_id"]
+                    persist(request)
                 text = snapshot["text"].strip()
+                if text.strip("（）() ") == "暂无内容":
+                    text = ""
                 if self.raw_directory and text != previous:
-                    atomic_write(self.raw_directory / f"{turn}-partial.txt", text.encode())
+                    atomic_write(
+                        self.raw_directory
+                        / ("repair-partial.txt" if request.get("repair") else "answer-partial.txt"),
+                        text.encode(),
+                    )
+                if snapshot.get("context_limit"):
+                    request["context_limit_evidence"] = snapshot
+                    persist(request)
+                    raise TaskError("context_limit", "点点明确提示上下文长度限制")
                 if snapshot["error"]:
-                    raise TaskError("answer_incomplete", "点点显示超时或中断，拒绝导出部分回答")
+                    raise TaskError("answer_incomplete", "点点显示超时或中断，拒绝部分回答")
                 if snapshot["finished"] and text:
                     if finished_since is None or text != previous:
                         finished_since = time.monotonic()
-                    if finished_since is not None and time.monotonic() - finished_since >= 1:
-                        current = parse_qs(urlsplit(page.url).query).get(
-                            "conversationId", [None],
-                        )[0]
-                        if not current:
-                            raise BrowserUnsupported("回答完成但缺少对话 ID，无法记录来源")
-                        if repair and current != self.conversation_id:
-                            raise TaskError("reference_mismatch", "修正过程中对话 ID 发生变化")
-                        self.conversation_id = current
+                    if time.monotonic() - finished_since >= 1:
+                        request.update(status="answered", answer=text)
+                        persist(request)
                         return text
                 else:
                     finished_since = None
                 previous = text
-            page.wait_for_timeout(250)
-        if not saw_answer:
-            raise TaskError("answer_timeout", "提交后未出现新的点点回答")
-        raise TaskError("answer_timeout", "未等到 ai-message-finished 完成标记，拒绝导出部分回答")
+            self.chat_page.wait_for_timeout(250)
+        raise TaskError("answer_timeout", "当前关联请求未收到完整回答")
+
+    def ask(self, prompt: str, source: Source, *, repair: bool = False) -> str:
+        # Compatibility entry point; all production commands use ChatSession below.
+        from uuid import uuid4
+
+        request = {
+            "request_id": uuid4().hex,
+            "note_id": source.note_id,
+            "conversation_id": self.conversation_id,
+            "repair": repair,
+        }
+        prompt = prompt + f"\n目标 note_id={source.note_id}；request_id={request['request_id']}"
+        self.begin_request(prompt, source, request, lambda value: None)
+        return self.wait_request(request, self.timeout, lambda value: None)
 
     def download_cover(self, url: str) -> bytes:
         parts = urlsplit(url)
