@@ -11,7 +11,7 @@ from playwright.sync_api import Error as PlaywrightError
 
 from .errors import BrowserUnsupported, TaskError
 from .models import parse_bound_answer
-from .prompts import bound_prompt
+from .prompts import CLASSIFICATION_VERSION, EXTRACTION_VERSION, bound_prompt
 from .storage import atomic_write, now, write_json
 
 PENDING = {
@@ -164,7 +164,7 @@ class ChatSession:
             try:
                 return driver.wait_request(request, 2, self.persist)
             except TaskError as exc:
-                if exc.code != "answer_timeout":
+                if exc.code not in {"answer_timeout", "empty_answer"}:
                     raise
                 raise BrowserUnsupported(
                     "上次无回复重试已耗尽或生成状态不明；本轮停止提交"
@@ -177,6 +177,8 @@ class ChatSession:
                     self.persist,
                 )
             except TaskError as exc:
+                if exc.code == "empty_answer":
+                    return self.empty_retry(request)
                 if exc.code != "answer_timeout":
                     raise
                 request.update(
@@ -204,6 +206,8 @@ class ChatSession:
                 )
                 return answer
             except TaskError as exc:
+                if exc.code == "empty_answer":
+                    return self.empty_retry(request)
                 if exc.code not in {"answer_timeout", "json_invalid", "reference_mismatch"}:
                     raise
                 request.update(status="cooling")
@@ -220,6 +224,19 @@ class ChatSession:
             raise BrowserUnsupported("同会话重试仍无有效回复；保存进度并停止整批")
         request.update(status="retry_ready", safe_to_retry=True)
         self.persist(request)
+        return None
+
+    def empty_retry(self, request):
+        # Only explicit placeholder + matched round + finished/idle can bypass cooldown.
+        if not request.get("empty_answer_evidence") or not self.driver().confirm_idle():
+            raise BrowserUnsupported("空回答缺少结束证据；停止提交")
+        if request.get("silence_retry") or request["attempt"] >= 2:
+            request.update(status="blocked", blocked_reason="empty_answer_retry_exhausted")
+            self.persist(request)
+            raise BrowserUnsupported("同会话重试仍为（暂无内容）；保存进度并停止整批")
+        request.update(status="retry_ready", safe_to_retry=True, retry_reason="empty_answer")
+        self.persist(request)
+        print("  当前轮已结束且持续为空，跳过冷却；原会话最多重试一次。", flush=True)
         return None
 
     def process(self, source, stage, directory):
@@ -258,6 +275,9 @@ class ChatSession:
                     "repair_used": repaired,
                     "silence_retry": silence_retry,
                     "repair": False,
+                    "prompt_version": (
+                        CLASSIFICATION_VERSION if stage == "classify" else EXTRACTION_VERSION
+                    ),
                     "source": source.model_dump(),
                     "raw_directory": str(directory.relative_to(self.store.directory)),
                 }
@@ -312,6 +332,7 @@ class ChatSession:
                         "server_message_id",
                         "history_binding",
                         "original_round_id",
+                        "empty_answer_evidence",
                     ):
                         repair.pop(key, None)
                     repair["conversation_id"] = self.driver().conversation_id

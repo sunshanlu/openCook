@@ -15,6 +15,7 @@ from .links import read_profiles
 from .models import Classification, Extraction, Source
 from .prompts import (
     CLASSIFICATION_VERSION,
+    EXTRACTION_VERSION,
 )
 from .storage import Store, atomic_write, now, state_lock, write_json
 
@@ -349,6 +350,11 @@ class Workflow:
                             "conversation_id": driver.conversation_id,
                             "raw_directory": str(directory.relative_to(self.store.directory)),
                             "classified_at": now(),
+                            "prompt_version": (
+                                CLASSIFICATION_VERSION
+                                if stage == "classify"
+                                else EXTRACTION_VERSION
+                            ),
                         }
                         if stage == "classify":
                             record = {

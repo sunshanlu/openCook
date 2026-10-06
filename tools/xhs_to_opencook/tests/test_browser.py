@@ -300,3 +300,35 @@ def test_editor_waits_until_loading_overlay_is_removed(driver):
     assert driver.wait_editor_ready().is_editable()
     assert driver.chat_page.locator('#loading-overlay').count() == 0
     assert driver.chat_page.locator('.user-message__text-wrapper').count() == 0
+
+
+def test_explicit_finished_empty_placeholder_can_fail_fast(driver, source):
+    driver.chat_page.evaluate("""() => {
+        window.reply = '';editor.addEventListener('keydown', e => {
+            if(e.key !== 'Enter') return;
+            const ai = messages.lastChild.querySelector('.ai-message');
+            ai.innerHTML += '<div class="empty">（暂无内容）</div>';
+        });
+    }""")
+    request = {'request_id': 'empty-test', 'note_id': source.note_id}
+    driver.begin_request(f"{source.note_id} empty-test", source, request, lambda r: None)
+    assert driver.request_snapshot(request)['empty_placeholder']
+    with pytest.raises(TaskError) as error:
+        driver.wait_request(request, 3, lambda r: None, empty_grace=0.3)
+    assert error.value.code == 'empty_answer'
+    assert request['empty_answer_evidence']['finished']
+
+
+def test_placeholder_without_generation_finish_does_not_fail_fast(driver, source):
+    driver.chat_page.evaluate("""() => {
+        window.reply = '';window.mode = 'partial';
+        editor.addEventListener('keydown', e => {
+            if(e.key === 'Enter') messages.lastChild.querySelector('.ai-message')
+                .innerHTML += '<div>（暂无内容）</div>';
+        });
+    }""")
+    request = {'request_id': 'partial-test', 'note_id': source.note_id}
+    driver.begin_request(f"{source.note_id} partial-test", source, request, lambda r: None)
+    with pytest.raises(TaskError) as error:
+        driver.wait_request(request, 0.7, lambda r: None, empty_grace=0.1)
+    assert error.value.code == 'answer_timeout'

@@ -402,9 +402,13 @@ class SiteBrowser:
             const content = ai?.querySelector('.xhs-ai-md-container');
             const codes = content ? [...content.querySelectorAll('pre code')] : [];
             const text = codes.length === 1 ? codes[0].textContent : content?.innerText;
+            const placeholder = [...(ai?.querySelectorAll('*') || [])].some(el =>
+                !el.children.length && (el.innerText || '').trim()
+                    .replace(/^[（(]\\s*|\\s*[）)]$/g, '') === '暂无内容');
             const user = round.querySelector('.user-message__text-wrapper')?.innerText || '';
             return {conversation_id:cid, matches:1, round_id:round.dataset.roundId,
-                user_text:user, text:text || '', finished:!!ai?.classList.contains(
+                user_text:user, text:text || '', empty_placeholder:placeholder,
+                finished:!!ai?.classList.contains(
                 'ai-message-finished'), error:!!ai?.querySelector('.interrupt, [class*="timeout"]'),
                 context_limit:
                 /上下文.{0,12}(上限|限制|过长)|对话.{0,8}(长度|太长)/.test(text || '')};
@@ -557,9 +561,12 @@ class SiteBrowser:
             page.wait_for_timeout(250)
         raise BrowserUnsupported("提交状态无法关联到唯一用户消息；保存请求并停止，禁止直接重发")
 
-    def wait_request(self, request: dict, timeout: float, persist) -> str:
+    def wait_request(
+        self, request: dict, timeout: float, persist, *, empty_grace: float | None = 5
+    ) -> str:
         started = time.monotonic()
         previous, finished_since = None, None
+        empty_since = None
         while time.monotonic() - started < timeout:
             snapshot = self.request_snapshot(request)
             if snapshot.get("matches") == 1:
@@ -586,6 +593,24 @@ class SiteBrowser:
                     raise TaskError("context_limit", "点点明确提示上下文长度限制")
                 if snapshot["error"]:
                     raise TaskError("answer_incomplete", "点点显示超时或中断，拒绝部分回答")
+                if (
+                    empty_grace is not None
+                    and snapshot.get("empty_placeholder")
+                    and snapshot["finished"]
+                    and not text
+                    and self.confirm_idle()
+                ):
+                    empty_since = empty_since or time.monotonic()
+                    if time.monotonic() - empty_since >= empty_grace:
+                        request["empty_answer_evidence"] = {
+                            **snapshot,
+                            "observed_at": time.time(),
+                            "stable_seconds": empty_grace,
+                        }
+                        persist(request)
+                        raise TaskError("empty_answer", "当前轮已结束且持续显示（暂无内容）")
+                else:
+                    empty_since = None
                 if snapshot["finished"] and text:
                     if finished_since is None or text != previous:
                         finished_since = time.monotonic()

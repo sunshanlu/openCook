@@ -12,6 +12,7 @@ from .errors import BrowserUnsupported, TaskError
 from .export import convert, cover_jpeg, estimates, write_outputs
 from .links import note_id, read_links, validate_url
 from .models import Extraction, Source
+from .prompts import EXTRACTION_VERSION
 from .storage import Store, atomic_write, now, state_lock, write_json
 
 
@@ -190,6 +191,7 @@ def run(args, *, browser_factory=SiteBrowser, sleeper=time.sleep) -> int:
                                 "status": "success",
                                 "source": source.model_dump(),
                                 "extraction": extraction.model_dump(),
+                                "prompt_version": EXTRACTION_VERSION,
                                 "export_names": names,
                                 "cover_path": str(image_path) if image_path else None,
                                 "image_error": image_error,

@@ -42,6 +42,9 @@ class Transport:
         self.clock += timeout
         value = self.replies.pop(0) if self.replies else "valid"
         if isinstance(value, Exception):
+            if getattr(value, 'code', None) == 'empty_answer':
+                request['empty_answer_evidence'] = {'finished': True, 'empty_placeholder': True}
+                persist(request)
             raise value
         if value == "valid":
             value = json.dumps(
@@ -262,4 +265,30 @@ def test_pre_submission_failure_does_not_count(tmp_path):
         process(store, manager, 1)
     assert not manager.batches()[0]["submitted_notes"]
     assert manager.pending() is None
+    store.close()
+
+
+def test_finished_empty_answer_retries_without_cooldown(tmp_path):
+    store, driver, manager = setup(tmp_path)
+    driver.replies = [TaskError('empty_answer', '（暂无内容）'), 'valid']
+    process(store, manager, 1)
+    requests = store.stage_rows('chat_requests')
+    assert len(driver.sent) == 2 and driver.new == 1
+    assert not any('cooldown_until' in r for r in requests)
+    assert driver.sent[1]['attempt'] == 2
+    assert len(manager.batches()[0]['submitted_notes']) == 1
+    store.close()
+
+
+def test_repeated_empty_answer_blocks_across_restart(tmp_path):
+    store, driver, manager = setup(tmp_path)
+    driver.replies = [TaskError('empty_answer', '（暂无内容）')] * 3
+    with pytest.raises(BrowserUnsupported):
+        process(store, manager, 1)
+    assert manager.pending()['blocked_reason'] == 'empty_answer_retry_exhausted'
+    assert not manager.pending().get('cooldown_until')
+    manager.loaded_batch = None
+    with pytest.raises(BrowserUnsupported):
+        process(store, manager, 1)
+    assert len(driver.sent) == 2 and driver.new == 1
     store.close()
