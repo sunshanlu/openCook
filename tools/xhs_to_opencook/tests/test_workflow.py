@@ -102,6 +102,7 @@ def setup(tmp_path, answer, image_bytes):
         non_interactive=True,
         reclassify=False,
         refresh=False,
+        max_attempts=2,
     )
     args.profiles.write_text(
         f"https://www.xiaohongshu.com/user/profile/{P1}\n"

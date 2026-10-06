@@ -44,6 +44,7 @@ class Workflow:
             store,
             self.driver,
             capacity=getattr(args, "chat_batch_size", 50),
+            max_attempts=getattr(args, "max_attempts", 30),
             interval=args.interval,
             timeout=args.timeout,
             sleeper=sleeper,

@@ -76,6 +76,7 @@ class Transport:
 def setup(tmp_path, **kwargs):
     store = Store(tmp_path)
     driver = Transport()
+    kwargs.setdefault('max_attempts', 2)
     manager = ChatSession(
         store,
         lambda: driver,
@@ -291,4 +292,34 @@ def test_repeated_empty_answer_blocks_across_restart(tmp_path):
     with pytest.raises(BrowserUnsupported):
         process(store, manager, 1)
     assert len(driver.sent) == 2 and driver.new == 1
+    store.close()
+
+
+def test_30_attempts_limit_and_restart_do_not_reset_count(tmp_path):
+    store, driver, manager = setup(tmp_path, max_attempts=30)
+    driver.replies = [TaskError('empty_answer', '（暂无内容）')] * 31
+    with pytest.raises(BrowserUnsupported):
+        process(store, manager, 1)
+    assert [r['attempt'] for r in driver.sent] == list(range(1, 31))
+    assert manager.pending()['attempt'] == 30
+    assert len(manager.batches()[0]['submitted_notes']) == 1
+    assert driver.new == 1
+    manager.loaded_batch = None
+    with pytest.raises(BrowserUnsupported):
+        process(store, manager, 1)
+    assert len(driver.sent) == 30
+    store.close()
+
+
+def test_higher_limit_resumes_old_blocked_request_at_attempt_three(tmp_path):
+    store, driver, manager = setup(tmp_path)
+    driver.replies = [TaskError('empty_answer', '（暂无内容）')] * 2
+    with pytest.raises(BrowserUnsupported):
+        process(store, manager, 1)
+    manager.max_attempts = 30
+    manager.loaded_batch = None
+    driver.replies = [TaskError('empty_answer', '（暂无内容）'), 'valid']
+    process(store, manager, 1)
+    assert [r['attempt'] for r in driver.sent] == [1, 2, 3]
+    assert driver.new == 1
     store.close()

@@ -61,6 +61,7 @@ def setup(tmp_path, source, answer, image_bytes):
         interval=10,
         non_interactive=True,
         refresh=False,
+        max_attempts=2,
     )
     args.links.write_text(source.url)
     driver = FakeBrowser(source, answer, image_bytes)

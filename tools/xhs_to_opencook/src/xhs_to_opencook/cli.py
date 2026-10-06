@@ -48,6 +48,7 @@ def main() -> int:
                 command.add_argument("--reclassify", action="store_true")
             if name in {"run", "pipeline", "classify", "extract"}:
                 command.add_argument("--chat-batch-size", type=positive_integer, default=50)
+                command.add_argument("--max-attempts", type=positive_integer, default=30)
             command.add_argument("--timeout", type=positive, default=180)
             command.add_argument("--interval", type=positive, default=10)
             command.add_argument("--non-interactive", action="store_true")

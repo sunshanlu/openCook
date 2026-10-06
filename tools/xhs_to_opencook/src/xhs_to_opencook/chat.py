@@ -38,9 +38,13 @@ class ChatSession:
         sleeper=time.sleep,
         clock=time.time,
         cooldown=600,
+        max_attempts=30,
     ):
         if isinstance(capacity, bool) or not isinstance(capacity, int) or capacity <= 0:
             raise ValueError("chat batch size must be a positive integer")
+        if isinstance(max_attempts, bool) or not isinstance(max_attempts, int) or max_attempts <= 0:
+            raise ValueError("max attempts must be a positive integer")
+        self.max_attempts = max_attempts
         self.store, self.driver = store, driver
         self.capacity, self.interval, self.timeout = capacity, max(10, interval), timeout
         self.sleeper, self.clock, self.cooldown = sleeper, clock, cooldown
@@ -162,10 +166,21 @@ class ChatSession:
         if request["status"] == "blocked":
             self.reconcile(request)
             try:
-                return driver.wait_request(request, 2, self.persist)
+                return driver.wait_request(request, 6, self.persist)
             except TaskError as exc:
                 if exc.code not in {"answer_timeout", "empty_answer"}:
                     raise
+                if request.get("blocked_reason") in {
+                    "silence_retry_exhausted", "empty_answer_retry_exhausted"
+                } and request["attempt"] < self.max_attempts:
+                    if exc.code == "empty_answer":
+                        return self.empty_retry(request)
+                    if not driver.stop_generation():
+                        raise BrowserUnsupported("恢复时无法确认旧生成已结束；停止提交") from exc
+                    request.update(status="retry_ready", safe_to_retry=True,
+                        attempt_limit=self.max_attempts, resumed_with_higher_limit=True)
+                    self.persist(request)
+                    return None
                 raise BrowserUnsupported(
                     "上次无回复重试已耗尽或生成状态不明；本轮停止提交"
                 ) from exc
@@ -218,7 +233,7 @@ class ChatSession:
             request.update(status="blocked", blocked_reason="generation_not_confirmed_stopped")
             self.persist(request)
             raise BrowserUnsupported("冷却结束，无法确认旧生成已终止；保存进度并停止整批")
-        if request.get("silence_retry") or request["attempt"] >= 2:
+        if request["attempt"] >= self.max_attempts:
             request.update(status="blocked", blocked_reason="silence_retry_exhausted")
             self.persist(request)
             raise BrowserUnsupported("同会话重试仍无有效回复；保存进度并停止整批")
@@ -230,13 +245,16 @@ class ChatSession:
         # Only explicit placeholder + matched round + finished/idle can bypass cooldown.
         if not request.get("empty_answer_evidence") or not self.driver().confirm_idle():
             raise BrowserUnsupported("空回答缺少结束证据；停止提交")
-        if request.get("silence_retry") or request["attempt"] >= 2:
+        if request["attempt"] >= self.max_attempts:
             request.update(status="blocked", blocked_reason="empty_answer_retry_exhausted")
             self.persist(request)
             raise BrowserUnsupported("同会话重试仍为（暂无内容）；保存进度并停止整批")
         request.update(status="retry_ready", safe_to_retry=True, retry_reason="empty_answer")
         self.persist(request)
-        print("  当前轮已结束且持续为空，跳过冷却；原会话最多重试一次。", flush=True)
+        print(
+            f"  当前轮已结束且持续为空，跳过冷却；原会话继续第 {request['attempt'] + 1}"
+            f"/{self.max_attempts} 次尝试。", flush=True
+        )
         return None
 
     def process(self, source, stage, directory):
@@ -258,7 +276,7 @@ class ChatSession:
                 silence_retry = True
                 predecessor = pending
                 pending = None
-        while attempt <= 2:
+        while attempt <= self.max_attempts:
             request = pending
             pending = None
             if not request:
@@ -272,6 +290,7 @@ class ChatSession:
                     "conversation_id": self.driver().conversation_id,
                     "status": "prepared",
                     "attempt": attempt,
+                    "attempt_limit": self.max_attempts,
                     "repair_used": repaired,
                     "silence_retry": silence_retry,
                     "repair": False,
@@ -385,7 +404,7 @@ class ChatSession:
                     self.store.stage_save("chat_batches", batch["batch_id"], batch)
                     batch = None
                 self.last_attempt = attempt
-                if not exc.retryable or attempt == 2:
+                if not exc.retryable or attempt >= self.max_attempts:
                     exc.retryable = False
                     raise
                 attempt += 1
