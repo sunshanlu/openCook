@@ -187,6 +187,143 @@ def test_default_throttle_uses_two_seconds(tmp_path):
     store.close()
 
 
+@pytest.mark.parametrize("failures", [1, 2])
+def test_pre_send_busy_rotates_then_succeeds_or_reviews(tmp_path, failures):
+    store, driver, manager = setup(tmp_path)
+    original = driver.begin_request
+    calls = []
+
+    def begin(prompt, src, request, persist):
+        calls.append(request["conversation_id"])
+        if len(calls) <= failures:
+            raise TaskError("generation_busy", "上一轮生成未确认结束")
+        original(prompt, src, request, persist)
+
+    driver.begin_request = begin
+    if failures == 1:
+        process(store, manager, 1)
+        assert len(driver.sent) == 1 and manager.current["attempt"] == 2
+    else:
+        with pytest.raises(TaskError) as error:
+            process(store, manager, 1)
+        assert error.value.code == "manual_review_required"
+        assert not driver.sent
+        assert manager.review_for("classify", source(1).note_id)["attempt"] == 2
+        driver.begin_request = original
+        process(store, manager, 2)
+    assert calls == ["chat-1", "chat-2"]
+    assert manager.batches()[0]["sealed_reason"] == "generation_busy"
+    assert manager.pending() is None
+    store.close()
+
+
+@pytest.mark.parametrize("becomes_idle", [True, False])
+def test_cached_answer_not_idle_observes_before_recovery(tmp_path, becomes_idle):
+    store, driver, manager = setup(tmp_path, timeout=1, cooldown=2)
+    directory = store.attempt_directory(source(1).note_id, 1)
+    manager.process(source(1), "classify", directory)
+    request_id = manager.current["request_id"]
+    manager.loaded_batch = None
+    driver.idle = False
+    original_idle = driver.confirm_idle
+    driver.confirm_idle = lambda: becomes_idle and driver.clock >= 1002
+    original_new = driver.new_chat
+
+    def new_chat():
+        original_new()
+        driver.confirm_idle = original_idle
+        driver.idle = True
+
+    driver.new_chat = new_chat
+    process(store, manager, 1)
+    if becomes_idle:
+        assert len(driver.sent) == 1 and manager.current["request_id"] == request_id
+    else:
+        assert len(driver.sent) == 2 and manager.current["attempt"] == 2
+        assert manager.current["previous_request_id"] == request_id
+    assert driver.clock >= 1002
+    assert manager.pending() is None
+    store.close()
+
+
+def test_pre_send_busy_retry_survives_restart_without_history_match(tmp_path):
+    store, driver, manager = setup(tmp_path)
+    original_begin = driver.begin_request
+    driver.begin_request = lambda *args: (_ for _ in ()).throw(
+        TaskError("generation_busy", "上一轮生成未确认结束")
+    )
+    original_new = driver.new_chat
+
+    def interrupt_new():
+        if driver.new:
+            raise KeyboardInterrupt()
+        original_new()
+
+    driver.new_chat = interrupt_new
+    with pytest.raises(KeyboardInterrupt):
+        process(store, manager, 1)
+    assert manager.pending()["status"] == "retry_ready"
+    assert "sent_at" not in manager.pending()
+    driver.new_chat = original_new
+    driver.begin_request = original_begin
+    driver.request_snapshot = lambda r: pytest.fail("unsent busy request has no history")
+    manager.loaded_batch = None
+    process(store, manager, 1)
+    assert len(driver.sent) == 1 and driver.new == 2
+    assert manager.current["attempt"] == 2
+    store.close()
+
+
+def test_cached_answer_cooling_survives_restart_and_exhausts_to_review(tmp_path):
+    store, driver, manager = setup(tmp_path, timeout=1, cooldown=2)
+    directory = store.attempt_directory(source(1).note_id, 1)
+    manager.process(source(1), "classify", directory)
+    request = manager.current
+    request["attempt"] = 2
+    manager.persist(request)
+    driver.idle = False
+    original_sleeper = manager.sleeper
+    manager.sleeper = lambda s: (_ for _ in ()).throw(KeyboardInterrupt())
+    with pytest.raises(KeyboardInterrupt):
+        process(store, manager, 1)
+    deadline = manager.pending()["cooldown_until"]
+    manager.sleeper = original_sleeper
+    manager.loaded_batch = None
+    driver.clock = deadline + 1
+    with pytest.raises(TaskError) as error:
+        process(store, manager, 1)
+    assert error.value.code == "manual_review_required"
+    assert len(driver.sent) == 1 and manager.pending() is None
+    driver.idle = True
+    process(store, manager, 2)
+    assert driver.new == 2
+    store.close()
+
+
+@pytest.mark.parametrize("status,attempt", [
+    ("prepared", 3), ("submitted", 3), ("cooling", 3), ("retry_ready", 2),
+])
+def test_old_pending_over_new_budget_reviews_without_submission(tmp_path, status, attempt):
+    store, driver, manager = setup(tmp_path, max_attempts=30)
+    directory = store.attempt_directory(source(1).note_id, 1)
+    manager.process(source(1), "classify", directory)
+    request = manager.current
+    request.update(status=status, attempt=attempt)
+    manager.persist(request)
+    manager.max_attempts = 2
+    manager.loaded_batch = None
+    with pytest.raises(TaskError) as error:
+        process(store, manager, 1)
+    assert error.value.code == "manual_review_required"
+    assert len(driver.sent) == 1
+    assert manager.review_for("classify", source(1).note_id)["attempt"] == attempt
+    assert manager.pending() is None
+    assert manager.batches()[0]["status"] == "sealed"
+    process(store, manager, 2)
+    assert driver.new == 2
+    store.close()
+
+
 @pytest.mark.parametrize("invalid,code", [
     ("{", "json_syntax_invalid"), ("{}", "json_schema_invalid"),
 ])
@@ -284,6 +421,48 @@ def test_phase_isolation_and_capacity_one(tmp_path, answer):
     assert error.value.code == "manual_review_required"
     assert [b["stage"] for b in manager.batches()] == ["classify", "extract", "extract"]
     assert driver.new == 3
+    store.close()
+
+
+@pytest.mark.parametrize("stage", ["classify", "extract"])
+@pytest.mark.parametrize("wrong_field", ["note_id", "request_id"])
+def test_answer_id_mismatch_retries_then_csv_review_and_continues(
+    tmp_path, answer, stage, wrong_field,
+):
+    store, driver, manager = setup(tmp_path)
+    original_wait = driver.wait_request
+
+    def mismatched(request, timeout, persist):
+        payload = {
+            "note_id": request["note_id"], "request_id": request["request_id"],
+        }
+        if stage == "classify":
+            payload.update(verdict="tutorial", reason="有制作过程")
+        else:
+            payload["extraction"] = json.loads(answer)
+        payload[wrong_field] = source(99).note_id if wrong_field == "note_id" else "old-request"
+        driver.replies.insert(0, json.dumps(payload))
+        return original_wait(request, timeout, persist)
+
+    driver.wait_request = mismatched
+    with pytest.raises(TaskError) as error:
+        process(store, manager, 1, stage)
+    assert error.value.code == "manual_review_required"
+    assert [r["attempt"] for r in driver.sent] == [1, 2]
+    assert driver.sent[0]["conversation_id"] != driver.sent[1]["conversation_id"]
+    assert manager.pending() is None
+    output = tmp_path / "output"
+    manager.write_reviews(output, {source(1).note_id})
+    with (output / "manual_review.csv").open(encoding="utf-8-sig", newline="") as file:
+        rows = list(csv.DictReader(file))
+    assert len(rows) == 1 and rows[0]["错误码"] == "reference_mismatch"
+    assert rows[0]["失败次数"] == "2"
+    with pytest.raises(TaskError, match="等待人工审核"):
+        process(store, manager, 1, stage)
+    assert len(driver.sent) == 2
+    driver.wait_request = original_wait
+    process(store, manager, 2)
+    assert manager.current["status"] == "complete"
     store.close()
 
 

@@ -87,6 +87,21 @@ def test_finished_signal_and_same_conversation_repair(driver, source, answer):
     assert driver.ask("repair", source, repair=True) == answer
 
 
+def test_pre_send_busy_is_classified_without_sending(driver, source):
+    driver.chat_page.evaluate("""() => {
+        messages.innerHTML = '<div data-round-id="old"><div class="ai-message"></div></div>';
+    }""")
+    request = {"status": "prepared", "request_id": "current", "note_id": source.note_id}
+    with pytest.raises(TaskError) as error:
+        driver.begin_request("test", source, request, lambda r: None)
+    assert error.value.code == "generation_busy"
+    assert request["status"] == "prepared" and "sent_at" not in request
+    assert driver.chat_page.locator('.user-message__text-wrapper').count() == 0
+    request["conversation_id"] = "different-chat"
+    with pytest.raises(BrowserUnsupported, match="发送前会话 ID 与批次不同"):
+        driver.begin_request("test", source, request, lambda r: None)
+
+
 def test_stable_partial_without_signal_times_out(driver, source):
     driver.timeout = 0.7
     driver.chat_page.evaluate("window.mode='partial'")

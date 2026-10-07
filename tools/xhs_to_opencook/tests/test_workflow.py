@@ -174,6 +174,71 @@ def test_empty_answer_exhaustion_continues_classification_and_extraction(setup, 
         assert list(csv.DictReader(file))[0]["状态"] == "已解除待审核"
 
 
+@pytest.mark.parametrize("scenario", ["pre_send_busy", "cached_answer_busy", "old_over_budget"])
+def test_recovery_failures_review_and_continue_full_stage(setup, monkeypatch, scenario):
+    from test_chat import Transport
+
+    from xhs_to_opencook.chat import ChatSession
+    from xhs_to_opencook.workflow import Workflow
+
+    args, browser = setup
+    args.command = "collect"
+    assert execute(args, browser)[0] == 0
+    args.command = "classify"
+    if scenario != "pre_send_busy":
+        store = Store(args.state_dir)
+        transport = Transport()
+        manager = ChatSession(store, lambda: transport, max_attempts=30,
+                              clock=lambda: transport.clock, sleeper=lambda s: None)
+        src = browser.open_source(f"https://www.xiaohongshu.com/explore/{N1}")
+        manager.process(src, "classify", store.attempt_directory(N1, 1))
+        request = manager.current
+        request.update(attempt=3 if scenario == "old_over_budget" else 2,
+                       status="submitted" if scenario == "old_over_budget" else "validated")
+        manager.persist(request)
+        store.close()
+
+    original_init, original_driver = Workflow.__init__, Workflow.driver
+    clock = [1000]
+
+    def initialize(flow, *a, **kw):
+        original_init(flow, *a, **kw)
+        flow.chats.clock = lambda: clock[0]
+        flow.chats.sleeper = lambda s: clock.__setitem__(0, clock[0] + s)
+        flow.chats.cooldown = 2
+
+    def driver(flow):
+        transport = original_driver(flow)
+        if not getattr(transport, "recovery_injected", False):
+            transport.recovery_injected = True
+            if scenario == "pre_send_busy":
+                original_begin = transport.begin_request
+
+                def begin(prompt, src, request, persist):
+                    if request["note_id"] == N1:
+                        raise TaskError("generation_busy", "上一轮生成未确认结束")
+                    original_begin(prompt, src, request, persist)
+
+                transport.begin_request = begin
+            elif scenario == "cached_answer_busy":
+                transport.confirm_idle = lambda: False
+                transport.stop_generation = lambda: False
+        return transport
+
+    monkeypatch.setattr(Workflow, "__init__", initialize)
+    monkeypatch.setattr(Workflow, "driver", driver)
+    code, report = execute(args, browser)
+    assert code == 2 and report["status"] == "partial"
+    assert report["manual_review_count"] == 1 and not report["pending_requests"]
+    tasks = {t["note_id"]: t for t in report["tasks"]}
+    assert tasks[N1]["status"] == "awaiting_review"
+    assert tasks[N2]["status"] == "success" and tasks[N3]["status"] == "success"
+    with (args.output / "manual_review.csv").open(encoding="utf-8-sig", newline="") as file:
+        rows = list(csv.DictReader(file))
+    assert len(rows) == 1 and len(rows[0]) == 12
+    assert rows[0]["笔记ID"] == N1
+
+
 def test_phase_order_scope_and_offline_export(setup):
     args, browser = setup
     code, report = execute(args, browser)

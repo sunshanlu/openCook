@@ -489,11 +489,11 @@ class SiteBrowser:
         page = self.chat_page
         self.ensure_access(page)
         editor = self.wait_editor_ready()
-        if not self.confirm_idle():
-            raise BrowserUnsupported("上一轮生成未确认结束；停止新提交")
         current = parse_qs(urlsplit(page.url).query).get("conversationId", [None])[0]
         if request.get("conversation_id") and current != request["conversation_id"]:
             raise BrowserUnsupported("发送前会话 ID 与批次不同")
+        if not self.confirm_idle():
+            raise TaskError("generation_busy", "上一轮生成未确认结束；当前请求尚未发送")
         # Only removable cards in the composer are current input references.
         composer = editor.locator('xpath=ancestor::*[contains(@class,"wendian-wrapper")][1]')
         if composer.count() != 1:

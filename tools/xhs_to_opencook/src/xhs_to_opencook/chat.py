@@ -178,7 +178,22 @@ class ChatSession:
         except PlaywrightError as exc:
             self.loaded_batch = None
             raise BrowserUnsupported("提交期间浏览器关闭；保存意图，续跑先核对历史") from exc
-        except TaskError:
+        except TaskError as exc:
+            if exc.code == "generation_busy" and request["status"] == "prepared" and not (
+                request.get("sent_at") or request.get("round_id")
+            ):
+                request.update(
+                    review_error={"code": exc.code, "message": str(exc)},
+                    retry_new_chat=True, retry_reason=exc.code,
+                )
+                self.seal(request, exc.code, {"request_id": request["request_id"],
+                                             "submitted": False})
+                if request["attempt"] >= self.max_attempts:
+                    self.exhausted(request)
+                request.update(status="retry_ready", safe_to_retry=False)
+                self.persist(request)
+                print("  上一轮仍忙碌，当前请求未发送；封存会话后换新会话重试。", flush=True)
+                return
             if request["status"] == "prepared":
                 request.update(status="failed", error={"code": "pre_submission_failed"})
                 self.persist(request)
@@ -212,9 +227,14 @@ class ChatSession:
     def wait(self, request):
         driver = self.driver()
         if request["status"] in {"answered", "validated"}:
-            if not driver.confirm_idle():
-                raise BrowserUnsupported("回答虽已缓存，但当前会话生成未确认结束")
-            return request["answer"]
+            if driver.confirm_idle():
+                return request["answer"]
+            request.update(
+                status="cooling", cached_answer_wait=True,
+                cooldown_until=request.get("cooldown_until", self.clock() + self.cooldown),
+            )
+            self.persist(request)
+            print("  回答已缓存，但生成结束状态未确认；冷却观察后恢复或换会话。", flush=True)
         if request["status"] == "retry_ready":
             return None
         if request["status"] == "blocked":
@@ -264,6 +284,13 @@ class ChatSession:
         # Small waits allow status updates and controlled interrupts throughout cooldown.
         while self.clock() < request["cooldown_until"]:
             remaining = request["cooldown_until"] - self.clock()
+            if request.get("cached_answer_wait"):
+                if driver.confirm_idle():
+                    request.update(status="answered")
+                    self.persist(request)
+                    return request["answer"]
+                self.sleeper(min(5, remaining))
+                continue
             print(
                 f"  冷却剩余 {int(remaining)} 秒；会话 {request.get('conversation_id')}", flush=True
             )
@@ -284,6 +311,10 @@ class ChatSession:
                 request.pop("answer", None)
                 self.persist(request)
                 self.sleeper(max(0, min(5, remaining) - (self.clock() - observed_at)))
+        if request.get("cached_answer_wait") and driver.confirm_idle():
+            request.update(status="answered")
+            self.persist(request)
+            return request["answer"]
         return self.silence_retry(request)
 
     def seal(self, request, reason, evidence):
@@ -377,7 +408,20 @@ class ChatSession:
         batch = None
         predecessor = None
         if pending:
-            if pending["status"] != "prepared":
+            if pending["attempt"] > self.max_attempts or (
+                pending["status"] == "retry_ready" and pending["attempt"] >= self.max_attempts
+            ):
+                self.seal(pending, "attempt_limit", {"attempt_limit": self.max_attempts})
+                pending.setdefault("review_error", {
+                    "code": "attempts_exhausted", "message": "旧请求次数已达到本轮上限",
+                })
+                self.exhausted(pending)
+            unsent_busy_retry = (
+                pending["status"] == "retry_ready"
+                and pending.get("retry_reason") == "generation_busy"
+                and not pending.get("sent_at") and not pending.get("round_id")
+            )
+            if pending["status"] != "prepared" and not unsent_busy_retry:
                 try:
                     self.reconcile(pending)
                 except TaskError as exc:
@@ -508,6 +552,7 @@ class ChatSession:
                         "original_round_id",
                         "empty_answer_evidence",
                         "error",
+                        "cached_answer_wait",
                     ):
                         repair.pop(key, None)
                     repair["conversation_id"] = self.driver().conversation_id
@@ -576,7 +621,8 @@ class ChatSession:
                     self.seal(request, "request_failed", request["error"])
                 batch = None
                 attempt += 1
-        raise BrowserUnsupported("无回复重试次数已耗尽")
+        self.seal(request, "attempt_limit", {"attempt_limit": self.max_attempts})
+        self.exhausted(request)
 
     def accept(self):
         # Called only AFTER the legacy recipe/classification cache commit.
