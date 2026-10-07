@@ -877,3 +877,78 @@ def test_higher_limit_resumes_old_blocked_request_at_attempt_three(tmp_path):
     assert [r['attempt'] for r in driver.sent] == [1, 2, 3]
     assert driver.new == 3
     store.close()
+
+
+@pytest.mark.parametrize("succeeds", [False, True])
+def test_pre_send_reference_failure_rotates_and_preserves_budget(tmp_path, succeeds):
+    store, driver, manager = setup(tmp_path)
+    original = driver.begin_request
+    failures = []
+
+    def begin(*args):
+        failures.append(driver.conversation_id)
+        if succeeds and len(failures) == 2:
+            return original(*args)
+        raise TaskError("reference_mismatch", "引用接口返回空列表")
+
+    driver.begin_request = begin
+    driver.request_snapshot = lambda r: pytest.fail("Unsent request has no history")
+    if succeeds:
+        assert process(store, manager, 1).verdict == "tutorial"
+        assert manager.current["attempt"] == 2
+    else:
+        with pytest.raises(TaskError) as error:
+            process(store, manager, 1)
+        assert error.value.code == "manual_review_required"
+        assert manager.review_rows()[0]["attempt"] == 2
+        assert manager.review_rows()[0]["review_error"]["code"] == "reference_mismatch"
+        resumed = ChatSession(store, lambda: driver)
+        with pytest.raises(TaskError, match="等待人工审核"):
+            process(store, resumed, 1)
+    assert len(failures) == 2 and driver.new == 2
+    assert manager.pending() is None
+    assert len(driver.sent) == (1 if succeeds else 0)
+    store.close()
+
+
+def test_legacy_pre_submission_failures_do_not_reset_on_restart(tmp_path):
+    store, driver, manager = setup(tmp_path)
+    process(store, manager, 1)
+    batch_id = manager.batches()[0]["batch_id"]
+    for index in range(2):
+        failed = {"request_id": f"legacy-{index}", "note_id": source(2).note_id,
+                  "stage": "classify", "batch_id": batch_id, "status": "failed",
+                  "attempt": 1, "error": {"code": "pre_submission_failed"}}
+        manager.persist(failed)
+    driver.begin_request = lambda *args: pytest.fail("Legacy failures must not reset the budget")
+    resumed = ChatSession(store, lambda: driver)
+    with pytest.raises(TaskError) as error:
+        process(store, resumed, 2)
+    assert error.value.code == "manual_review_required"
+    assert len(driver.sent) == 1 and resumed.pending() is None
+    assert resumed.review_rows()[0]["attempt"] >= 2
+    store.close()
+
+
+def test_legacy_failures_never_discard_a_submitted_request(tmp_path):
+    store, driver, manager = setup(tmp_path)
+    process(store, manager, 1)
+    for index in range(2):
+        manager.persist({"request_id": f"legacy-{index}", "note_id": source(2).note_id,
+                         "stage": "classify", "batch_id": manager.batches()[0]["batch_id"],
+                         "status": "failed", "attempt": 1,
+                         "error": {"code": "pre_submission_failed"}})
+    driver.failure = KeyboardInterrupt()
+    with pytest.raises(KeyboardInterrupt):
+        original = driver.begin_request
+        # Reserve a submitted request from a previous version without invoking recovery.
+        request = {"request_id": "already-sent", "note_id": source(2).note_id,
+                   "stage": "classify", "batch_id": manager.batches()[0]["batch_id"],
+                   "status": "prepared", "attempt": 1}
+        original("original", source(2), request, manager.persist)
+    driver.failure = None
+    resumed = ChatSession(store, lambda: driver, clock=lambda: driver.clock)
+    assert process(store, resumed, 2).verdict == "tutorial"
+    assert resumed.pending() is None and resumed.review_rows() == []
+    assert len(driver.sent) == 1
+    store.close()

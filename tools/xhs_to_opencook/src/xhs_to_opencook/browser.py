@@ -18,6 +18,24 @@ CHAT = "https://www.xiaohongshu.com/ai_chat"
 EDITOR = 'textarea[name="aiSearchTextarea"]:not([aria-hidden="true"]):visible'
 
 
+def profile_note_metadata(card: dict) -> dict:
+    """Read metadata already delivered in a profile's note card."""
+    user = card.get("user") or {}
+    cover = card.get("cover") or {}
+    images = cover.get("info_list") or cover.get("infoList") or []
+    cover_url = cover.get("url_default") or cover.get("urlDefault") or next(
+        (image.get("url") for image in images
+         if (image.get("image_scene") or image.get("imageScene")) == "WB_DFT"),
+        None,
+    ) or cover.get("url") or cover.get("url_pre")
+    return {
+        "title": card.get("display_title") or card.get("title") or "",
+        "author": user.get("nickname") or user.get("nick_name") or "",
+        "author_id": user.get("user_id") or user.get("userId"),
+        "cover_url": cover_url,
+    }
+
+
 class SiteBrowser:
     def __init__(self, profile: Path, *, timeout: float = 180, interactive: bool = True):
         self.profile = profile
@@ -238,8 +256,10 @@ class SiteBrowser:
         page = self.context.new_page()
         pagination = {"observed": False, "has_more": None, "error": None}
         pending = []
+        observed_pages = 0
 
         def observe(response):
+            nonlocal observed_pages
             parts = urlsplit(response.url)
             if (
                 parts.hostname not in {"www.xiaohongshu.com", "edith.xiaohongshu.com"}
@@ -259,6 +279,12 @@ class SiteBrowser:
                     pagination["error"] = "主页分页响应失败或结构改变"
                     return
                 batch = []
+                observed_pages += 1
+                if self.raw_directory:
+                    write_json(
+                        self.raw_directory / "profile-pages" / f"{observed_pages:04d}.json",
+                        data,
+                    )
                 for note in data["notes"]:
                     card = note.get("note_card", note)
                     nid = note.get("note_id", card.get("note_id"))
@@ -276,7 +302,7 @@ class SiteBrowser:
                             "note_id": nid,
                             "url": link,
                             "type": card.get("type"),
-                            "title": card.get("display_title", card.get("title", "")),
+                            **profile_note_metadata(card),
                         }
                     )
                 pending.extend(batch)
@@ -301,10 +327,20 @@ class SiteBrowser:
                 }""")
                 if active_tab is not None and active_tab != "note":
                     raise BrowserUnsupported("主页已切换到非笔记标签；停止以免采集收藏内容")
+                author = page.evaluate("""() => {
+                    const unwrap = v => v?._value ?? v?.value ?? v;
+                    const data = unwrap(window.__INITIAL_STATE__?.user?.userPageData);
+                    return unwrap(data?.basicInfo)?.nickname
+                        || document.querySelector('.user-name')?.innerText?.trim() || '';
+                }""")
                 cards = page.locator("section.note-item").evaluate_all("""els => els.map(e => ({
                     note_id: e.dataset.noteId, url: e.querySelector('a.cover')?.href,
                     type: e.querySelector('.play-icon') ? 'video' : null,
-                    title: e.querySelector('.title')?.innerText || ''
+                    title: e.querySelector('.title')?.innerText || '',
+                    author: e.querySelector('.author .name, .author-wrapper .name')
+                        ?.innerText?.trim() || '',
+                    cover_url: e.querySelector('a.cover img')?.currentSrc
+                        || e.querySelector('a.cover img')?.src || null
                 }))""")
                 batch = {n["note_id"]: n for n in pending}
                 pending.clear()
@@ -313,10 +349,12 @@ class SiteBrowser:
                     if nid and card.get("url") and note_id(card["url"]) == nid:
                         previous = batch.get(nid, {})
                         batch[nid] = {
-                            **previous,
-                            **card,
-                            "type": card["type"] or previous.get("type"),
+                            **{k: v for k, v in card.items() if v},
+                            **{k: v for k, v in previous.items() if v},
                         }
+                for card in batch.values():
+                    card["author"] = card.get("author") or author
+                    card["author_id"] = card.get("author_id") or identity
                 if batch:
                     save_batch(list(batch.values()))
                 new = set(batch) - seen
@@ -542,6 +580,17 @@ class SiteBrowser:
             data = payload.get("data", payload)
             details = data.get("content_detail_list", data.get("contentDetailList", []))
             ids = [entry.get("id") for entry in details]
+            evidence = {
+                "expected_note_id": source.note_id,
+                "selected_note_ids": ids,
+                "response_status": response.status,
+                "response_code": payload.get("code"),
+                "verified_at": time.time(),
+            }
+            if self.raw_directory:
+                write_json(self.raw_directory / "reference.json", evidence)
+            if not response.ok or ids != [source.note_id]:
+                raise TaskError("reference_mismatch", "引用接口未返回唯一目标视频；当前请求未发送")
             card = composer.locator(".xhs-ai-selected-note-card:visible")
             card.wait_for(state="visible", timeout=10000)
             if not response.ok or ids != [source.note_id] or card.count() != 1:
@@ -562,6 +611,7 @@ class SiteBrowser:
         except (PlaywrightError, ValueError, TypeError, AttributeError) as exc:
             self.ensure_access(page)
             raise TaskError("reference_mismatch", "链接未形成可确认的视频引用") from exc
+        print("  已确认视频引用，填写请求…", flush=True)
         editor.fill(prompt)
         page.wait_for_timeout(500)
         if editor.input_value() != prompt:
@@ -595,6 +645,7 @@ class SiteBrowser:
                 )
                 self.conversation_id = snapshot["conversation_id"]
                 persist(request)
+                print("  已确认请求发送，等待点点回答…", flush=True)
                 return
             page.wait_for_timeout(250)
         raise BrowserUnsupported("提交状态无法关联到唯一用户消息；保存请求并停止，禁止直接重发")

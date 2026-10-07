@@ -168,8 +168,9 @@ class Store:
             (profile, identity),
         ).fetchone()
         previous = json.loads(row[0]) if row else {}
-        if not note.get("type") and previous.get("type"):
-            note["type"] = previous["type"]
+        for field in ("type", "title", "author", "author_id", "cover_url", "source"):
+            if not note.get(field) and previous.get(field):
+                note[field] = previous[field]
         value = {
             **previous,
             **note,

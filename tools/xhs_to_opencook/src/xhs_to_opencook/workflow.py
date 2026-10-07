@@ -11,7 +11,7 @@ from .browser import SiteBrowser
 from .chat import ChatSession
 from .errors import SESSION_BLOCK_CODES, BrowserUnsupported, TaskError
 from .export import convert, cover_jpeg, estimates, write_outputs
-from .links import read_profiles
+from .links import note_id, read_profiles, validate_url
 from .models import Classification, Extraction, Source
 from .prompts import (
     CLASSIFICATION_VERSION,
@@ -31,6 +31,30 @@ def classification_record(store, identity):
         return record, result
     except (ValueError, KeyError, TypeError):
         return None, None
+
+
+def collected_source(note, *records):
+    """Build the submission source from collection and saved stage metadata."""
+    identity = note["note_id"]
+    metadata = {}
+    for record in (*records, note):
+        saved = (record or {}).get("source")
+        if saved:
+            if saved.get("note_id") != identity:
+                raise TaskError("reference_mismatch", "缓存来源 ID 与采集笔记不同", retryable=False)
+            metadata.update({k: v for k, v in saved.items() if v})
+    metadata.update({k: note[k] for k in ("title", "author", "cover_url") if note.get(k)})
+    url = note["url"]
+    validate_url(url)
+    if note_id(url) != identity:
+        raise TaskError("reference_mismatch", "采集 URL 与笔记 ID 不同", retryable=False)
+    return Source(
+        note_id=identity,
+        url=url,
+        title=metadata.get("title") or f"标题未记录（{identity}）",
+        author=metadata.get("author") or f"作者未记录（{note['profile_ids'][0]}）",
+        cover_url=metadata.get("cover_url"),
+    )
 
 
 class Workflow:
@@ -242,28 +266,16 @@ class Workflow:
                 self.store.stage_save(
                     "profiles", identity, {"url": url, **result, "finished_at": now()}
                 )
-                # Detail verification uses a different page so profile scrolling is undisturbed.
+                # Missing card types stay explicit; collection never opens note pages.
                 for note in self.store.collected([identity]):
                     if note.get("type") in {"video", "normal"}:
                         continue
-                    try:
-                        source = self.driver().open_source(note["url"])
-                        self.store.collect_note(
-                            identity, {**note, "type": "video", "source": source.model_dump()}
-                        )
-                    except TaskError as exc:
-                        if isinstance(exc, BrowserUnsupported) or exc.code in SESSION_BLOCK_CODES:
-                            raise
-                        self.store.collect_note(
-                            identity,
-                            {
-                                **note,
-                                "type": "normal" if exc.code == "not_video" else "unknown",
-                                "type_error": {"code": exc.code, "message": str(exc)},
-                            },
-                        )
-                        if exc.code != "not_video":
-                            self.code = max(self.code, 2)
+                    self.store.collect_note(identity, {
+                        **note, "type": "unknown", "type_error": {
+                            "code": "type_unknown", "message": "主页卡片未提供笔记类型",
+                        },
+                    })
+                    self.code = max(self.code, 2)
             except (TaskError, PlaywrightError) as exc:
                 self.store.stage_save(
                     "profiles", identity, {"url": url, "status": "incomplete", "reason": str(exc)}
@@ -344,7 +356,7 @@ class Workflow:
                         source = (
                             Source.model_validate(pending["source"])
                             if pending and pending["note_id"] == identity
-                            else driver.open_source(note["url"])
+                            else collected_source(note, cache, classified)
                         )
                         if source.note_id != identity:
                             raise TaskError("reference_mismatch", "笔记 ID 发生变化")

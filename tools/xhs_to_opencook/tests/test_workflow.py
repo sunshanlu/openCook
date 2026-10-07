@@ -161,6 +161,57 @@ def test_extraction_uses_saved_classification_source_without_note_navigation(set
     store.close()
 
 
+def test_collected_metadata_survives_recollection_and_reaches_export(setup, monkeypatch):
+    args, browser = setup
+    args.command = "collect"
+    execute(args, browser)
+    store = Store(args.state_dir)
+    for profile in (P1, P2):
+        store.collect_note(profile, {
+            "note_id": N1, "url": f"https://www.xiaohongshu.com/explore/{N1}",
+            "type": "video", "title": "主页标题", "author": "主页作者",
+            "author_id": profile, "cover_url": "https://example.test/image",
+        })
+        store.collect_note(profile, {
+            "note_id": N1, "url": f"https://www.xiaohongshu.com/explore/{N1}",
+            "type": None, "title": "", "author": "", "cover_url": None,
+        })
+    store.close()
+    args.command = "pipeline"
+    monkeypatch.setattr(browser, "open_source", lambda url: pytest.fail("No detail navigation"))
+    code, report = execute(args, browser)
+    assert code == 2 and report["recipe_count"] == 1
+    store = Store(args.state_dir)
+    record = store.get(N1)
+    assert record["source"]["title"] == "主页标题"
+    assert record["source"]["author"] == "主页作者"
+    assert record["source"]["cover_url"] == "https://example.test/image"
+    assert record["cover_path"] and record["image_error"] is None
+    store.close()
+
+
+@pytest.mark.parametrize("field", ["source", "url"])
+def test_cached_identity_mismatch_is_rejected_before_submission(setup, field):
+    args, browser = setup
+    args.command = "collect"
+    execute(args, browser)
+    store = Store(args.state_dir)
+    note = {"note_id": N1, "url": f"https://www.xiaohongshu.com/explore/{N1}"}
+    if field == "source":
+        note["source"] = browser.open_source(
+            f"https://www.xiaohongshu.com/explore/{N2}"
+        ).model_dump()
+    else:
+        note["url"] = f"https://www.xiaohongshu.com/explore/{N2}"
+    store.collect_note(P1, note)
+    store.collect_note(P2, note)
+    store.close()
+    args.command = "classify"
+    _, report = execute(args, browser)
+    assert report["tasks"][0]["error"]["code"] == "reference_mismatch"
+    assert browser.events.count("classify") == 2  # Other videos can continue.
+
+
 def test_empty_answer_exhaustion_continues_classification_and_extraction(setup, monkeypatch):
     from xhs_to_opencook.workflow import Workflow
 
@@ -414,15 +465,15 @@ def test_platform_restriction_stops_before_next_video(setup, monkeypatch):
     execute(args, browser)
     args.command = "classify"
 
-    def restricted(url):
-        browser.opens.append(url)
+    def restricted(prompt, source, *, repair=False):
+        browser.events.append("classify")
         raise TaskError("platform_restricted", "访问频繁 300013", retryable=False)
 
-    monkeypatch.setattr(browser, "open_source", restricted)
+    monkeypatch.setattr(browser, "ask", restricted)
     code, report = execute(args, browser)
     assert code == 1 and report["status"] == "blocked"
     assert report["error"]["code"] == "platform_restricted"
-    assert len(browser.opens) == 1 and "classify" not in browser.events
+    assert browser.opens == [] and browser.events.count("classify") == 1
     assert report["manual_review_count"] == 0
     assert (args.output / "recipes.zip").is_file()
 
@@ -457,7 +508,7 @@ def test_invalid_classification_json(text):
         parse_classification(text, N1)
 
 
-def test_unknown_type_is_opened_and_normal_skipped(setup):
+def test_unknown_type_is_reported_without_opening_note_and_normal_skipped(setup):
     args, browser = setup
     original = browser.collect_profile
 
@@ -471,8 +522,10 @@ def test_unknown_type_is_opened_and_normal_skipped(setup):
 
     browser.collect_profile = collect
     code, report = execute(args, browser)
-    assert code == 0 and report["recipe_count"] == 1
-    assert N1 in browser.opens and N2 not in browser.opens and N3 not in browser.opens
+    assert code == 2 and report["recipe_count"] == 0
+    assert browser.opens == []
+    notes = json.loads((args.output / "collection.json").read_text())["notes"]
+    assert next(n for n in notes if n["note_id"] == N1)["type"] == "unknown"
 
 
 def test_submit_interval_applies_to_repair(setup):

@@ -179,8 +179,10 @@ class ChatSession:
             self.loaded_batch = None
             raise BrowserUnsupported("提交期间浏览器关闭；保存意图，续跑先核对历史") from exc
         except TaskError as exc:
-            if exc.code == "generation_busy" and request["status"] == "prepared" and not (
-                request.get("sent_at") or request.get("round_id")
+            if (
+                exc.code in {"generation_busy", "reference_mismatch"} and exc.retryable
+                and request["status"] == "prepared"
+                and not (request.get("sent_at") or request.get("round_id"))
             ):
                 request.update(
                     review_error={"code": exc.code, "message": str(exc)},
@@ -191,7 +193,7 @@ class ChatSession:
                     self.exhausted(request, seal_reason=exc.code, seal_evidence=evidence)
                 request.update(status="retry_ready", safe_to_retry=False)
                 self.seal(request, exc.code, evidence, with_request=True)
-                print("  上一轮仍忙碌，当前请求未发送；封存会话后换新会话重试。", flush=True)
+                print(f"  {exc.code}，当前请求未发送；封存会话后换新会话重试。", flush=True)
                 return
             if request["status"] == "prepared":
                 request.update(status="failed", error={"code": "pre_submission_failed"})
@@ -396,6 +398,41 @@ class ChatSession:
         pending = self.pending()
         if pending and (pending["stage"] != stage or pending["note_id"] != source.note_id):
             raise BrowserUnsupported("必须先恢复原阶段及原视频的未决请求，不能发送另一视频")
+        # Older versions restarted every unsent failure at attempt 1. Preserve their
+        # actual failed preparations instead of repeating them on every full resume.
+        legacy_failures = []
+        for row in self.store.stage_rows("chat_requests"):
+            if row["stage"] != stage or row["note_id"] != source.note_id:
+                continue
+            if row["status"] in {"complete", "review_released"}:
+                legacy_failures = []
+            elif (
+                row["status"] == "failed"
+                and row.get("error", {}).get("code") == "pre_submission_failed"
+            ):
+                legacy_failures.append(row)
+        if legacy_failures and (
+            not pending or (
+                pending["status"] == "prepared"
+                and not (pending.get("sent_at") or pending.get("round_id"))
+            )
+        ):
+            recovery = pending or dict(legacy_failures[-1])
+            recovery["attempt"] = max(
+                recovery["attempt"], len(legacy_failures) + (1 if pending else 0),
+            )
+            recovery.setdefault("review_error", {
+                "code": "pre_submission_failed", "message": "旧版本已记录发送前失败",
+            })
+            if recovery["attempt"] >= self.max_attempts:
+                self.exhausted(recovery, seal_reason="pre_submission_failed",
+                               seal_evidence={"legacy_failed_preparations": len(legacy_failures)})
+            if not pending:
+                recovery.update(status="retry_ready", retry_new_chat=True,
+                                retry_reason="reference_mismatch", safe_to_retry=False)
+                self.seal(recovery, "pre_submission_failed", {"submitted": False},
+                          with_request=True)
+            pending = recovery
         if not pending:
             previous = [
                 r for r in self.store.stage_rows("chat_requests")
@@ -427,7 +464,7 @@ class ChatSession:
                 self.exhausted(pending)
             unsent_busy_retry = (
                 pending["status"] == "retry_ready"
-                and pending.get("retry_reason") == "generation_busy"
+                and pending.get("retry_reason") in {"generation_busy", "reference_mismatch"}
                 and not pending.get("sent_at") and not pending.get("round_id")
             )
             if pending["status"] != "prepared" and not unsent_busy_retry:

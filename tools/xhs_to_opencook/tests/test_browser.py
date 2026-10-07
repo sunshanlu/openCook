@@ -320,7 +320,8 @@ def test_unsupported_editor_fails_closed(driver):
         driver.new_chat()
 
 
-def test_collection_observes_only_matching_profile_pagination(driver, source):
+@pytest.mark.parametrize("cover_field", ["url_default", "info_list"])
+def test_collection_observes_only_matching_profile_pagination(driver, source, cover_field):
     profile = "1" * 24
     url = f"https://www.xiaohongshu.com/user/profile/{profile}"
     script = """<body><script>
@@ -340,6 +341,11 @@ def test_collection_observes_only_matching_profile_pagination(driver, source):
                             "type": "video",
                             "xsec_token": "fixture",
                             "display_title": source.title,
+                            "user": {"user_id": profile, "nick_name": source.author},
+                            "cover": ({"url_default": source.cover_url}
+                                      if cover_field == "url_default" else {"info_list": [
+                                          {"image_scene": "WB_DFT", "url": source.cover_url},
+                                      ]}),
                         }
                     ],
                 },
@@ -352,6 +358,38 @@ def test_collection_observes_only_matching_profile_pagination(driver, source):
     assert result["end_signal"] == "user_posted.has_more=false"
     assert batches[0]["type"] == "video"
     assert "xsec_token=fixture" in batches[0]["url"]
+    assert batches[0]["author"] == source.author
+    assert batches[0]["author_id"] == profile
+    assert batches[0]["cover_url"] == source.cover_url
+    captured = json.loads((driver.raw_directory / "profile-pages/0001.json").read_text())
+    assert captured["has_more"] is False
+    assert captured["notes"][0]["note_id"] == source.note_id
+
+
+def test_collection_dom_metadata_does_not_erase_response_fields(driver, source):
+    profile = "1" * 24
+    url = f"https://www.xiaohongshu.com/user/profile/{profile}"
+    body = f"""<meta charset="utf-8"><body><div class="user-name">{source.author}</div>
+    <section class="note-item" data-note-id="{source.note_id}">
+    <a class="cover" href="/explore/{source.note_id}"><img src="{source.cover_url}"></a>
+    <span class="play-icon"></span><span class="title"></span></section>
+    <script>window.__INITIAL_STATE__={{user:{{userPageData:{{basicInfo:{{
+    nickname:'{source.author}'}}}}}}}};
+    fetch('/api/sns/web/v1/user_posted?user_id={profile}');</script></body>"""
+    driver.context.route(url, lambda route: route.fulfill(body=body, content_type="text/html"))
+    driver.context.route("**/api/sns/web/v1/user_posted?*", lambda route: route.fulfill(json={
+        "success": True, "data": {"has_more": False, "notes": [{"note_card": {
+            "note_id": source.note_id, "type": "video", "display_title": source.title,
+            "xsec_token": "fixture", "user": {}, "cover": {},
+        }}]},
+    }))
+    notes = []
+    assert driver.collect_profile(url, notes.extend)["status"] == "complete"
+    assert notes[0]["title"] == source.title
+    assert notes[0]["author"] == source.author
+    assert notes[0]["author_id"] == profile
+    assert notes[0]["cover_url"] == source.cover_url
+    assert "xsec_token=fixture" in notes[0]["url"]
 
 
 def test_collection_wrong_profile_and_stagnation_not_complete(driver):
@@ -480,3 +518,32 @@ def test_placeholder_without_generation_finish_does_not_fail_fast(driver, source
     with pytest.raises(TaskError) as error:
         driver.wait_request(request, 0.7, lambda r: None, empty_grace=0.1)
     assert error.value.code == 'answer_timeout'
+
+
+def test_empty_reference_response_does_not_wait_for_a_card(driver, source, monkeypatch):
+    from playwright.sync_api import Locator
+
+    driver.context.route("**/api/sns/agentspark/web/note/detail", lambda route: route.fulfill(
+        json={"code": 0, "success": True, "data": {"content_detail_list": []}}))
+    driver.chat_page.evaluate("""() => {
+        const replacement = editor.cloneNode(true);
+        editor.replaceWith(replacement);
+        replacement.addEventListener('paste', async e => {
+            e.preventDefault();
+            await fetch('/api/sns/agentspark/web/note/detail', {method:'POST'});
+        });
+    }""")
+    original = Locator.wait_for
+
+    def wait_for(locator, *args, **kwargs):
+        if 'xhs-ai-selected-note-card' in str(locator):
+            pytest.fail("Empty reference response must fail before waiting for a card")
+        return original(locator, *args, **kwargs)
+
+    monkeypatch.setattr(Locator, 'wait_for', wait_for)
+    with pytest.raises(TaskError) as error:
+        driver.ask('test', source)
+    assert error.value.code == 'reference_mismatch'
+    assert driver.chat_page.locator('.user-message__text-wrapper').count() == 0
+    evidence = json.loads((driver.raw_directory / 'reference.json').read_text())
+    assert evidence['selected_note_ids'] == [] and evidence['response_status'] == 200
