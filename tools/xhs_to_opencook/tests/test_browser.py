@@ -547,3 +547,14 @@ def test_empty_reference_response_does_not_wait_for_a_card(driver, source, monke
     assert driver.chat_page.locator('.user-message__text-wrapper').count() == 0
     evidence = json.loads((driver.raw_directory / 'reference.json').read_text())
     assert evidence['selected_note_ids'] == [] and evidence['response_status'] == 200
+
+
+def test_account_identity_unique_and_missing(driver):
+    identity = 'a' * 24
+    driver.chat_page.evaluate("""id => {const a=document.createElement('a');
+        a.href='/user/profile/'+id;a.innerText='我';document.body.append(a)}""", identity)
+    assert driver.account_identity() == identity
+    driver.chat_page.evaluate("""() => {const a=document.createElement('a');
+        a.href='/user/profile/'+ 'b'.repeat(24);a.innerText='我';document.body.append(a)}""")
+    with pytest.raises(TaskError, match='唯一'):
+        driver.account_identity()

@@ -126,6 +126,9 @@ def coordinator(tmp_path):
     store.stage_save("profiles", profile, {"status": "complete"})
     store.close()
     directory = args.state_dir / "supervision"
+    from xhs_to_opencook.accounts import save_binding
+    save_binding(args.state_dir, "classify", "a" * 24)
+    save_binding(args.state_dir, "extract", "b" * 24)
     initialize(args, directory)
     c = ParallelCoordinator(directory, clock=lambda: 1000)
     c.outbox.flush = lambda **kw: None
@@ -226,13 +229,13 @@ def test_pause_broadcast_is_observed_before_retire(coordinator):
 
 def test_complete_requires_both_workers(coordinator):
     c = coordinator
-    c.chrome = SimpleNamespace(alive=lambda: True)
+    c.ensure_chrome = lambda stage: True
     c.publish = lambda **kw: None
     c.publisher.report["workflow_status"] = "complete"
     c.job["workers"]["classify"]["status"] = "completed"
     c.job["workers"]["extract"]["status"] = "blocked"
     assert c.step()
-    assert c.job["status"] == "waiting"
+    assert c.job["status"] == "running"
     c.job["workers"]["extract"]["status"] = "completed"
     c.job["status"] = "running"
     assert c.step()
@@ -266,7 +269,7 @@ def test_launch_records_identity_after_exec(coordinator):
     from xhs_to_opencook.supervisor import owned_process
 
     c = coordinator
-    c.chrome = SimpleNamespace(ensure_window=lambda stage: None)
+    c.chromes["classify"] = SimpleNamespace(ensure_window=lambda stage: None)
     # Keep the actual child alive while testing post-exec identity stability.
     import subprocess
 
@@ -319,3 +322,44 @@ def test_empty_history_with_pending_cannot_rotate(tmp_path):
     assert store.stage_get('chat_batches', 'old')['status'] == 'open'
     assert len(chat.batches()) == 1
     store.close()
+
+
+def test_account_wait_only_retires_affected_stage(coordinator):
+    c = coordinator
+    retired = []
+    c.retire = retired.append
+    c.publish = lambda **kw: None
+    c.job['workers']['classify']['status'] = 'running'
+    c.account_wait('extract', {'reason': 'platform_restricted', 'wait_kind': 'platform'})
+    assert retired == ['extract']
+    assert c.job['workers']['extract']['status'] == 'waiting'
+    assert c.job['workers']['extract']['next_check'] == 1300
+    assert c.job['workers']['classify']['status'] == 'running'
+
+
+def test_targeted_resume_does_not_restart_other_stage(coordinator):
+    from xhs_to_opencook.storage import write_json
+    c = coordinator
+    c.job['workers']['extract']['status'] = 'waiting'
+    c.job['workers']['classify']['status'] = 'blocked'
+    c.ensure_chrome = lambda stage: False
+    c.publish = lambda **kw: None
+    write_json(c.directory / 'control.json', {'job_id': c.job['job_id'], 'action': 'resume',
+                                            'worker': 'extract'})
+    c.step()
+    assert c.job['workers']['extract']['status'] == 'ready'
+    assert c.job['workers']['classify']['status'] == 'blocked'
+
+
+def test_dead_account_chrome_restarts_only_its_worker(coordinator, monkeypatch):
+    c = coordinator
+    c.retire = lambda stage: None
+    c.playwright = object()
+    old = SimpleNamespace(alive=lambda: False, close=lambda: None)
+    c.chromes['extract'] = old
+    c.chromes['classify'] = SimpleNamespace(alive=lambda: True)
+    c.job['workers']['extract']['status'] = 'running'
+    c.chrome_factory = lambda *a, **kw: SimpleNamespace(open=lambda: SimpleNamespace())
+    assert c.ensure_chrome('extract')
+    assert c.job['workers']['extract']['status'] == 'ready'
+    assert c.chromes['classify'].alive()

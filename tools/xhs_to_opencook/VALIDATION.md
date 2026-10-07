@@ -394,3 +394,17 @@ attempt=1 完成，没有重新发送。另一条真实空回答按既有规则�
 批次，提取侧冻结而分类继续；修复为仅在没有该阶段未决请求时封存空历史批次，
 重新开启空白会话，随后实际越过该笔记。修复覆盖“无未决可轮换”和“有未决禁止
 轮换”两种情况。两小时生产观察尚未结束，状态记录在 `.state/parallel-live-observation.json`。
+
+## 2026-10-07 双账号隔离验收
+
+分类原Chrome配置与提取新 `chrome-extract` 分别登录，网页用户ID确认不同。
+独立验证数据库预置1条教程，另2条边分类边入队；三个提取全部完成，两个分类请求
+和三个提取请求的account_id分别对应各自账号，note_id/request_id全部匹配。
+两阶段均有submitted请求时SIGKILL提取工作进程；原提取请求以原request_id和
+attempt=1完成，分类继续。最终queue done=3，workflow complete、无人工项。
+
+修正最终状态计算读取过期快照的问题，强制最终汇总后判断完成；用已完成实跑结果
+重新执行协调器完成判断，状态completed。证据在本机忽略目录
+`.state/dual-account-live-check/verdict.json` 和 `crash-request.json`。
+双Chrome隔离测试覆盖不同Cookie、不同进程树及关闭一边不影响另一边。
+后续生产两小时观察单独记录，不将小范围验收称为全量成功。

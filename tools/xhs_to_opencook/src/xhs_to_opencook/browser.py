@@ -90,6 +90,23 @@ class SiteBrowser:
         self._pause("请登录小红书；不要关闭这个 Chrome 窗口")
         self.ensure_access(self.page, require_account=True)
 
+    def account_identity(self, page=None):
+        page = page or self.chat_page or self.page
+        self.ensure_access(page, require_account=True)
+        links = page.evaluate("""() => [...document.querySelectorAll('a[href*="/user/profile/"]')]
+            .filter(el => (el.offsetWidth || el.offsetHeight || el.getClientRects().length)
+                && el.innerText.trim() === '我')
+            .map(el => new URL(el.getAttribute('href'), location.href).href)""")
+        try:
+            identities = {profile_id(url) for url in links}
+        except TaskError as error:
+            raise TaskError("account_identity_unavailable", "无法确认登录用户ID",
+                            retryable=False) from error
+        if len(identities) != 1:
+            raise TaskError("account_identity_unavailable", "无法唯一确认登录用户ID",
+                            retryable=False)
+        return identities.pop()
+
     def ensure_access(self, page: Page, *, require_account: bool = False) -> bool:
         """Never solve challenges or dismiss login by pretending a page is accessible."""
         runtime.check()

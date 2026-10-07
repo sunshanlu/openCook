@@ -353,7 +353,11 @@ def command(argv, state_default, *, parser):
         import argparse
         controls = argparse.ArgumentParser(prog=f"xhs-to-opencook {action}")
         controls.add_argument("--state-dir", type=Path, default=state_default)
-        state = controls.parse_args(argv[1:]).state_dir.resolve()
+        if action == "resume":
+            controls.add_argument("--worker", choices=("classify", "extract"))
+        options = controls.parse_args(argv[1:])
+        target_worker = getattr(options, "worker", None)
+        state = options.state_dir.resolve()
     directory = state / "supervision"
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / "job.json"
@@ -376,11 +380,12 @@ def command(argv, state_default, *, parser):
             return 0
         if action == "resume":
             old_control = read_json(directory / "control.json")
-            if job["status"] in {"running", "waiting_access"} \
+            if not target_worker and job["status"] in {"running", "waiting_access"} \
                     and old_control.get("action") not in {"pause", "stop"}:
                 print("任务正在运行，无需恢复。")
                 return 0
-        write_json(directory / "control.json", {"job_id": job["job_id"], "action": action})
+        write_json(directory / "control.json", {"job_id": job["job_id"], "action": action,
+                                                "worker": target_worker})
         if action == "resume":
             supervisor_identity = process_identity(job.get("supervisor_pid", 0))
             if supervisor_identity and str(directory) in supervisor_identity:

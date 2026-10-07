@@ -37,6 +37,8 @@ def main(argv=None) -> int:
     for name in ("login", "run", "pipeline", "collect", "classify", "extract", "export"):
         command = commands.add_parser(name)
         command.add_argument("--state-dir", type=Path, default=state_directory())
+        if name == "login":
+            command.add_argument("--worker", choices=("classify", "extract"), default="classify")
         if name != "login":
             command.add_argument(
                 "--links" if name == "run" else "--profiles", type=Path, required=True
@@ -70,9 +72,14 @@ def main(argv=None) -> int:
     code, error = 1, None
     try:
         if args.command == "login":
-            with state_lock(args.state_dir), SiteBrowser(args.state_dir / "chrome") as browser:
+            from .accounts import profile_path, save_binding
+            with state_lock(args.state_dir), SiteBrowser(
+                profile_path(args.state_dir, args.worker)
+            ) as browser:
                 browser.login()
-            print("登录状态已保存。")
+                identity = browser.account_identity(browser.page)
+                save_binding(args.state_dir, args.worker, identity)
+            print(f"{args.worker} 登录状态已保存，用户ID：{identity}。")
             code = 0
             return code
         if args.command == "run":

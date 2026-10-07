@@ -15,16 +15,17 @@ from .storage import write_json
 
 
 class ChromeOwner:
-    def __init__(self, profile, directory):
+    def __init__(self, profile, directory, *, playwright=None):
         self.profile, self.directory = Path(profile), Path(directory)
         self.playwright = self.context = None
+        self.borrowed_playwright = playwright
 
     def open(self):
         self.profile.mkdir(parents=True, exist_ok=True, mode=0o700)
         with socket.socket() as sock:
             sock.bind(("127.0.0.1", 0))
             port = sock.getsockname()[1]
-        self.playwright = sync_playwright().start()
+        self.playwright = self.borrowed_playwright or sync_playwright().start()
         try:
             self.context = self.playwright.chromium.launch_persistent_context(
                 str(self.profile),
@@ -35,7 +36,19 @@ class ChromeOwner:
             )
             self.processes = WorkerRuntime(self.directory, "browser-owner")
             self.processes.register_children()
-            self.browser_children = self.processes.data.get("children", [])
+            children = self.processes.data.get("children", [])
+            roots = {
+                c["pid"] for c in children if f"--user-data-dir={self.profile}" in c["identity"]
+            }
+            # Shared Playwright node is excluded; only this Chrome tree is owned.
+            rows = self.context.pages[0].context.browser.new_browser_cdp_session()
+            try:
+                chrome_pids = {
+                    r["id"] for r in rows.send("SystemInfo.getProcessInfo")["processInfo"]
+                }
+            finally:
+                rows.detach()
+            self.browser_children = [c for c in children if c["pid"] in chrome_pids | roots]
             write_json(
                 self.directory / "browser-processes.json",
                 {
@@ -92,16 +105,18 @@ class ChromeOwner:
                 self.context.close()
             self.context = None
         if self.playwright:
-            self.playwright.stop()
+            if not self.borrowed_playwright:
+                self.playwright.stop()
             self.playwright = None
 
 
 class AttachedBrowser(SiteBrowser):
-    def __init__(self, profile, *, directory, stage, playwright=None, **kwargs):
+    def __init__(self, profile, *, directory, stage, playwright=None, account_id=None, **kwargs):
         super().__init__(profile, **kwargs)
         self.directory, self.stage = Path(directory), stage
         self.remote = None
         self.borrowed_playwright = playwright
+        self.expected_account = account_id
 
     def __enter__(self):
         state = read_json(self.directory / "browser.json")
@@ -123,12 +138,32 @@ class AttachedBrowser(SiteBrowser):
                     if identity == target:
                         self.page = self.chat_page = page
                         self.generation = state["generation"]
+                        if self.expected_account:
+                            if page.url.startswith("about:"):
+                                from .browser import CHAT
+
+                                page.goto(CHAT, wait_until="domcontentloaded")
+                            self.verify_account()
                         return self
                 time.sleep(0.1)
             raise TaskError("browser_unavailable", "找不到本阶段拥有的Chrome窗口", retryable=False)
         except BaseException:
             self.__exit__(None, None, None)
             raise
+
+    def verify_account(self):
+        if self.expected_account and self.account_identity() != self.expected_account:
+            raise TaskError("account_mismatch", "当前登录账号与本阶段绑定不符", retryable=False)
+
+    def restore_chat(self, conversation_id):
+        self.verify_account()
+        return super().restore_chat(conversation_id)
+
+    def begin_request(self, prompt, source, request, persist):
+        self.verify_account()
+        if self.expected_account and request.get("account_id") != self.expected_account:
+            raise TaskError("account_mismatch", "请求不属于当前账号", retryable=False)
+        return super().begin_request(prompt, source, request, persist)
 
     def prepare_chat_page(self):
         if not self.chat_page or self.chat_page.is_closed():

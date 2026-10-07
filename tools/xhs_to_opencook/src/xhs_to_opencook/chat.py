@@ -46,6 +46,7 @@ class ChatSession:
         max_attempts=2,
         reset_browser=None,
         stage_scope=None,
+        account_id=None,
     ):
         if isinstance(capacity, bool) or not isinstance(capacity, int) or capacity <= 0:
             raise ValueError("chat batch size must be a positive integer")
@@ -58,6 +59,7 @@ class ChatSession:
         self.loaded_batch = None
         self.reset_browser = reset_browser
         self.stage_scope = stage_scope
+        self.account_id = account_id
 
     def pause(self, seconds):
         runtime.sleep(seconds, self.sleeper)
@@ -72,6 +74,9 @@ class ChatSession:
             rows = [r for r in rows if r["stage"] == stage]
         if len(rows) > 1:
             raise BrowserUnsupported("存在多个未决点点请求；停止提交，需核对持久记录")
+        if rows and self.account_id and rows[0].get("account_id") != self.account_id:
+            raise TaskError("account_mismatch", "未决请求属于其他账号，须用原账号收尾",
+                            retryable=False)
         return rows[0] if rows else None
 
     def batches(self):
@@ -130,6 +135,10 @@ class ChatSession:
         return rows
 
     def persist(self, request):
+        if self.account_id:
+            if request.get("account_id", self.account_id) != self.account_id:
+                raise TaskError("account_mismatch", "禁止修改其他账号的请求", retryable=False)
+            request["account_id"] = self.account_id
         self.store.stage_save("chat_requests", request["request_id"], request)
         if request.get("conversation_id") and request.get("round_id"):
             batch = self.store.stage_get("chat_batches", request["batch_id"])
@@ -144,6 +153,8 @@ class ChatSession:
             write_json(self.store.directory / request["raw_directory"] / "request.json", request)
 
     def load(self, batch):
+        if self.account_id and batch.get("account_id") != self.account_id:
+            raise TaskError("account_mismatch", "禁止恢复其他账号的会话", retryable=False)
         if self.loaded_batch == batch["batch_id"]:
             return
         driver = self.driver()
@@ -160,7 +171,9 @@ class ChatSession:
         self.loaded_batch = batch["batch_id"]
 
     def batch(self, stage, note):
-        rows = [b for b in self.batches() if b["stage"] == stage]
+        self.throttle()
+        rows = [b for b in self.batches() if b["stage"] == stage
+                and (not self.account_id or b.get("account_id") == self.account_id)]
         batch = rows[-1] if rows else None
         if (
             batch
@@ -179,6 +192,8 @@ class ChatSession:
                 "conversation_id": None,
                 "created_at": now(),
             }
+            if self.account_id:
+                batch["account_id"] = self.account_id
             self.store.stage_save("chat_batches", batch["batch_id"], batch)
         try:
             self.load(batch)
@@ -194,6 +209,8 @@ class ChatSession:
 
     def begin(self, prompt, source, request):
         runtime.check()
+        if self.account_id:
+            request["account_id"] = self.account_id
         try:
             self.driver().begin_request(prompt, source, request, self.persist)
         except PlaywrightError as exc:
@@ -202,6 +219,10 @@ class ChatSession:
             self.loaded_batch = None
             raise BrowserUnsupported("提交期间浏览器关闭；保存意图，续跑先核对历史") from exc
         except TaskError as exc:
+            if exc.code in {"account_mismatch", "account_identity_unavailable", "login_required"} \
+                    and runtime.current():
+                runtime.block(exc.code, str(exc), kind="access" if exc.code == "login_required"
+                              else "manual")
             if runtime.current() and runtime.network_error(exc):
                 runtime.block("network_unavailable", str(exc))
             if self.recoverable_page_error(exc) and request["status"] == "prepared":
@@ -229,7 +250,8 @@ class ChatSession:
 
     def throttle(self):
         sent = [r["sent_at"] for r in self.store.stage_rows("chat_requests") if r.get("sent_at")
-                and (not self.stage_scope or r["stage"] == self.stage_scope)]
+                and (not self.stage_scope or r["stage"] == self.stage_scope)
+                and (not self.account_id or r.get("account_id") == self.account_id)]
         if sent:
             self.pause(max(0, self.interval - (self.clock() - max(sent))))
 
@@ -545,6 +567,8 @@ class ChatSession:
                     self.persist(request)
                     return
             except TaskError as exc:
+                if exc.code in {"account_mismatch", "account_identity_unavailable"}:
+                    runtime.block(exc.code, str(exc), kind="manual")
                 if exc.code == "runtime_wait":
                     raise
                 if runtime.current() and runtime.network_error(exc):

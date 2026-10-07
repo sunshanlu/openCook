@@ -99,7 +99,15 @@ def summary(job, report):
     counts = report.get("classification_counts", {})
     classified = counts.get("tutorial", 0) + counts.get("non_tutorial", 0)
     extracted = report.get("extraction_success_count", 0)
+    workers = job.get("workers", {})
+    detail = "\n".join(
+        f"{stage}：{value.get('status')}；{value.get('reason') or value.get('message') or '正常'}；"
+        f"下次检查：{value.get('next_check_label', value.get('next_check', '按状态继续'))}"
+        for stage, value in workers.items()
+    )
     return (
+        f"{detail}\n" if detail else ""
+    ) + (
         f"openCook：{job['status']}\n"
         f"阶段：{job.get('stage', '准备')}\n"
         f"分类：{classified}/{report.get('video_count', '待确定')}\n"

@@ -77,6 +77,7 @@ class Workflow:
             sleeper=sleeper,
             clock=clock,
             stage_scope=getattr(args, "worker_stage", None),
+            account_id=getattr(args, "account_id", None),
         )
         self.code = 0
         self.report = {

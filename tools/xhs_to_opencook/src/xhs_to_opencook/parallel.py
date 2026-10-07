@@ -8,7 +8,10 @@ from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
 
+from playwright.sync_api import sync_playwright
+
 from . import runtime
+from .accounts import profile_path, require_bindings
 from .errors import TaskError
 from .links import read_profiles
 from .notifications import Outbox, summary
@@ -41,6 +44,7 @@ def worker(directory, stage):
         ),
     )
     args.worker_stage = stage
+    args.account_id = job.get("accounts", {}).get(stage, {}).get("account_id")
     args.non_interactive = True
     profiles = read_profiles(args.profiles)
     store = Store(args.state_dir)
@@ -52,7 +56,9 @@ def worker(directory, stage):
         args,
         store,
         profiles,
-        lambda profile, **kw: AttachedBrowser(profile, directory=directory, stage=stage, **kw),
+        lambda profile, **kw: AttachedBrowser(
+            profile, directory=directory / stage, stage=stage, account_id=args.account_id, **kw
+        ),
         time.sleep,
     )
     # Workers publish no common files. Progress derives from the committed business DB.
@@ -102,6 +108,17 @@ def worker(directory, stage):
     except Exception as exc:
         error = f"{type(exc).__name__}: {exc}"
         if active:
+            if getattr(exc, "code", None) in {
+                "account_mismatch",
+                "account_identity_unavailable",
+                "login_required",
+            }:
+                active.data.update(
+                    status="waiting",
+                    reason=exc.code,
+                    message=str(exc),
+                    wait_kind="access" if exc.code == "login_required" else "manual",
+                )
             import sqlite3
 
             active.data["error_scope"] = (
@@ -120,13 +137,22 @@ class ParallelCoordinator:
     def __init__(self, directory, *, clock=time.time, chrome_factory=ChromeOwner):
         self.directory, self.clock = Path(directory), clock
         self.job = runtime.read_json(self.directory / "job.json")
+        configured = require_bindings(Path(self.job["state_dir"]))
+        if any(
+            self.job.get("accounts", {}).get(s, {}).get("account_id") != configured[s]["account_id"]
+            for s in STAGES
+        ):
+            raise TaskError(
+                "account_mismatch", "任务账号绑定与登录配置不符，保持停止", retryable=False
+            )
         self.children = {}
         self.spawn = subprocess.Popen
-        self.chrome = None
+        self.chromes = {}
+        self.playwright = None
         self.chrome_factory = chrome_factory
         self.outbox = Outbox(self.directory)
         self.last_loop = clock()
-        self.chrome_restarts = self.job.get("chrome_restarts", [])
+
         self.args = SimpleNamespace(**self.job["options"])
         for key in ("profiles", "state_dir", "output"):
             setattr(self.args, key, Path(getattr(self.args, key)))
@@ -139,6 +165,12 @@ class ParallelCoordinator:
     def save(self):
         self.job.update(supervisor_pid=os.getpid(), supervisor_heartbeat_at=self.clock())
         self.job["queue"] = self.store.queue_counts(self.job["job_id"])
+        for record in self.job["workers"].values():
+            record["next_check_label"] = (
+                time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(record["next_check"]))
+                if record.get("next_check")
+                else "等待处理或运行中"
+            )
         if self.job.get("next_check"):
             self.job["next_check_label"] = time.strftime(
                 "%Y-%m-%d %H:%M:%S", time.localtime(self.job["next_check"])
@@ -176,7 +208,7 @@ class ParallelCoordinator:
         self.save()
 
     def launch(self, stage, probe=False):
-        self.chrome.ensure_window(stage)
+        self.chromes[stage].ensure_window(stage)
         folder = self.directory / stage
         folder.mkdir(exist_ok=True)
         (folder / "worker.json").unlink(missing_ok=True)
@@ -299,34 +331,92 @@ class ParallelCoordinator:
         else:
             record.update(status="ready", restarts=restarts + [self.clock()], message=message)
 
-    def probe(self):
-        # Read-only page checks happen before restoring either original pending request.
-        for stage in STAGES:
-            if self.job["workers"][stage]["status"] in TERMINAL:
-                continue
-            self.chrome.ensure_window(stage)
-            with AttachedBrowser(
-                self.args.state_dir / "chrome",
-                directory=self.directory,
-                stage=stage,
-                playwright=self.chrome.playwright,
-                timeout=self.args.timeout,
-                interactive=False,
-            ) as browser:
-                if browser.chat_page.url.startswith("about:"):
-                    from .browser import CHAT
+    def account_wait(self, stage, data):
+        self.retire(stage)
+        record = self.job["workers"][stage]
+        kind = data.get("wait_kind", "platform")
+        attempt = record.get("wait_attempt", 0)
+        delay = (
+            300
+            if kind == "access"
+            else (1800 if not attempt else 3600)
+            if kind == "circuit"
+            else (300, 900, 1800, 3600)[min(attempt, 3)]
+        )
+        record.update(
+            status="waiting",
+            reason=data.get("reason"),
+            message=data.get("message", "账号等待恢复"),
+            wait_kind=kind,
+            wait_attempt=attempt + 1,
+            next_check=self.clock() + delay,
+        )
+        if kind == "manual" or (kind == "circuit" and record.get("probe_failures", 0) >= 3):
+            record["next_check"] = None
+        self.save()
+        self.notify(f"waiting:{stage}:{record['wait_attempt']}:{self.job.get('wait_episode', 0)}")
+        self.publish(force=True)
 
-                    browser.chat_page.goto(CHAT, wait_until="domcontentloaded")
-                browser.ensure_access(browser.chat_page, require_account=True)
-                pending = self.publisher.chats.pending(stage)
-                if pending:
-                    from .models import Source
+    def ensure_chrome(self, stage):
+        owner = self.chromes.get(stage)
+        if owner and owner.alive():
+            return True
+        record = self.job["workers"][stage]
+        self.retire(stage)
+        if owner:
+            owner.close()
+            recent = [t for t in record.get("chrome_restarts", []) if self.clock() - t < 900]
+            if len(recent) >= 3:
+                self.account_wait(
+                    stage,
+                    {
+                        "reason": "browser_restart_exhausted",
+                        "message": "本账号Chrome恢复次数耗尽",
+                        "wait_kind": "manual",
+                    },
+                )
+                return False
+            record["chrome_restarts"] = recent + [self.clock()]
+            record["status"] = "ready"
+        if self.playwright is None:
+            self.playwright = sync_playwright().start()
+        try:
+            self.chromes[stage] = self.chrome_factory(
+                profile_path(self.args.state_dir, stage),
+                self.directory / stage,
+                playwright=self.playwright,
+            ).open()
+            return True
+        except Exception as error:
+            self.account_wait(
+                stage,
+                {"reason": "browser_unavailable", "message": str(error), "wait_kind": "manual"},
+            )
+            return False
 
-                    browser.verify_reference(
-                        Source.model_validate(pending["source"]), browser.wait_editor_ready()
-                    )
-        self.job.update(status="probing", message="恢复检查中")
-        self.launch(self.job["trigger_stage"], probe=True)
+    def probe(self, stage):
+        if not self.ensure_chrome(stage):
+            return
+        owner = self.chromes[stage]
+        owner.ensure_window(stage)
+        with AttachedBrowser(
+            profile_path(self.args.state_dir, stage),
+            directory=self.directory / stage,
+            stage=stage,
+            playwright=self.playwright,
+            account_id=self.job["accounts"][stage]["account_id"],
+            timeout=self.args.timeout,
+            interactive=False,
+        ) as browser:
+            browser.verify_account()
+            pending = self.publisher.chats.pending(stage)
+            if pending:
+                from .models import Source
+
+                browser.verify_reference(
+                    Source.model_validate(pending["source"]), browser.wait_editor_ready()
+                )
+        self.launch(stage, probe=True)
 
     def step(self):
         now = self.clock()
@@ -334,39 +424,49 @@ class ParallelCoordinator:
         self.last_loop = now
         control = runtime.read_json(self.directory / "control.json")
         action = control.get("action") if control.get("job_id") == self.job["job_id"] else None
+        target = control.get("worker")
         if action in {"pause", "stop"}:
             self.stop_workers()
+            for record in self.job["workers"].values():
+                if record["status"] not in TERMINAL:
+                    record["status"] = "paused"
             self.job["status"] = "stopped" if action == "stop" else "paused"
             self.publish(force=True)
             return action != "stop"
-        if action == "resume" and self.job["status"] not in {
-            "completed",
-            "partial",
-            "notifications_pending",
-        }:
-            for record in self.job["workers"].values():
-                if record["status"] not in TERMINAL:
-                    record.update(status="ready", restarts=[])
-            self.job.update(
-                status="ready",
-                wait_attempt=0,
-                probe_failures=0,
-                wait_episode=self.job.get("wait_episode", 0) + 1,
-            )
+        if action == "resume":
+            if target and self.job["status"] in {"stopped", "paused"}:
+                for stage, record in self.job["workers"].items():
+                    if stage != target and record["status"] not in TERMINAL:
+                        record["status"] = "paused"
+            if self.job["status"] not in {"completed", "partial", "notifications_pending"}:
+                for stage, record in self.job["workers"].items():
+                    if (
+                        (not target or target == stage)
+                        and record["status"] != "running"
+                        and record["status"] not in TERMINAL
+                    ):
+                        record.update(
+                            status="ready",
+                            restarts=[],
+                            wait_attempt=0,
+                            probe_failures=0,
+                            probing=False,
+                            next_check=None,
+                        )
+                self.job.update(
+                    status="running",
+                    wait_attempt=0,
+                    probe_failures=0,
+                    reason=None,
+                    message="从账号断点恢复",
+                    wait_episode=self.job.get("wait_episode", 0) + 1,
+                )
             write_json(
                 self.directory / "control.json", {"job_id": self.job["job_id"], "action": "running"}
             )
-        if action == "resume":
-            write_json(
-                self.directory / "control.json",
-                {
-                    "job_id": self.job["job_id"],
-                    "action": "running",
-                },
-            )
         if self.job["status"] in {"completed", "partial", "notifications_pending"}:
-            self.publish(force=True) if self.job.get("export_error") else None
             if self.job.get("export_error"):
+                self.publish(force=True)
                 return True
             self.outbox.flush(still_actionable=False)
             if self.outbox.data["pending"]:
@@ -375,78 +475,44 @@ class ParallelCoordinator:
                 return True
             return False
         if self.job["status"] == "paused":
-            self.outbox.flush(still_actionable=False)
             self.save()
+            self.outbox.flush(still_actionable=False)
             return True
-        if self.job["status"] == "waiting" and not self.job.get("next_check"):
-            self.publish()
-            self.outbox.flush()
-            return True
-        if not self.chrome or not self.chrome.alive():
-            if self.chrome:
-                self.chrome_restarts = [t for t in self.chrome_restarts if now - t < 900]
-                if len(self.chrome_restarts) >= 3:
-                    self.wait(
-                        "classify",
-                        {
-                            "reason": "browser_restart_exhausted",
-                            "message": "共享Chrome恢复次数耗尽",
-                            "wait_kind": "manual",
-                        },
-                    )
-                    return True
-                self.chrome_restarts.append(now)
-                self.job["chrome_restarts"] = self.chrome_restarts
-            self.stop_workers()
-            if self.chrome:
-                self.chrome.close()
-            try:
-                self.chrome = self.chrome_factory(
-                    self.args.state_dir / "chrome", self.directory
-                ).open()
-            except Exception as error:
-                self.wait(
-                    "classify",
-                    {"reason": "browser_unavailable", "message": str(error), "wait_kind": "manual"},
-                )
-                return True
-            for record in self.job["workers"].values():
-                if record["status"] not in TERMINAL and record["status"] != "blocked":
-                    record["status"] = "ready"
+        # This state is reserved for shared network/storage/coordinator faults.
         if self.job["status"] == "waiting":
-            if not self.job.get("next_check"):
+            if self.job.get("next_check") and now >= self.job["next_check"]:
+                self.job.update(status="running", reason=None)
+                for record in self.job["workers"].values():
+                    if record["status"] == "ready":
+                        record["probing"] = True
+            else:
                 self.publish()
                 self.outbox.flush()
                 return True
-            if self.job.get("next_check") and now >= self.job["next_check"]:
-                try:
-                    self.probe()
-                except Exception as error:
-                    self.wait(
-                        self.job["trigger_stage"],
-                        {
-                            "reason": self.job.get("reason"),
-                            "message": str(error),
-                            "wait_kind": self.job["wait_kind"],
-                        },
-                    )
-            self.publish()
-            self.outbox.flush()
-            return True
-        if (
-            self.job["status"] == "probing"
-            and self.job["workers"][self.job["trigger_stage"]]["status"] == "ready"
-        ):
-            self.launch(self.job["trigger_stage"], probe=True)
-        if self.job["status"] != "probing":
-            for stage in STAGES:
-                if self.job["workers"][stage]["status"] == "ready":
-                    self.launch(stage)
-            self.job["status"] = "running"
         for stage in STAGES:
             record = self.job["workers"][stage]
-            if record["status"] != "running":
+            if record["status"] in TERMINAL | {"blocked", "paused"}:
                 continue
+            if record["status"] == "waiting":
+                if not record.get("next_check") or now < record["next_check"]:
+                    continue
+                try:
+                    self.probe(stage)
+                except Exception as error:
+                    record["probe_failures"] = record.get("probe_failures", 0) + 1
+                    self.account_wait(
+                        stage,
+                        {
+                            "reason": getattr(error, "code", "probe_failed"),
+                            "message": str(error),
+                            "wait_kind": record.get("wait_kind", "manual"),
+                        },
+                    )
+                continue
+            if not self.ensure_chrome(stage):
+                continue
+            if record["status"] == "ready":
+                self.launch(stage, probe=record.get("probing", False))
             child = self.children.get(stage)
             if child:
                 self.drain(stage, child)
@@ -464,40 +530,45 @@ class ParallelCoordinator:
                 )
                 return True
             if data.get("status") == "waiting":
-                if self.job["status"] == "probing":
-                    self.job["probe_failures"] = self.job.get("probe_failures", 0) + 1
-                self.wait(stage, data)
-                return True
+                if record.get("probing"):
+                    record["probe_failures"] = record.get("probe_failures", 0) + 1
+                if data.get("reason") == "network_unavailable":
+                    self.wait(stage, data)
+                    return True
+                self.account_wait(stage, data)
+                continue
             if code is not None or not owned_process(record):
                 self.retire(stage)
                 if code in (0, 2):
                     record["status"] = "partial" if code else "completed"
                     self.notify(f"stage:{self.job['job_id']}:{stage}")
-                    if self.job["status"] == "probing":
-                        self.job.update(status="running", probe_failures=0, wait_attempt=0)
                 elif code == 1 and data.get("error"):
-                    record.update(status="blocked", message=data["error"])
-                    self.notify(f"blocked:{stage}:{self.job['job_id']}")
+                    if any(
+                        x in data["error"]
+                        for x in ("account_mismatch", "account_identity_unavailable")
+                    ):
+                        self.account_wait(
+                            stage,
+                            {
+                                "reason": "account_mismatch",
+                                "message": data["error"],
+                                "wait_kind": "manual",
+                            },
+                        )
+                    else:
+                        record.update(status="blocked", message=data["error"])
+                        self.notify(f"blocked:{stage}:{self.job['job_id']}")
                 else:
                     self.crash(stage, "工作进程异常退出")
                 continue
-            if self.job["status"] == "probing" and data.get("probe_succeeded"):
-                self.job.update(status="running", probe_failures=0, wait_attempt=0)
+            if record.get("probing") and data.get("probe_succeeded"):
+                record.update(probing=False, probe_failures=0, wait_attempt=0, reason=None)
             if resumed:
                 record["grace_until"] = now + 60
             deadline = data.get("deadline", record["started_at"] + 60)
             stale = now - data.get("heartbeat_at", record["started_at"]) > 60
             if (stale or now > deadline) and now >= record.get("grace_until", 0):
                 self.crash(stage, "心跳或操作截止时间超时")
-        if all(r["status"] in TERMINAL | {"blocked"} for r in self.job["workers"].values()) and any(
-            r["status"] == "blocked" for r in self.job["workers"].values()
-        ):
-            self.job.update(
-                status="waiting",
-                wait_kind="manual",
-                next_check=None,
-                message="局部工作阶段等待人工处理",
-            )
         if all(r["status"] in TERMINAL for r in self.job["workers"].values()):
             self.publish(force=True)
             partial = self.publisher.report.get("workflow_status") != "complete" or any(
@@ -511,6 +582,7 @@ class ParallelCoordinator:
             self.publish(force=True)
             self.notify(f"complete:{self.job['job_id']}")
         else:
+            self.job.update(status="running", message="双账号处理；各阶段状态见workers")
             self.publish()
         if now - self.job.get("last_progress_notice", 0) >= 1800:
             self.notify("progress", progress=True)
@@ -528,6 +600,10 @@ class ParallelCoordinator:
                     if record["status"] == "running":
                         record["status"] = "ready"
                 cleanup_children(runtime.read_json(self.directory / "browser-processes.json"))
+                for stage in STAGES:
+                    cleanup_children(
+                        runtime.read_json(self.directory / stage / "browser-processes.json")
+                    )
                 while True:
                     try:
                         if not self.step():
@@ -548,8 +624,10 @@ class ParallelCoordinator:
             self.publish(force=True)
         finally:
             self.stop_workers()
-            if self.chrome:
-                self.chrome.close()
+            for owner in self.chromes.values():
+                owner.close()
+            if self.playwright:
+                self.playwright.stop()
             self.store.close()
         return (
             2
@@ -566,7 +644,8 @@ def initialize(args, directory, *, job=None):
         options[key] = str(Path(options[key]).resolve())
     value = {
         **(job or {}),
-        "version": 2,
+        "version": 3,
+        "accounts": require_bindings(args.state_dir),
         "execution": "parallel",
         "job_id": (job or {}).get("job_id", uuid4().hex),
         "status": "ready",
@@ -579,6 +658,9 @@ def initialize(args, directory, *, job=None):
         "stage": "classify + extract",
     }
     with StoreContext(args.state_dir) as store:
+        from .accounts import migrate_accounts
+
+        migrate_accounts(store, value["accounts"]["classify"]["account_id"], value["accounts"])
         profiles = read_profiles(args.profiles)
         if any(not store.stage_get("profiles", p) for p in profiles):
             raise TaskError("collection_required", "请先采集所有指定博主", retryable=False)

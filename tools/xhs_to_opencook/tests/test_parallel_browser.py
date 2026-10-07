@@ -123,3 +123,24 @@ def test_attached_cover_request(tmp_path, image_bytes):
         owner.close()
         server.shutdown()
         server.server_close()
+
+
+def test_two_profiles_have_separate_cookies_and_local_close(tmp_path):
+    from playwright.sync_api import sync_playwright
+    with sync_playwright() as engine:
+        first = ChromeOwner(tmp_path / 'chrome-a', tmp_path / 'a', playwright=engine).open()
+        second = ChromeOwner(tmp_path / 'chrome-b', tmp_path / 'b', playwright=engine).open()
+        try:
+            first.context.add_cookies([{'name': 'identity', 'value': 'A',
+                                       'domain': 'example.test', 'path': '/'}])
+            second.context.add_cookies([{'name': 'identity', 'value': 'B',
+                                        'domain': 'example.test', 'path': '/'}])
+            assert first.context.cookies()[0]['value'] == 'A'
+            assert second.context.cookies()[0]['value'] == 'B'
+            assert not ({c['pid'] for c in first.browser_children}
+                        & {c['pid'] for c in second.browser_children})
+            first.close()
+            assert second.alive()
+        finally:
+            first.close()
+            second.close()

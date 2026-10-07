@@ -333,3 +333,22 @@ xhs-to-opencook supervise pipeline --profiles bloggers.txt --output ./output --e
 
 并行模式不自动降级。首次切换须先验证实站两个会话同时生成不互相打断；生产迁移
 应暂停、核对未决请求并备份数据库与监督状态，保持原请求、次数和审核冻结。
+
+### 双账号并行
+
+并行模式现在要求两个不同的小红书账号：分类使用原 `chrome/`，提取使用独立的
+`chrome-extract/`。首次配置：
+
+```bash
+xhs-to-opencook login --worker classify
+xhs-to-opencook login --worker extract
+xhs-to-opencook resume --worker extract
+```
+
+登录命令读取本人主页用户ID并保存到 `accounts.json`。相同账号、无法确认身份、
+与已绑定账号不一致时拒绝使用。请求和会话批次记录账号归属，跨账号历史不能恢复。
+账号登录、验证码、封控和连续失败分别等待，另一边继续；Chrome分别恢复。
+共享网络、存储或协调器故障整体等待。每账号提交间隔仍为2秒，修正和重试计入。
+无 `--worker` 的 pause/resume/stop 控制整个任务；按阶段恢复不会重启正常的一边。
+迁移前保持停止并备份，已验证且业务结果已提交的旧提取请求补齐确认；其他未决
+提取请求必须在原账号收尾。换账号前封存旧提取批次，成功缓存和审核记录保留。
