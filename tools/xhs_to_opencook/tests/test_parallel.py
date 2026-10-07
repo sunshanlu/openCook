@@ -298,3 +298,24 @@ def test_empty_old_batch_without_pending_rotates_safely(tmp_path):
     assert batch['batch_id'] != 'old'
     assert store.stage_get('chat_batches', 'old')['status'] == 'sealed'
     store.close()
+
+
+def test_empty_history_with_pending_cannot_rotate(tmp_path):
+    from xhs_to_opencook.errors import TaskError
+    store = Store(tmp_path)
+    store.stage_save('chat_batches', 'old', {'batch_id': 'old', 'stage': 'extract',
+                     'status': 'open', 'capacity': 5, 'submitted_notes': ['note'],
+                     'conversation_id': 'empty-history'})
+    store.stage_save('chat_requests', 'pending', {'request_id': 'pending', 'stage': 'extract',
+                     'batch_id': 'old', 'note_id': 'note', 'status': 'submitted'})
+    class Driver:
+        def restore_chat(self, cid):
+            raise TaskError('history_unavailable', 'empty history')
+        def new_chat(self):
+            pytest.fail('unresolved request must not open another conversation')
+    chat = ChatSession(store, lambda: Driver(), stage_scope='extract')
+    with pytest.raises(TaskError, match='empty history'):
+        chat.batch('extract', 'other-note')
+    assert store.stage_get('chat_batches', 'old')['status'] == 'open'
+    assert len(chat.batches()) == 1
+    store.close()
