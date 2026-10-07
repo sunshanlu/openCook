@@ -277,8 +277,8 @@ def test_suspension_extends_operation_deadline_without_spending_budget(tmp_path)
 
 
 def test_reference_network_failure_waits_without_consuming_retry(tmp_path, monkeypatch):
-    from test_chat import process, setup
     from playwright.sync_api import Error
+    from test_chat import process, setup
     store, driver, manager = setup(tmp_path)
     clock = [1000]
     active = worker(tmp_path / "supervision", clock)
