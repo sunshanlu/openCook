@@ -113,7 +113,10 @@ def setup(tmp_path, answer, image_bytes):
 
 
 def execute(args, browser):
-    code = run_workflow(args, browser_factory=lambda *a, **kw: browser, sleeper=lambda n: None)
+    ticks = [1000.0]
+    code = run_workflow(args, browser_factory=lambda *a, **kw: browser,
+                        sleeper=lambda n: ticks.__setitem__(0, ticks[0] + n),
+                        clock=lambda: ticks[0])
     return code, json.loads((args.output / "report.json").read_text())
 
 
@@ -209,7 +212,8 @@ def test_cached_identity_mismatch_is_rejected_before_submission(setup, field):
     args.command = "classify"
     _, report = execute(args, browser)
     assert report["tasks"][0]["error"]["code"] == "reference_mismatch"
-    assert browser.events.count("classify") == 2  # Other videos can continue.
+    assert report["status"] == "blocked"
+    assert browser.events.count("classify") == 0  # Identity contradictions stop the stage.
 
 
 def test_empty_answer_exhaustion_continues_classification_and_extraction(setup, monkeypatch):
@@ -459,7 +463,7 @@ def test_unsupported_stops_all_ai(setup):
     assert browser.events.count("classify") == 1
 
 
-def test_platform_restriction_stops_before_next_video(setup, monkeypatch):
+def test_platform_restriction_exhausts_to_review_and_continues(setup, monkeypatch):
     args, browser = setup
     args.command = "collect"
     execute(args, browser)
@@ -471,11 +475,11 @@ def test_platform_restriction_stops_before_next_video(setup, monkeypatch):
 
     monkeypatch.setattr(browser, "ask", restricted)
     code, report = execute(args, browser)
-    assert code == 1 and report["status"] == "blocked"
-    assert report["error"]["code"] == "platform_restricted"
-    assert browser.opens == [] and browser.events.count("classify") == 1
-    assert report["manual_review_count"] == 0
-    assert (args.output / "recipes.zip").is_file()
+    assert code == 2 and report["status"] == "partial"
+    assert browser.opens == [] and browser.events.count("classify") == 18
+    assert report["pending_requests"] == []
+    assert report["manual_review_count"] == 3
+    assert (args.output / "manual_review.csv").is_file()
 
 
 def test_atomic_replace_failure_preserves_previous(tmp_path, monkeypatch):
@@ -540,4 +544,103 @@ def test_submit_interval_applies_to_repair(setup):
     flow.submit("verdict", source, repair=True)
     assert len(sleeps) == 1 and 9 < sleeps[0] <= 10
     flow.close()
+    store.close()
+
+
+@pytest.mark.parametrize("exhausts", [False, True])
+def test_full_workflow_handles_empty_reply_then_navigation_failure(setup, monkeypatch, exhausts):
+    from playwright.sync_api import Error as PlaywrightError
+
+    from xhs_to_opencook.workflow import Workflow
+
+    args, browser = setup
+    args.command = "collect"
+    execute(args, browser)
+    args.command = "classify"
+    original = Workflow.driver
+    calls = []
+    sends = []
+
+    def driver(flow):
+        transport = original(flow)
+        if not getattr(transport, "navigation_injected", False):
+            new_chat = transport.new_chat
+            begin, wait = transport.begin_request, transport.wait_request
+
+            def new():
+                calls.append(1)
+                if (exhausts and 2 <= len(calls) <= 7) or (not exhausts and len(calls) == 2):
+                    raise PlaywrightError("Page.goto: Timeout 8000ms exceeded")
+                new_chat()
+
+            def send(prompt, source, request, persist):
+                sends.append((source.note_id, request["attempt"]))
+                begin(prompt, source, request, persist)
+
+            def reply(request, timeout, persist):
+                if request["note_id"] == N1 and request["attempt"] == 1:
+                    request['empty_answer_evidence'] = {'finished': True, 'empty_placeholder': True}
+                    persist(request)
+                    raise TaskError("empty_answer", "（暂无内容）")
+                return wait(request, timeout, persist)
+
+            transport.new_chat, transport.begin_request, transport.wait_request = new, send, reply
+            transport.navigation_injected = True
+        return transport
+
+    monkeypatch.setattr(Workflow, 'driver', driver)
+    code, report = execute(args, browser)
+    assert code == 2  # The fixture includes unknown classification.
+    assert report['status'] == 'partial' and report['pending_requests'] == []
+    assert sends[0] == (N1, 1)
+    if exhausts:
+        assert sends[1][0] == N2
+        assert report['manual_review_count'] == 1
+        assert report['tasks'][0]['status'] == 'awaiting_review'
+    else:
+        assert sends[1] == (N1, 2) and sends[2][0] == N2
+        assert report['manual_review_count'] == 0
+    assert not any(task.get('error', {}).get('code') == 'page_unsupported'
+                   for task in report['tasks'])
+
+
+def test_outer_workflow_never_reinvokes_inner_after_unexpected_bug(setup, monkeypatch):
+    from xhs_to_opencook.chat import ChatSession
+
+    args, browser = setup
+    args.command = 'collect'
+    execute(args, browser)
+    args.command = 'classify'
+    calls = []
+
+    def broken(*args):
+        calls.append(1)
+        raise TaskError('unexpected_error', '状态矛盾')
+
+    monkeypatch.setattr(ChatSession, 'process', broken)
+    code, report = execute(args, browser)
+    assert code == 1 and report['status'] == 'blocked'
+    assert len(calls) == 1 and len(report['tasks']) == 1
+
+
+def test_unknown_python_bug_marks_current_video_failed_and_stops(setup, monkeypatch):
+    from xhs_to_opencook.chat import ChatSession
+
+    args, browser = setup
+    args.command = 'collect'
+    execute(args, browser)
+    args.command = 'classify'
+    calls = []
+
+    def broken(*args):
+        calls.append(1)
+        raise RuntimeError('unexpected state')
+
+    monkeypatch.setattr(ChatSession, 'process', broken)
+    code, report = execute(args, browser)
+    assert code == 1 and report['status'] == 'blocked'
+    assert len(calls) == 1 and report['tasks'][0]['status'] == 'failed'
+    assert report['tasks'][0]['error']['code'] == 'unexpected_error'
+    store = Store(args.state_dir)
+    assert store.stage_get('classifications', N1)['status'] == 'failed'
     store.close()

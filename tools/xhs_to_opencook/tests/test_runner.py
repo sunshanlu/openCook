@@ -195,7 +195,7 @@ def test_names_collision_persisted(setup):
     assert json.loads((args.output / "recipes.json").read_text())[0]["name"] == names[1]
 
 
-def test_closed_browser_stops_then_reconciles_on_resume(setup):
+def test_closed_browser_recovers_inside_same_run(setup):
     args, driver = setup
     original = driver.ask
     calls = []
@@ -213,9 +213,10 @@ def test_closed_browser_stops_then_reconciles_on_resume(setup):
         factories.append(1)
         return driver
 
-    assert run(args, browser_factory=factory, sleeper=lambda _: None) == 1
-    assert len(factories) == 1 and len(calls) == 1
-    assert run(args, browser_factory=factory, sleeper=lambda _: None) == 0
+    ticks = [1000.0]
+    assert run(args, browser_factory=factory,
+               sleeper=lambda n: ticks.__setitem__(0, ticks[0] + n),
+               clock=lambda: ticks[0]) == 0
     assert len(factories) == 2 and len(calls) == 2
     report = json.loads((args.output / "report.json").read_text())
     assert report["tasks"][0]["attempts"] == 1

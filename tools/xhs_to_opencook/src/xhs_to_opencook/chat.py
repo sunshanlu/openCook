@@ -6,10 +6,12 @@ unknown intent is reconciled against history, never optimistically resent.
 
 import csv
 import io
+import json
 import time
 from uuid import uuid4
 
 from playwright.sync_api import Error as PlaywrightError
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 from .errors import SESSION_BLOCK_CODES, BrowserUnsupported, TaskError
 from .models import JSON_ERROR_CODES, parse_bound_answer
@@ -41,6 +43,7 @@ class ChatSession:
         clock=time.time,
         cooldown=600,
         max_attempts=2,
+        reset_browser=None,
     ):
         if isinstance(capacity, bool) or not isinstance(capacity, int) or capacity <= 0:
             raise ValueError("chat batch size must be a positive integer")
@@ -51,6 +54,7 @@ class ChatSession:
         self.capacity, self.interval, self.timeout = capacity, interval, timeout
         self.sleeper, self.clock, self.cooldown = sleeper, clock, cooldown
         self.loaded_batch = None
+        self.reset_browser = reset_browser
 
     def pending_rows(self):
         return [r for r in self.store.stage_rows("chat_requests") if r["status"] in PENDING]
@@ -179,6 +183,8 @@ class ChatSession:
             self.loaded_batch = None
             raise BrowserUnsupported("提交期间浏览器关闭；保存意图，续跑先核对历史") from exc
         except TaskError as exc:
+            if self.recoverable_page_error(exc) and request["status"] == "prepared":
+                raise
             if (
                 exc.code in {"generation_busy", "reference_mismatch"} and exc.retryable
                 and request["status"] == "prepared"
@@ -389,7 +395,115 @@ class ChatSession:
         )
         return None
 
+    @staticmethod
+    def recoverable_page_error(error):
+        if isinstance(error, TaskError) and error.code in SESSION_BLOCK_CODES:
+            return True
+        # Adapter mismatches and unknown Playwright errors are bugs, not retry signals.
+        cause = error
+        while cause is not None:
+            if isinstance(cause, PlaywrightTimeoutError):
+                return True
+            if isinstance(cause, PlaywrightError) and any(text in str(cause) for text in (
+                "Timeout", "Execution context was destroyed", "has been closed",
+                "net::ERR_", "Target closed",
+            )):
+                return True
+            cause = cause.__cause__
+        return False
+
+    def recovery_review(self, source, stage, directory, evidence):
+        request = self.pending()
+        batches = [b for b in self.batches() if b["stage"] == stage]
+        if request and (request["note_id"] != source.note_id or request["stage"] != stage):
+            raise BrowserUnsupported("页面恢复的未决请求与当前视频不一致")
+        if not request:
+            batch = batches[-1] if batches else {
+                "batch_id": uuid4().hex, "stage": stage, "status": "open",
+                "capacity": self.capacity, "submitted_notes": [], "conversation_id": None,
+            }
+            if not batches:
+                self.store.stage_save("chat_batches", batch["batch_id"], batch)
+                batches.append(batch)
+            request = {
+                "request_id": uuid4().hex, "note_id": source.note_id, "stage": stage,
+                "batch_id": batch["batch_id"], "status": "prepared", "attempt": 0,
+                "source": source.model_dump(),
+                "raw_directory": str(directory.relative_to(self.store.directory)),
+            }
+        request.update(review_error={
+            "code": "page_recovery_exhausted", "message": "页面恢复6次失败，含5分钟等待",
+        }, page_recovery=evidence)
+        # Isolate every partially opened replacement before processing another video.
+        for batch in batches:
+            if batch["status"] == "open":
+                batch.update(status="sealed", sealed_reason="page_recovery_exhausted",
+                             sealed_at=now())
+                self.store.stage_save("chat_batches", batch["batch_id"], batch)
+        self.loaded_batch = None
+        self.exhausted(request, seal_reason="page_recovery_exhausted", seal_evidence=evidence)
+
     def process(self, source, stage, directory):
+        """Own all recovery for one video; callers never repeat this operation."""
+        path = self.store.directory / "recovery" / f"{stage}-{source.note_id}.json"
+        if self.review_for(stage, source.note_id):
+            path.unlink(missing_ok=True)
+            return self._process(source, stage, directory)
+        recovery = json.loads(path.read_text()) if path.exists() else {
+            "failures": 0, "wait_until": None,
+        }
+        while True:
+            try:
+                deadline = recovery.get("wait_until")
+                if deadline:
+                    while self.clock() < deadline:
+                        self.sleeper(min(5, deadline - self.clock()))
+                    recovery["wait_until"] = None
+                    write_json(path, recovery)
+                if recovery["failures"] >= 6:
+                    self.recovery_review(source, stage, directory, recovery)
+                driver = self.driver()
+                driver.raw_directory = directory
+                result = self._process(source, stage, directory)
+                path.unlink(missing_ok=True)
+                return result
+            except TaskError as exc:
+                if exc.code == "manual_review_required":
+                    path.unlink(missing_ok=True)
+                    raise
+                if not self.recoverable_page_error(exc):
+                    raise
+                failure = exc
+            except PlaywrightError as exc:
+                if not self.recoverable_page_error(exc):
+                    raise BrowserUnsupported("未预期的浏览器错误；停止并保存现场") from exc
+                failure = exc
+            except Exception as exc:
+                write_json(directory / "unexpected-error.json", {
+                    "type": type(exc).__name__, "message": str(exc),
+                })
+                raise
+            self.loaded_batch = None
+            recovery.update(failures=recovery["failures"] + 1,
+                            last_error={"type": type(failure).__name__, "message": str(failure)},
+                            updated_at=now())
+            if recovery["failures"] == 3:
+                recovery["wait_until"] = self.clock() + 300
+                print("  页面恢复连续3次失败；原地等待5分钟后再恢复3次。", flush=True)
+            elif recovery["failures"] < 6:
+                recovery["wait_until"] = self.clock() + 5
+            write_json(path, recovery)
+            print(f"  页面恢复 {recovery['failures']}/6：{failure}", flush=True)
+            cause = failure
+            while cause is not None:
+                if self.reset_browser and any(text in str(cause) for text in (
+                    "has been closed", "Target closed",
+                )):
+                    self.reset_browser()
+                    break
+                cause = cause.__cause__
+
+    def _process(self, source, stage, directory):
         review = self.review_for(stage, source.note_id)
         if review:
             self.last_attempt = review["attempt"]

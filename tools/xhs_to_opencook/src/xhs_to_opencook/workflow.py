@@ -58,7 +58,7 @@ def collected_source(note, *records):
 
 
 class Workflow:
-    def __init__(self, args, store, profiles, browser_factory, sleeper):
+    def __init__(self, args, store, profiles, browser_factory, sleeper, clock=time.time):
         self.args, self.store, self.profiles = args, store, profiles
         self.output = args.output.resolve()
         self.browser_factory, self.sleeper = browser_factory, sleeper
@@ -67,11 +67,13 @@ class Workflow:
         self.chats = ChatSession(
             store,
             self.driver,
+            reset_browser=self.close,
             capacity=getattr(args, "chat_batch_size", 5),
             max_attempts=getattr(args, "max_attempts", 2),
             interval=args.interval,
             timeout=args.timeout,
             sleeper=sleeper,
+            clock=clock,
         )
         self.code = 0
         self.report = {
@@ -106,7 +108,6 @@ class Workflow:
     def raw(self, identity, stage, attempt):
         directory = self.store.attempt_directory(identity, attempt) / stage
         directory.mkdir()
-        self.driver().raw_directory = directory
         return directory
 
     def archive(self, identity):
@@ -348,94 +349,70 @@ class Workflow:
             self.store.stage_save(table, identity, {"status": "running", "started_at": now()})
             print(f"[{index}/{len(notes)}] {stage} {identity}", flush=True)
             try:
-                for attempt in (1, 2):
-                    task["attempts"] = attempt
-                    try:
-                        driver = self.driver()
-                        directory = self.raw(identity, stage, attempt)
-                        source = (
-                            Source.model_validate(pending["source"])
-                            if pending and pending["note_id"] == identity
-                            else collected_source(note, cache, classified)
-                        )
-                        if source.note_id != identity:
-                            raise TaskError("reference_mismatch", "笔记 ID 发生变化")
-                        write_json(directory / "source.json", source.model_dump())
-                        self.store.alias(source.url, identity)
-                        for profile in note["profile_ids"]:
-                            self.store.collect_note(
-                                profile, {**note, "url": source.url, "source": source.model_dump()}
-                            )
-                        result = self.chats.process(source, stage, directory)
-                        task["attempts"] = max(attempt, self.chats.current["attempt"])
-                        common = {
-                            "status": "success",
-                            "source": source.model_dump(),
-                            "conversation_id": driver.conversation_id,
-                            "raw_directory": str(directory.relative_to(self.store.directory)),
-                            "classified_at": now(),
-                            "prompt_version": (
-                                CLASSIFICATION_VERSION
-                                if stage == "classify"
-                                else EXTRACTION_VERSION
-                            ),
-                        }
-                        if stage == "classify":
-                            record = {
-                                **common,
-                                "classification": result.model_dump(),
-                                "prompt_version": CLASSIFICATION_VERSION,
-                            }
-                            self.store.stage_save(table, identity, record)
-                            task.update(verdict=result.verdict, reason=result.reason)
-                            if result.verdict == "unknown":
-                                self.code = max(self.code, 2)
-                        else:
-                            cover, error = None, None
-                            if source.cover_url:
-                                try:
-                                    image = cover_jpeg(driver.download_cover(source.cover_url))
-                                    cover = self.store.directory / "covers" / f"{identity}.jpg"
-                                    atomic_write(cover, image)
-                                except (TaskError, PlaywrightError, OSError) as exc:
-                                    error = {"code": "image_failed", "message": str(exc)}
-                            else:
-                                error = {"code": "image_missing", "message": "未提供封面"}
-                            record = {
-                                **common,
-                                "extraction": result.model_dump(),
-                                "export_names": [r["name"] for r in convert(source, result)],
-                                "cover_path": str(cover) if cover else None,
-                                "image_error": error,
-                            }
-                            self.store.save(identity, record)
-                            self.store.stage_save(table, identity, common)
-                            task.update(estimates=estimates(result), image_error=error)
-                        write_json(directory / "result.json", record)
-                        self.chats.accept()
-                        pending = None
-                        task["status"] = "success"
-                        break
-                    except (TaskError, PlaywrightError) as exc:
-                        task["attempts"] = max(
-                            task["attempts"], getattr(self.chats, "last_attempt", 1)
-                        )
-                        failure = (
-                            exc
-                            if isinstance(exc, TaskError)
-                            else TaskError("browser_error", str(exc))
-                        )
-                        if directory:
-                            write_json(
-                                directory / "error.json",
-                                {"code": failure.code, "message": str(failure)},
-                            )
-                            self.driver().diagnostics(directory / "diagnostics")
-                        if isinstance(exc, PlaywrightError) and "has been closed" in str(exc):
-                            self.close()
-                        if not failure.retryable or attempt == 2:
-                            raise failure from None
-                        print(f"  {failure.code}，重试一次", flush=True)
+                directory = self.raw(identity, stage, 1)
+                source = (
+                    Source.model_validate(pending["source"])
+                    if pending and pending["note_id"] == identity
+                    else collected_source(note, cache, classified)
+                )
+                if source.note_id != identity:
+                    raise TaskError("reference_mismatch", "笔记 ID 发生变化")
+                write_json(directory / "source.json", source.model_dump())
+                self.store.alias(source.url, identity)
+                for profile in note["profile_ids"]:
+                    self.store.collect_note(
+                        profile, {**note, "url": source.url, "source": source.model_dump()}
+                    )
+                result = self.chats.process(source, stage, directory)
+                task["attempts"] = self.chats.current["attempt"]
+                driver = self.driver()
+                common = {
+                    "status": "success",
+                    "source": source.model_dump(),
+                    "conversation_id": driver.conversation_id,
+                    "raw_directory": str(directory.relative_to(self.store.directory)),
+                    "classified_at": now(),
+                    "prompt_version": (
+                        CLASSIFICATION_VERSION
+                        if stage == "classify"
+                        else EXTRACTION_VERSION
+                    ),
+                }
+                if stage == "classify":
+                    record = {
+                        **common,
+                        "classification": result.model_dump(),
+                        "prompt_version": CLASSIFICATION_VERSION,
+                    }
+                    self.store.stage_save(table, identity, record)
+                    task.update(verdict=result.verdict, reason=result.reason)
+                    if result.verdict == "unknown":
+                        self.code = max(self.code, 2)
+                else:
+                    cover, error = None, None
+                    if source.cover_url:
+                        try:
+                            image = cover_jpeg(driver.download_cover(source.cover_url))
+                            cover = self.store.directory / "covers" / f"{identity}.jpg"
+                            atomic_write(cover, image)
+                        except (TaskError, PlaywrightError, OSError) as exc:
+                            error = {"code": "image_failed", "message": str(exc)}
+                    else:
+                        error = {"code": "image_missing", "message": "未提供封面"}
+                    record = {
+                        **common,
+                        "extraction": result.model_dump(),
+                        "export_names": [r["name"] for r in convert(source, result)],
+                        "cover_path": str(cover) if cover else None,
+                        "image_error": error,
+                    }
+                    self.store.save(identity, record)
+                    self.store.stage_save(table, identity, common)
+                    task.update(estimates=estimates(result), image_error=error)
+                write_json(directory / "result.json", record)
+                self.chats.accept()
+                pending = None
+                task["status"] = "success"
             except (TaskError, PlaywrightError) as exc:
                 failure = (
                     exc if isinstance(exc, TaskError) else TaskError("browser_error", str(exc))
@@ -452,7 +429,14 @@ class Workflow:
                         else None,
                     },
                 )
+                task["attempts"] = getattr(self.chats, "last_attempt", 0)
+                if directory:
+                    write_json(directory / "error.json", {
+                        "code": failure.code, "message": str(failure),
+                    })
                 self.record_error(task, failure)
+                if failure.code != "manual_review_required" or pending:
+                    raise BrowserUnsupported("当前视频未安全结束；保存现场并停止") from exc
             except (KeyboardInterrupt, EOFError):
                 task["status"] = "interrupted"
                 self.store.stage_save(
@@ -466,12 +450,24 @@ class Workflow:
                     },
                 )
                 raise
+            except Exception as exc:
+                error = {"code": "unexpected_error", "type": type(exc).__name__,
+                         "message": str(exc)}
+                task.update(status="failed", error=error)
+                self.store.stage_save(table, identity, {"status": "failed", "error": error})
+                if directory:
+                    write_json(directory / "unexpected-error.json", error)
+                    if self.browser:
+                        self.browser.diagnostics(directory / "diagnostics")
+                raise
             finally:
                 self.archive(identity)
                 self.snapshot()
+            if self.chats.pending():
+                raise BrowserUnsupported("视频处理结束后仍有未决请求；禁止进入下一视频")
 
 
-def run_workflow(args, *, browser_factory=SiteBrowser, sleeper=time.sleep):
+def run_workflow(args, *, browser_factory=SiteBrowser, sleeper=time.sleep, clock=time.time):
     profiles = read_profiles(args.profiles)
     state, output = args.state_dir.resolve(), args.output.resolve()
     if output == state or output in state.parents or state in output.parents:
@@ -479,7 +475,7 @@ def run_workflow(args, *, browser_factory=SiteBrowser, sleeper=time.sleep):
     with state_lock(state), ExitStack() as stack:
         store = Store(state)
         stack.callback(store.close)
-        flow = Workflow(args, store, profiles, browser_factory, sleeper)
+        flow = Workflow(args, store, profiles, browser_factory, sleeper, clock)
         stack.callback(flow.close)
         try:
             if args.command not in {"collect", "pipeline"} and any(
@@ -498,7 +494,7 @@ def run_workflow(args, *, browser_factory=SiteBrowser, sleeper=time.sleep):
         except (KeyboardInterrupt, EOFError):
             flow.report["status"] = "interrupted"
             flow.code = 130
-        except (TaskError, PlaywrightError, OSError) as exc:
+        except Exception as exc:
             flow.report.update(
                 status="blocked",
                 error={

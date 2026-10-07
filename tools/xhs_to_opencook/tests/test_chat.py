@@ -106,24 +106,19 @@ def process(store, manager, number, stage="classify"):
     return result
 
 
-def test_platform_restriction_preserves_second_attempt_for_resume(tmp_path):
+def test_platform_restriction_recovers_without_an_extra_submission(tmp_path):
     store, driver, manager = setup(tmp_path)
     driver.replies = [
         TaskError("empty_answer", "（暂无内容）"),
         TaskError("platform_restricted", "访问频繁 300013", retryable=False),
+        "valid",
     ]
-    with pytest.raises(TaskError) as error:
-        process(store, manager, 1)
-    assert error.value.code == "platform_restricted"
-    assert manager.pending()["status"] == "submitted"
-    assert manager.pending()["attempt"] == 2
-    assert manager.review_rows() == []
-    assert len(driver.sent) == 2
-    manager.loaded_batch = None
     assert process(store, manager, 1).verdict == "tutorial"
     assert len(driver.sent) == 2
-    assert manager.pending() is None
+    assert manager.current["attempt"] == 2
+    assert manager.review_rows() == [] and manager.pending() is None
     store.close()
+
 
 
 def test_50_51_boundary_and_restart(tmp_path):
@@ -951,4 +946,169 @@ def test_legacy_failures_never_discard_a_submitted_request(tmp_path):
     assert process(store, resumed, 2).verdict == "tutorial"
     assert resumed.pending() is None and resumed.review_rows() == []
     assert len(driver.sent) == 1
+    store.close()
+
+
+def test_empty_reply_navigation_failure_recovers_same_video(tmp_path):
+    from playwright.sync_api import Error as PlaywrightError
+
+    store, driver, manager = setup(tmp_path)
+    driver.replies = [TaskError("empty_answer", "（暂无内容）"), "valid"]
+    original = driver.new_chat
+    calls = []
+
+    def new_chat():
+        calls.append(1)
+        if len(calls) == 2:
+            raise PlaywrightError("Page.goto: Timeout 8000ms exceeded")
+        original()
+
+    driver.new_chat = new_chat
+    assert process(store, manager, 1).verdict == "tutorial"
+    assert [r["attempt"] for r in driver.sent] == [1, 2]
+    assert len(calls) == 3 and manager.pending() is None
+    assert manager.review_rows() == []
+    store.close()
+
+
+def test_navigation_recovery_waits_five_minutes_then_reviews_and_continues(tmp_path):
+    from playwright.sync_api import Error as PlaywrightError
+
+    store, driver, manager = setup(tmp_path)
+    driver.replies = [TaskError("empty_answer", "（暂无内容）")]
+    original = driver.new_chat
+    calls = []
+    sleeps = []
+    manager.sleeper = lambda seconds: (sleeps.append(seconds),
+                                      setattr(driver, "clock", driver.clock + seconds))
+
+    def new_chat():
+        calls.append(1)
+        if len(calls) > 1:
+            raise PlaywrightError("Page.evaluate: Execution context was destroyed")
+        original()
+
+    driver.new_chat = new_chat
+    with pytest.raises(TaskError) as error:
+        process(store, manager, 1)
+    assert error.value.code == "manual_review_required"
+    assert len(calls) == 7  # Initial chat plus six recovery attempts.
+    assert sum(sleeps) >= 300
+    assert manager.pending() is None
+    assert manager.review_rows()[0]["review_error"]["code"] == "page_recovery_exhausted"
+    assert manager.review_rows()[0]["attempt"] == 1  # No second AI submission occurred.
+    assert all(b["status"] == "sealed" for b in manager.batches())
+    driver.new_chat = original
+    assert process(store, manager, 2).verdict == "tutorial"
+    assert len(driver.sent) == 2
+    store.close()
+
+
+def test_unexpected_browser_error_is_not_retried_or_reviewed(tmp_path):
+    from playwright.sync_api import Error as PlaywrightError
+
+    store, driver, manager = setup(tmp_path)
+    calls = []
+
+    def new_chat():
+        calls.append(1)
+        raise PlaywrightError("Invalid selector adapter bug")
+
+    driver.new_chat = new_chat
+    with pytest.raises(BrowserUnsupported):
+        process(store, manager, 1)
+    assert len(calls) == 1 and manager.review_rows() == []
+    store.close()
+
+
+def test_page_recovery_deadline_and_failures_survive_restart(tmp_path):
+    from playwright.sync_api import Error as PlaywrightError
+
+    store, driver, manager = setup(tmp_path)
+    original = driver.new_chat
+    calls = []
+
+    def broken():
+        calls.append(1)
+        raise PlaywrightError("Page.goto: Timeout 8000ms exceeded")
+
+    driver.new_chat = broken
+
+    def sleep(seconds):
+        if len(calls) == 3:
+            raise KeyboardInterrupt()
+        driver.clock += seconds
+
+    manager.sleeper = sleep
+    with pytest.raises(KeyboardInterrupt):
+        process(store, manager, 1)
+    state = json.loads((tmp_path / 'recovery' / f'classify-{source(1).note_id}.json').read_text())
+    assert state['failures'] == 3 and state['wait_until'] == driver.clock + 300
+    driver.new_chat = original
+    waits = []
+    recovery = ChatSession(store, lambda: driver, clock=lambda: driver.clock,
+                           sleeper=lambda s: (waits.append(s),
+                                              setattr(driver, 'clock', driver.clock + s)))
+    assert process(store, recovery, 1).verdict == 'tutorial'
+    assert sum(waits) >= 300 and len(driver.sent) == 1
+    assert not (tmp_path / 'recovery' / f'classify-{source(1).note_id}.json').exists()
+    store.close()
+
+
+def test_review_committed_before_crash_does_not_repeat_recovery(tmp_path):
+    from xhs_to_opencook.storage import write_json
+
+    store, driver, manager = setup(tmp_path)
+    driver.replies = [TaskError('empty_answer', '（暂无内容）')] * 2
+    with pytest.raises(TaskError):
+        process(store, manager, 1)
+    write_json(tmp_path / 'recovery' / f'classify-{source(1).note_id}.json',
+               {'failures': 6, 'wait_until': None})
+    count = len(manager.review_rows())
+    with pytest.raises(TaskError, match='等待人工审核'):
+        process(store, manager, 1)
+    assert len(manager.review_rows()) == count
+    assert len(driver.sent) == 2
+    store.close()
+
+
+def test_login_during_preparation_does_not_spend_ai_attempt(tmp_path):
+    store, driver, manager = setup(tmp_path)
+    original = driver.begin_request
+    calls = []
+
+    def begin(*args):
+        calls.append(1)
+        if len(calls) < 3:
+            raise TaskError('login_required', '请登录', retryable=False)
+        original(*args)
+
+    driver.begin_request = begin
+    assert process(store, manager, 1).verdict == 'tutorial'
+    assert len(calls) == 3 and len(driver.sent) == 1
+    assert driver.sent[0]['attempt'] == 1
+    assert manager.review_rows() == []
+    store.close()
+
+
+def test_navigation_error_wrapped_as_reference_failure_recovers_without_spending_attempt(tmp_path):
+    from playwright.sync_api import Error as PlaywrightError
+
+    store, driver, manager = setup(tmp_path)
+    original = driver.begin_request
+    calls = []
+
+    def begin(*args):
+        calls.append(1)
+        if len(calls) == 1:
+            try:
+                raise PlaywrightError('Page.evaluate: Execution context was destroyed')
+            except PlaywrightError as exc:
+                raise TaskError('reference_mismatch', '页面在引用期间切换') from exc
+        original(*args)
+
+    driver.begin_request = begin
+    assert process(store, manager, 1).verdict == 'tutorial'
+    assert driver.sent[0]['attempt'] == 1 and len(driver.sent) == 1
+    assert manager.pending() is None
     store.close()
