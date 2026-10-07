@@ -16,13 +16,21 @@ def test_strict_json_and_fence(answer):
     assert parse_answer(answer) == parse_answer(f"```json\n{answer}\n```")
 
 
-@pytest.mark.parametrize("invalid", [
-    '{"recipes": [], "recipes": []}', '{"recipes": NaN}', '```json\n{}',
-    '说明\n{}', '{"recipes": [', '{"recipes": []}',
+@pytest.mark.parametrize("invalid,code", [
+    ('{"recipes": [], "recipes": []}', "json_syntax_invalid"),
+    ('{"recipes": NaN}', "json_syntax_invalid"),
+    ('```json\n{}', "json_syntax_invalid"),
+    ('```python\n{}\n```', "json_syntax_invalid"),
+    ('说明\n{}', "json_syntax_invalid"),
+    ('{"recipes": [', "json_syntax_invalid"),
+    ('{"recipes": []}', "json_schema_invalid"),
+    ('{}', "json_schema_invalid"),
+    ('null', "json_schema_invalid"),
 ])
-def test_invalid_json_never_reconstructed(invalid):
-    with pytest.raises(TaskError, match="JSON"):
+def test_invalid_json_never_reconstructed(invalid, code):
+    with pytest.raises(TaskError, match="JSON") as error:
         parse_answer(invalid)
+    assert error.value.code == code
 
 
 @pytest.mark.parametrize("field,value", [
@@ -32,8 +40,10 @@ def test_invalid_json_never_reconstructed(invalid):
 ])
 def test_invalid_ingredients(payload, field, value):
     payload["recipes"][0]["ingredients"][0][field] = value
-    with pytest.raises(TaskError):
+    with pytest.raises(TaskError) as error:
         parse_answer(json.dumps(payload))
+    expected = "json_syntax_invalid" if value == float("inf") else "json_schema_invalid"
+    assert error.value.code == expected
 
 
 @pytest.mark.parametrize("change", ["missing_amount", "missing_estimate", "no_steps", "bad_time"])
@@ -47,8 +57,9 @@ def test_missing_fields_and_nonstandard_time(payload, change):
         recipe["steps"] = [" "]
     else:
         recipe["total_time"] = "PT2H+1夜"
-    with pytest.raises(TaskError):
+    with pytest.raises(TaskError) as error:
         parse_answer(json.dumps(payload))
+    assert error.value.code == "json_schema_invalid"
 
 
 def test_conversion_keeps_purposes_estimates_and_multi_dish(source, payload):

@@ -1,3 +1,4 @@
+import csv
 import json
 from types import SimpleNamespace
 
@@ -116,6 +117,63 @@ def execute(args, browser):
     return code, json.loads((args.output / "report.json").read_text())
 
 
+def test_empty_answer_exhaustion_continues_classification_and_extraction(setup, monkeypatch):
+    from xhs_to_opencook.workflow import Workflow
+
+    args, browser = setup
+    args.max_attempts = 2
+    browser.verdicts[N2] = "tutorial"
+    browser.verdicts[N3] = "non_tutorial"
+    original_driver = Workflow.driver
+
+    def driver(flow):
+        transport = original_driver(flow)
+        if not getattr(transport, "empty_injected", False):
+            original_wait = transport.wait_request
+
+            def wait(request, timeout, persist):
+                if request["note_id"] == N1 and request["stage"] == "classify":
+                    request["empty_answer_evidence"] = {"finished": True}
+                    persist(request)
+                    raise TaskError("empty_answer", "（暂无内容）")
+                return original_wait(request, timeout, persist)
+
+            transport.wait_request = wait
+            transport.empty_injected = True
+        return transport
+
+    monkeypatch.setattr(Workflow, "driver", driver)
+    code, report = execute(args, browser)
+    assert code == 2 and report["status"] == "partial"
+    assert not report["pending_requests"]
+    tasks = {(t.get("stage"), t.get("note_id")): t for t in report["tasks"]}
+    failure = tasks["classify", N1]
+    assert failure["attempts"] == 2
+    assert failure["error"]["code"] == "manual_review_required"
+    assert tasks["classify", N2]["status"] == "success"
+    assert "extract" in browser.events
+    store = Store(args.state_dir)
+    requests = [r for r in store.stage_rows("chat_requests") if r["note_id"] == N1]
+    assert [r["attempt"] for r in requests] == [1, 2]
+    store.close()
+    assert report["manual_review_count"] == 1
+    with (args.output / "manual_review.csv").open(encoding="utf-8-sig", newline="") as file:
+        rows = list(csv.DictReader(file))
+    assert [(r["笔记ID"], r["失败阶段"]) for r in rows] == [(N1, "分类")]
+    args.command = "classify"
+
+    def unexpected_browser(*a, **kw):
+        pytest.fail("review tasks and successful cache must not submit again")
+
+    assert run_workflow(args, browser_factory=unexpected_browser) == 2
+    monkeypatch.setattr(Workflow, "driver", original_driver)
+    del browser.empty_injected
+    args.retry_review = True
+    assert execute(args, browser)[0] == 0
+    with (args.output / "manual_review.csv").open(encoding="utf-8-sig", newline="") as file:
+        assert list(csv.DictReader(file))[0]["状态"] == "已解除待审核"
+
+
 def test_phase_order_scope_and_offline_export(setup):
     args, browser = setup
     code, report = execute(args, browser)
@@ -200,7 +258,7 @@ def test_legacy_cache_classified_then_reused_and_failure_preserves_it(setup):
     assert browser.events.count("classify") == 3
     assert browser.events.count("extract") == 0
     args.command, args.refresh = "extract", True
-    browser.failure = TaskError("json_invalid", "invalid")
+    browser.failure = TaskError("json_schema_invalid", "invalid")
     assert execute(args, browser)[0] == 2
     store = Store(args.state_dir)
     assert store.get(N1)["status"] == "success"
@@ -214,7 +272,7 @@ def test_single_repair_two_attempts_and_mismatch(setup):
     browser.notes = {P1: [N1], P2: []}
     browser.replies = ["{}", "{}", "{}"]
     code, report = execute(args, browser)
-    assert code == 2 and browser.events.count("classify") == 3
+    assert code == 2 and browser.events.count("classify") == 2
     assert report["recipe_count"] == 0
     with pytest.raises(TaskError) as error:
         parse_classification(json.dumps({"note_id": N2, "verdict": "tutorial", "reason": "x"}), N1)

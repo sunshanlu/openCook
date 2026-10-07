@@ -1,3 +1,4 @@
+import csv
 import json
 
 import pytest
@@ -105,7 +106,7 @@ def process(store, manager, number, stage="classify"):
 
 
 def test_50_51_boundary_and_restart(tmp_path):
-    store, driver, manager = setup(tmp_path)
+    store, driver, manager = setup(tmp_path, capacity=50)
     for i in range(1, 51):
         process(store, manager, i)
     assert driver.new == 1
@@ -120,19 +121,153 @@ def test_50_51_boundary_and_restart(tmp_path):
     store.close()
 
 
-def test_failure_and_repair_count_once(tmp_path):
+def test_five_video_boundary_by_default(tmp_path):
     store, driver, manager = setup(tmp_path)
-    driver.replies = ["{}", "valid"]
+    for i in range(1, 6):
+        process(store, manager, i)
+    assert driver.new == 1
+    assert manager.batches()[0]["status"] == "sealed"
+    process(store, manager, 6)
+    assert driver.new == 2
+    assert [len(b["submitted_notes"]) for b in manager.batches()] == [5, 1]
+    store.close()
+
+
+def test_old_large_batch_switches_to_five_on_resume(tmp_path):
+    store, driver, manager = setup(tmp_path, capacity=50)
+    for i in range(1, 8):
+        process(store, manager, i)
+    manager.capacity = 5
+    manager.loaded_batch = None
+    process(store, manager, 8)
+    assert driver.new == 2
+    assert manager.batches()[0]["status"] == "sealed"
+    assert manager.batches()[1]["capacity"] == 5
+    store.close()
+
+
+def test_unsent_request_in_old_large_batch_moves_to_new_chat(tmp_path):
+    store, driver, manager = setup(tmp_path, capacity=50)
+    for i in range(1, 8):
+        process(store, manager, i)
+
+    def interrupt_before_send(*args):
+        raise KeyboardInterrupt()
+
+    original = driver.begin_request
+    driver.begin_request = interrupt_before_send
+    with pytest.raises(KeyboardInterrupt):
+        process(store, manager, 8)
+    request = manager.pending()
+    request_id, old_batch = request["request_id"], request["batch_id"]
+    assert request["status"] == "prepared"
+    driver.begin_request = original
+    manager.capacity = 5
+    manager.loaded_batch = None
+    process(store, manager, 8)
+    saved = store.stage_get("chat_requests", request_id)
+    assert saved["status"] == "complete" and saved["attempt"] == 1
+    assert saved["batch_id"] != old_batch
+    assert saved["conversation_id"] == "chat-2"
+    assert [len(b["submitted_notes"]) for b in manager.batches()] == [7, 1]
+    store.close()
+
+
+def test_default_throttle_uses_two_seconds(tmp_path):
+    store, driver, manager = setup(tmp_path)
+    process(store, manager, 1)
+    sent_at = driver.sent[-1]["sent_at"]
+    driver.clock = sent_at + 0.5
+    manager.throttle()
+    assert driver.clock == sent_at + 2
+    driver.clock += 10
+    before = driver.clock
+    manager.throttle()
+    assert driver.clock == before
+    store.close()
+
+
+@pytest.mark.parametrize("invalid,code", [
+    ("{", "json_syntax_invalid"), ("{}", "json_schema_invalid"),
+])
+def test_invalid_second_attempt_does_not_trigger_third_submission(tmp_path, invalid, code):
+    store, driver, manager = setup(tmp_path)
+    driver.replies = [TaskError("empty_answer", "暂无内容"), invalid]
+    with pytest.raises(TaskError, match="等待人工审核"):
+        process(store, manager, 1)
+    assert len(driver.sent) == 2
+    assert not any(r["repair"] for r in driver.sent)
+    review = manager.review_for("classify", source(1).note_id)
+    assert review["attempt"] == 2
+    assert review["review_error"]["code"] == code
+    store.close()
+
+
+def test_csv_review_preserves_quoted_text_and_requires_explicit_release(tmp_path):
+    store, driver, manager = setup(tmp_path)
+    driver.replies = [TaskError("empty_answer", "暂无内容")] * 2
+    with pytest.raises(TaskError, match="等待人工审核"):
+        process(store, manager, 1)
+    review = manager.review_for("classify", source(1).note_id)
+    review["source"]["title"] = '标题,"含引号"\n第二行'
+    manager.persist(review)
+    output = tmp_path / "output"
+    rows = manager.write_reviews(output, {source(1).note_id})
+    assert len(rows) == 1
+    path = output / "manual_review.csv"
+    assert path.read_bytes().startswith(b"\xef\xbb\xbf")
+    with path.open(encoding="utf-8-sig", newline="") as file:
+        csv_rows = list(csv.DictReader(file))
+    assert len(csv_rows[0]) == 12
+    assert "失败原因" not in csv_rows[0]
+    assert csv_rows[0]["标题"] == review["source"]["title"]
+    assert csv_rows[0]["失败次数"] == "2"
+    assert csv_rows[0]["错误码"] == "empty_answer"
+    csv_rows[0]["人工审核结论"] = "可重试"
+    csv_rows[0]["补全备注"] = '已核对,"原视频"\n稍后补全'
+    # Existing exports with the old column still retain human annotations.
+    legacy_rows = [dict(csv_rows[0], 失败原因="旧版失败原因")]
+    with path.open("w", encoding="utf-8-sig", newline="") as file:
+        writer = csv.DictWriter(file, fieldnames=list(legacy_rows[0]))
+        writer.writeheader()
+        writer.writerows(legacy_rows)
+    manager.write_reviews(output, {source(1).note_id})
+    with path.open(encoding="utf-8-sig", newline="") as file:
+        assert list(csv.DictReader(file)) == csv_rows
+    assert (output / "manual_review_links.txt").read_text().strip() == source(1).url
+    driver.replies = ["valid"]
+    manager.max_attempts = 30
+    with pytest.raises(TaskError, match="等待人工审核"):
+        process(store, manager, 1)
+    assert len(driver.sent) == 2
+    manager.release_review("classify", source(1).note_id)
+    process(store, manager, 1)
+    assert manager.review_for("classify", source(1).note_id) is None
+    manager.write_reviews(output, {source(1).note_id})
+    with path.open(encoding="utf-8-sig", newline="") as file:
+        released = list(csv.DictReader(file))
+    assert released[0]["状态"] == "已解除待审核"
+    assert released[0]["人工审核结论"] == "可重试"
+    assert released[0]["补全备注"] == csv_rows[0]["补全备注"]
+    assert (output / "manual_review_links.txt").read_text() == ""
+    store.close()
+
+
+@pytest.mark.parametrize("invalid", ["{", "{}"])
+def test_repair_counts_as_attempt_but_each_chat_counts_note_once(tmp_path, invalid):
+    store, driver, manager = setup(tmp_path)
+    driver.replies = [invalid, "valid"]
     process(store, manager, 1)
     assert len(driver.sent) == 2
     assert driver.sent[1]["repair"]
     assert manager.batches()[0]["submitted_notes"] == [source(1).note_id]
-    driver.replies = ["{}", "{}", "{}"]
+    driver.replies = [invalid] * 3
     with pytest.raises(TaskError):
         process(store, manager, 2)
-    assert len(manager.batches()[0]["submitted_notes"]) == 2
-    assert [s["attempt"] for s in driver.sent[-3:]] == [1, 1, 2]
-    assert sum(s["repair"] for s in driver.sent[-3:]) == 1
+    assert [len(b["submitted_notes"]) for b in manager.batches()] == [1, 2, 1]
+    assert [s["attempt"] for s in driver.sent[-2:]] == [1, 2]
+    assert sum(s["repair"] for s in driver.sent[-2:]) == 1
+    assert driver.sent[-2]["conversation_id"] != driver.sent[-1]["conversation_id"]
     store.close()
 
 
@@ -146,9 +281,9 @@ def test_phase_isolation_and_capacity_one(tmp_path, answer):
     ] * 2
     with pytest.raises(TaskError) as error:
         process(store, manager, 1, "extract")
-    assert error.value.code == "reference_mismatch"
-    assert [b["stage"] for b in manager.batches()] == ["classify", "extract"]
-    assert driver.new == 2
+    assert error.value.code == "manual_review_required"
+    assert [b["stage"] for b in manager.batches()] == ["classify", "extract", "extract"]
+    assert driver.new == 3
     store.close()
 
 
@@ -161,18 +296,149 @@ def test_late_answer_keeps_same_request_and_chat(tmp_path):
     store.close()
 
 
-def test_cooldown_retry_then_block_persists(tmp_path):
+@pytest.mark.parametrize("invalid", ["{", "{}"])
+def test_cooling_observes_after_invalid_json_without_resubmission(tmp_path, invalid):
+    store, driver, manager = setup(tmp_path, timeout=1, cooldown=100)
+    driver.replies = [TaskError("answer_timeout", "no answer"), invalid, "valid"]
+    process(store, manager, 1)
+    assert len(driver.sent) == 1 and driver.new == 1
+    assert manager.pending() is None
+    store.close()
+
+
+def test_unconfirmed_generation_recovers_in_new_chat(tmp_path):
+    store, driver, manager = setup(tmp_path, timeout=1, cooldown=2)
+    driver.idle = False
+    original_new = driver.new_chat
+
+    def new_chat():
+        original_new()
+        if driver.new > 1:
+            driver.idle = True
+
+    driver.new_chat = new_chat
+    driver.replies = [TaskError("answer_timeout", "no answer")] * 2 + ["valid"]
+    process(store, manager, 1)
+    assert [r["attempt"] for r in driver.sent] == [1, 2]
+    assert [r["conversation_id"] for r in driver.sent] == ["chat-1", "chat-2"]
+    assert manager.batches()[0]["sealed_reason"] == "generation_not_confirmed_stopped"
+    assert manager.pending() is None
+    store.close()
+
+
+def test_old_generation_block_resumes_attempt_seven_after_restart(tmp_path):
+    store, driver, manager = setup(tmp_path, max_attempts=30)
+    directory = store.attempt_directory(source(1).note_id, 1)
+    manager.process(source(1), "classify", directory)
+    request = manager.current
+    request.update(
+        status="blocked", attempt=6, blocked_reason="generation_not_confirmed_stopped",
+        cooldown_until=driver.clock - 1,
+    )
+    request.pop("answer")
+    manager.persist(request)
+    manager.loaded_batch = None
+    driver.idle = False
+    driver.replies = [TaskError("answer_timeout", "no answer"), "valid"]
+    process(store, manager, 1)
+    assert [r["attempt"] for r in driver.sent] == [1, 7]
+    retired = store.stage_get("chat_requests", request["request_id"])
+    assert retired["status"] == "abandoned"
+    assert retired["superseded_by"] == manager.current["request_id"]
+    assert manager.current["previous_request_id"] == request["request_id"]
+    assert driver.new == 2 and manager.pending() is None
+    store.close()
+
+
+def test_recovery_intent_survives_interrupt_before_new_chat(tmp_path):
+    store, driver, manager = setup(tmp_path, timeout=1, cooldown=2)
+    driver.idle = False
+    driver.replies = [TaskError("answer_timeout", "no answer")] * 2
+    original_new = driver.new_chat
+
+    def interrupt_new():
+        if driver.new:
+            raise KeyboardInterrupt
+        original_new()
+
+    driver.new_chat = interrupt_new
+    with pytest.raises(KeyboardInterrupt):
+        process(store, manager, 1)
+    assert manager.pending()["retry_new_chat"]
+    manager.loaded_batch = None
+    driver.new_chat = original_new
+    driver.replies = ["valid"]
+    process(store, manager, 1)
+    assert driver.new == 2
+    assert [r["attempt"] for r in driver.sent] == [1, 2]
+    assert manager.pending() is None
+    store.close()
+
+
+def test_exhausted_stuck_chat_is_sealed_before_next_video(tmp_path):
+    store, driver, manager = setup(tmp_path, timeout=1, cooldown=2, max_attempts=1)
+    driver.idle = False
+    driver.replies = [TaskError("answer_timeout", "no answer")] * 2
+    with pytest.raises(TaskError, match="已尝试 1 次"):
+        process(store, manager, 1)
+    assert manager.pending() is None
+    assert manager.batches()[0]["status"] == "sealed"
+    driver.replies = ["valid"]
+    process(store, manager, 2)
+    assert driver.new == 2
+    store.close()
+
+
+def test_unknown_history_during_recovery_still_blocks(tmp_path):
+    store, driver, manager = setup(tmp_path, timeout=1, cooldown=2)
+    driver.idle = False
+    driver.replies = [TaskError("answer_timeout", "no answer")] * 2
+    driver.request_snapshot = lambda request: {"matches": 0}
+    with pytest.raises(BrowserUnsupported, match="历史中无法确认"):
+        process(store, manager, 1)
+    assert len(driver.sent) == 1 and driver.new == 1
+    assert manager.pending()["status"] == "cooling"
+    store.close()
+
+
+def test_confirmed_empty_history_recovers_persisted_submission(tmp_path):
+    store, driver, manager = setup(tmp_path)
+    directory = store.attempt_directory(source(1).note_id, 1)
+    manager.process(source(1), "classify", directory)
+    request = manager.current
+    request.update(status="blocked", prompt="saved prompt")
+    request.pop("answer")
+    manager.persist(request)
+    manager.loaded_batch = None
+
+    def missing(cid):
+        error = TaskError("history_unavailable", "confirmed empty history", retryable=False)
+        error.evidence = {"conversation_id": cid, "items": []}
+        raise error
+
+    driver.restore_chat = missing
+    process(store, manager, 1)
+    assert [r["attempt"] for r in driver.sent] == [1, 2]
+    assert driver.new == 2
+    assert manager.batches()[0]["sealed_reason"] == "history_unavailable"
+    assert manager.pending() is None
+    store.close()
+
+
+def test_cooldown_retry_then_exhaustion_continues_to_next_note(tmp_path):
     store, driver, manager = setup(tmp_path, timeout=1, cooldown=2)
     driver.replies = [TaskError("answer_timeout", "no answer")] * 8
-    with pytest.raises(BrowserUnsupported):
+    with pytest.raises(TaskError, match="等待人工审核"):
         process(store, manager, 1)
-    assert len(driver.sent) == 2 and driver.new == 1
+    assert len(driver.sent) == 2 and driver.new == 2
     assert driver.sent[1]["silence_retry"]
-    assert manager.pending()["status"] == "blocked"
+    assert manager.pending() is None
     manager.loaded_batch = None
-    with pytest.raises(BrowserUnsupported):
+    with pytest.raises(TaskError, match="等待人工审核"):
         process(store, manager, 1)
-    assert len(driver.sent) == 2 and driver.new == 1
+    assert len(driver.sent) == 2 and driver.new == 2
+    driver.replies = ["valid"]
+    process(store, manager, 2)
     store.close()
 
 
@@ -252,7 +518,7 @@ def test_cooling_deadline_survives_restart_without_reset(tmp_path):
     driver.wait_request = original
     driver.replies = ["valid"]
     process(store, manager, 1)
-    assert len(driver.sent) == 2 and driver.new == 1
+    assert len(driver.sent) == 2 and driver.new == 2
     assert manager.current["silence_retry"]
     store.close()
 
@@ -274,38 +540,39 @@ def test_finished_empty_answer_retries_without_cooldown(tmp_path):
     driver.replies = [TaskError('empty_answer', '（暂无内容）'), 'valid']
     process(store, manager, 1)
     requests = store.stage_rows('chat_requests')
-    assert len(driver.sent) == 2 and driver.new == 1
+    assert len(driver.sent) == 2 and driver.new == 2
     assert not any('cooldown_until' in r for r in requests)
     assert driver.sent[1]['attempt'] == 2
     assert len(manager.batches()[0]['submitted_notes']) == 1
     store.close()
 
 
-def test_repeated_empty_answer_blocks_across_restart(tmp_path):
+def test_repeated_empty_answer_exhaustion_survives_restart(tmp_path):
     store, driver, manager = setup(tmp_path)
     driver.replies = [TaskError('empty_answer', '（暂无内容）')] * 3
-    with pytest.raises(BrowserUnsupported):
+    with pytest.raises(TaskError, match="已尝试 2 次"):
         process(store, manager, 1)
-    assert manager.pending()['blocked_reason'] == 'empty_answer_retry_exhausted'
-    assert not manager.pending().get('cooldown_until')
+    assert manager.pending() is None
+    assert store.stage_rows("chat_requests")[-1]["error"]["code"] == "manual_review_required"
     manager.loaded_batch = None
-    with pytest.raises(BrowserUnsupported):
+    with pytest.raises(TaskError, match="等待人工审核"):
         process(store, manager, 1)
-    assert len(driver.sent) == 2 and driver.new == 1
+    assert len(driver.sent) == 2 and driver.new == 2
     store.close()
 
 
 def test_30_attempts_limit_and_restart_do_not_reset_count(tmp_path):
     store, driver, manager = setup(tmp_path, max_attempts=30)
     driver.replies = [TaskError('empty_answer', '（暂无内容）')] * 31
-    with pytest.raises(BrowserUnsupported):
+    with pytest.raises(TaskError, match="已尝试 30 次"):
         process(store, manager, 1)
     assert [r['attempt'] for r in driver.sent] == list(range(1, 31))
-    assert manager.pending()['attempt'] == 30
+    assert store.stage_rows("chat_requests")[-1]["attempt"] == 30
+    assert manager.pending() is None
     assert len(manager.batches()[0]['submitted_notes']) == 1
-    assert driver.new == 1
+    assert driver.new == 30
     manager.loaded_batch = None
-    with pytest.raises(BrowserUnsupported):
+    with pytest.raises(TaskError, match="等待人工审核"):
         process(store, manager, 1)
     assert len(driver.sent) == 30
     store.close()
@@ -314,12 +581,16 @@ def test_30_attempts_limit_and_restart_do_not_reset_count(tmp_path):
 def test_higher_limit_resumes_old_blocked_request_at_attempt_three(tmp_path):
     store, driver, manager = setup(tmp_path)
     driver.replies = [TaskError('empty_answer', '（暂无内容）')] * 2
-    with pytest.raises(BrowserUnsupported):
+    with pytest.raises(TaskError, match="已尝试 2 次"):
         process(store, manager, 1)
+    # Persist the old policy's blocked row to exercise migration on restart.
+    blocked = store.stage_rows("chat_requests")[-1]
+    blocked.update(status="blocked", blocked_reason="empty_answer_retry_exhausted")
+    manager.persist(blocked)
     manager.max_attempts = 30
     manager.loaded_batch = None
     driver.replies = [TaskError('empty_answer', '（暂无内容）'), 'valid']
     process(store, manager, 1)
     assert [r['attempt'] for r in driver.sent] == [1, 2, 3]
-    assert driver.new == 1
+    assert driver.new == 3
     store.close()

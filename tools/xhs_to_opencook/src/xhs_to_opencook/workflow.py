@@ -43,8 +43,8 @@ class Workflow:
         self.chats = ChatSession(
             store,
             self.driver,
-            capacity=getattr(args, "chat_batch_size", 50),
-            max_attempts=getattr(args, "max_attempts", 30),
+            capacity=getattr(args, "chat_batch_size", 5),
+            max_attempts=getattr(args, "max_attempts", 2),
             interval=args.interval,
             timeout=args.timeout,
             sleeper=sleeper,
@@ -93,6 +93,8 @@ class Workflow:
     def record_error(self, task, error):
         failure = error if isinstance(error, TaskError) else TaskError("browser_error", str(error))
         task.update(status="failed", error={"code": failure.code, "message": str(failure)})
+        if failure.code == "manual_review_required":
+            task["status"] = "awaiting_review"
         self.code = max(self.code, 2)
         print(f"  {failure.code}: {failure}", file=sys.stderr, flush=True)
         if isinstance(failure, BrowserUnsupported) or failure.code == "login_required":
@@ -110,6 +112,8 @@ class Workflow:
                 }
             )
         videos = [n for n in notes if n.get("type") == "video"]
+        reviews = self.chats.write_reviews(self.output, {n["note_id"] for n in videos})
+        self.report.update(manual_review=reviews, manual_review_count=len(reviews))
         tutorials, records, states = [], [], []
         used = set()
         for note in videos:
@@ -289,6 +293,13 @@ class Workflow:
             table = "classifications" if stage == "classify" else "extraction_runs"
             task = {"stage": stage, "note_id": identity, "status": "running", "attempts": 0}
             self.report["tasks"].append(task)
+            if self.chats.review_for(stage, identity):
+                if getattr(self.args, "retry_review", False):
+                    self.chats.release_review(stage, identity)
+                else:
+                    task.update(status="awaiting_review", reason="manual_review_required")
+                    self.code = max(self.code, 2)
+                    continue
             cache = self.store.get(identity)
             if (
                 stage == "classify"
@@ -417,6 +428,7 @@ class Workflow:
                 failure = (
                     exc if isinstance(exc, TaskError) else TaskError("browser_error", str(exc))
                 )
+                pending = self.chats.pending()
                 self.store.stage_save(
                     table,
                     identity,

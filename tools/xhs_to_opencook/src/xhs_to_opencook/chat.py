@@ -4,13 +4,15 @@ Only the adapter can confirm a submission. Sending intent is journaled before En
 unknown intent is reconciled against history, never optimistically resent.
 """
 
+import csv
+import io
 import time
 from uuid import uuid4
 
 from playwright.sync_api import Error as PlaywrightError
 
 from .errors import BrowserUnsupported, TaskError
-from .models import parse_bound_answer
+from .models import JSON_ERROR_CODES, parse_bound_answer
 from .prompts import CLASSIFICATION_VERSION, EXTRACTION_VERSION, bound_prompt
 from .storage import atomic_write, now, write_json
 
@@ -32,13 +34,13 @@ class ChatSession:
         store,
         driver,
         *,
-        capacity=50,
-        interval=10,
+        capacity=5,
+        interval=2,
         timeout=180,
         sleeper=time.sleep,
         clock=time.time,
         cooldown=600,
-        max_attempts=30,
+        max_attempts=2,
     ):
         if isinstance(capacity, bool) or not isinstance(capacity, int) or capacity <= 0:
             raise ValueError("chat batch size must be a positive integer")
@@ -46,7 +48,7 @@ class ChatSession:
             raise ValueError("max attempts must be a positive integer")
         self.max_attempts = max_attempts
         self.store, self.driver = store, driver
-        self.capacity, self.interval, self.timeout = capacity, max(10, interval), timeout
+        self.capacity, self.interval, self.timeout = capacity, interval, timeout
         self.sleeper, self.clock, self.cooldown = sleeper, clock, cooldown
         self.loaded_batch = None
 
@@ -63,6 +65,58 @@ class ChatSession:
 
     def batches(self):
         return self.store.stage_rows("chat_batches")
+
+    def review_rows(self):
+        return [r for r in self.store.stage_rows("chat_requests")
+                if r["status"] == "manual_review"]
+
+    def review_for(self, stage, note_id):
+        return next((r for r in self.review_rows()
+                     if r["stage"] == stage and r["note_id"] == note_id), None)
+
+    def release_review(self, stage, note_id):
+        for request in self.review_rows():
+            if request["stage"] == stage and request["note_id"] == note_id:
+                request.update(status="review_released", review_released_at=now())
+                self.persist(request)
+
+    def write_reviews(self, directory, note_ids):
+        rows = [{
+            "note_id": r["note_id"], "stage": r["stage"], "url": r["source"]["url"],
+            "title": r["source"].get("title"), "author": r["source"].get("author"),
+            "status": "awaiting_review", "attempts": r["attempt"],
+            "error": r.get("review_error", r.get("error")),
+            "request_id": r["request_id"], "raw_directory": r.get("raw_directory"),
+        } for r in self.review_rows() if r["note_id"] in note_ids]
+        previous = {}
+        csv_path = directory / "manual_review.csv"
+        if csv_path.exists():
+            with csv_path.open(encoding="utf-8-sig", newline="") as file:
+                previous = {r["请求ID"]: r for r in csv.DictReader(file)}
+        buffer = io.StringIO(newline="")
+        writer = csv.writer(buffer)
+        headers = ["笔记ID", "失败阶段", "标题", "作者", "URL", "状态", "失败次数",
+                   "错误码", "请求ID", "原始记录路径", "人工审核结论", "补全备注"]
+        writer.writerow(headers)
+        for row in rows:
+            error = row["error"] or {}
+            annotations = previous.pop(row["request_id"], {})
+            writer.writerow([
+                row["note_id"], "分类" if row["stage"] == "classify" else "提取",
+                row["title"], row["author"], row["url"], "待人工审核", row["attempts"],
+                error.get("code"), row["request_id"],
+                str(self.store.directory / row["raw_directory"]) if row["raw_directory"] else "",
+                annotations.get("人工审核结论", ""), annotations.get("补全备注", ""),
+            ])
+        for row in previous.values():
+            if row["笔记ID"] in note_ids:
+                row["状态"] = "已解除待审核"
+                writer.writerow([row.get(header, "") for header in headers])
+        atomic_write(csv_path, buffer.getvalue().encode("utf-8-sig"))
+        urls = list(dict.fromkeys(r["url"] for r in rows))
+        atomic_write(directory / "manual_review_links.txt",
+                     ("\n".join(urls) + ("\n" if urls else "")).encode())
+        return rows
 
     def persist(self, request):
         self.store.stage_save("chat_requests", request["request_id"], request)
@@ -100,7 +154,7 @@ class ChatSession:
         if (
             batch
             and batch["status"] == "open"
-            and len(batch["submitted_notes"]) >= batch["capacity"]
+            and len(batch["submitted_notes"]) >= min(batch["capacity"], self.capacity)
         ):
             batch.update(status="sealed", sealed_reason="capacity", sealed_at=now())
             self.store.stage_save("chat_batches", batch["batch_id"], batch)
@@ -171,16 +225,17 @@ class ChatSession:
                 if exc.code not in {"answer_timeout", "empty_answer"}:
                     raise
                 if request.get("blocked_reason") in {
-                    "silence_retry_exhausted", "empty_answer_retry_exhausted"
-                } and request["attempt"] < self.max_attempts:
+                    "silence_retry_exhausted",
+                    "empty_answer_retry_exhausted",
+                    "generation_not_confirmed_stopped",
+                }:
                     if exc.code == "empty_answer":
                         return self.empty_retry(request)
-                    if not driver.stop_generation():
-                        raise BrowserUnsupported("恢复时无法确认旧生成已结束；停止提交") from exc
-                    request.update(status="retry_ready", safe_to_retry=True,
-                        attempt_limit=self.max_attempts, resumed_with_higher_limit=True)
+                    request.update(
+                        attempt_limit=self.max_attempts, resumed_with_recovery_policy=True
+                    )
                     self.persist(request)
-                    return None
+                    return self.silence_retry(request)
                 raise BrowserUnsupported(
                     "上次无回复重试已耗尽或生成状态不明；本轮停止提交"
                 ) from exc
@@ -223,52 +278,133 @@ class ChatSession:
             except TaskError as exc:
                 if exc.code == "empty_answer":
                     return self.empty_retry(request)
-                if exc.code not in {"answer_timeout", "json_invalid", "reference_mismatch"}:
+                if exc.code not in JSON_ERROR_CODES | {"answer_timeout", "reference_mismatch"}:
                     raise
                 request.update(status="cooling")
                 request.pop("answer", None)
                 self.persist(request)
                 self.sleeper(max(0, min(5, remaining) - (self.clock() - observed_at)))
-        if not driver.stop_generation():
-            request.update(status="blocked", blocked_reason="generation_not_confirmed_stopped")
-            self.persist(request)
-            raise BrowserUnsupported("冷却结束，无法确认旧生成已终止；保存进度并停止整批")
-        if request["attempt"] >= self.max_attempts:
-            request.update(status="blocked", blocked_reason="silence_retry_exhausted")
-            self.persist(request)
-            raise BrowserUnsupported("同会话重试仍无有效回复；保存进度并停止整批")
-        request.update(status="retry_ready", safe_to_retry=True)
+        return self.silence_retry(request)
+
+    def seal(self, request, reason, evidence):
+        batch = self.store.stage_get("chat_batches", request["batch_id"])
+        batch.update(
+            status="sealed", sealed_reason=reason, evidence=evidence, sealed_at=now()
+        )
+        self.store.stage_save("chat_batches", batch["batch_id"], batch)
+
+    def exhausted(self, request):
+        error = TaskError(
+            "manual_review_required",
+            f"当前视频 {request['stage']} 已尝试 {request['attempt']} 次；等待人工审核并继续下一条",
+            retryable=False,
+        )
+        request.update(
+            status="manual_review",
+            review_error=request.get("review_error") or request.get("error"),
+            error={"code": error.code, "message": str(error)}, review_requested_at=now(),
+        )
+        self.last_attempt = request["attempt"]
         self.persist(request)
+        raise error
+
+    def silence_retry(self, request):
+        request["review_error"] = {"code": "answer_timeout", "message": "等待及冷却后无有效回答"}
+        rotate = not self.driver().stop_generation()
+        if rotate:
+            # Recheck the unique submission before isolating it. Never claim it stopped.
+            evidence = self.reconcile(request)
+            request.update(recovery_evidence=evidence, retry_new_chat=True)
+            self.seal(request, "generation_not_confirmed_stopped", evidence)
+        else:
+            request["retry_new_chat"] = True
+            self.seal(request, "no_valid_answer", {"request_id": request["request_id"]})
+        if request["attempt"] >= self.max_attempts:
+            self.exhausted(request)
+        request.update(status="retry_ready", safe_to_retry=False)
+        self.persist(request)
+        if rotate:
+            print(
+                f"  旧生成状态不明，已封存会话；换新会话继续第 {request['attempt'] + 1}"
+                f"/{self.max_attempts} 次尝试。", flush=True
+            )
         return None
 
     def empty_retry(self, request):
         # Only explicit placeholder + matched round + finished/idle can bypass cooldown.
         if not request.get("empty_answer_evidence") or not self.driver().confirm_idle():
             raise BrowserUnsupported("空回答缺少结束证据；停止提交")
+        request["review_error"] = {"code": "empty_answer", "message": "页面已结束但回答为暂无内容"}
+        self.seal(request, "empty_answer", request["empty_answer_evidence"])
         if request["attempt"] >= self.max_attempts:
-            request.update(status="blocked", blocked_reason="empty_answer_retry_exhausted")
-            self.persist(request)
-            raise BrowserUnsupported("同会话重试仍为（暂无内容）；保存进度并停止整批")
-        request.update(status="retry_ready", safe_to_retry=True, retry_reason="empty_answer")
+            self.exhausted(request)
+        request.update(status="retry_ready", safe_to_retry=False,
+                       retry_new_chat=True, retry_reason="empty_answer")
         self.persist(request)
         print(
-            f"  当前轮已结束且持续为空，跳过冷却；原会话继续第 {request['attempt'] + 1}"
+            f"  当前轮已结束且持续为空，跳过冷却；换新会话继续第 {request['attempt'] + 1}"
             f"/{self.max_attempts} 次尝试。", flush=True
         )
         return None
 
     def process(self, source, stage, directory):
+        review = self.review_for(stage, source.note_id)
+        if review:
+            self.last_attempt = review["attempt"]
+            raise TaskError("manual_review_required", "当前视频等待人工审核，未重新提交",
+                            retryable=False)
         pending = self.pending()
         if pending and (pending["stage"] != stage or pending["note_id"] != source.note_id):
             raise BrowserUnsupported("必须先恢复原阶段及原视频的未决请求，不能发送另一视频")
+        if not pending:
+            previous = [
+                r for r in self.store.stage_rows("chat_requests")
+                if r["stage"] == stage and r["note_id"] == source.note_id
+            ]
+            latest = previous[-1] if previous else None
+            if (
+                latest and latest["status"] == "failed"
+                and latest.get("error", {}).get("code") == "attempts_exhausted"
+            ):
+                if latest["attempt"] >= self.max_attempts:
+                    self.exhausted(latest)
+                pending = latest
+                pending.update(status="blocked", blocked_reason="silence_retry_exhausted")
+                pending.pop("error", None)
+                self.persist(pending)
         attempt, repaired, silence_retry = 1, False, False
         self.last_attempt = 1
         batch = None
         predecessor = None
         if pending:
             if pending["status"] != "prepared":
-                self.reconcile(pending)
+                try:
+                    self.reconcile(pending)
+                except TaskError as exc:
+                    if exc.code != "history_unavailable" or not (
+                        pending.get("conversation_id") and pending.get("round_id")
+                        and pending.get("sent_at") and pending.get("prompt")
+                    ):
+                        raise
+                    pending.update(retry_new_chat=True, recovery_evidence=exc.evidence)
+                    self.seal(pending, "history_unavailable", exc.evidence)
+                    if pending["attempt"] >= self.max_attempts:
+                        self.exhausted(pending)
+                    pending.update(status="retry_ready", safe_to_retry=False)
+                    self.persist(pending)
+                    print(
+                        f"  旧会话历史确认不可用，封存后换新会话继续第 {pending['attempt'] + 1}"
+                        f"/{self.max_attempts} 次尝试。", flush=True
+                    )
             batch = self.store.stage_get("chat_batches", pending["batch_id"])
+            if (pending["status"] == "prepared"
+                    and pending["note_id"] not in batch["submitted_notes"]
+                    and len(batch["submitted_notes"]) >= self.capacity):
+                self.seal(pending, "capacity", {"capacity": self.capacity})
+                batch = self.batch(stage, source.note_id)
+                pending.update(batch_id=batch["batch_id"],
+                               conversation_id=self.driver().conversation_id)
+                self.persist(pending)
             attempt, repaired = pending["attempt"], pending.get("repair_used", False)
             silence_retry = pending.get("silence_retry", False)
             if pending["status"] == "retry_ready":
@@ -277,9 +413,12 @@ class ChatSession:
                 predecessor = pending
                 pending = None
         while attempt <= self.max_attempts:
+            self.last_attempt = attempt
             request = pending
             pending = None
             if not request:
+                if predecessor and predecessor.get("retry_new_chat"):
+                    batch = None
                 batch = batch or self.batch(stage, source.note_id)
                 self.load(batch)
                 request = {
@@ -301,8 +440,14 @@ class ChatSession:
                     "raw_directory": str(directory.relative_to(self.store.directory)),
                 }
                 if predecessor:
-                    predecessor.update(status="no_reply")
+                    request["previous_request_id"] = predecessor["request_id"]
+                    predecessor.update(
+                        status="abandoned" if predecessor.get("retry_new_chat") else "no_reply",
+                        superseded_by=request["request_id"],
+                    )
                     self.store.replace_chat_request(predecessor, request)
+                    self.persist(predecessor)
+                    self.persist(request)
                     predecessor = None
                 else:
                     self.persist(request)
@@ -332,14 +477,24 @@ class ChatSession:
                         answer, stage, source.note_id, request["request_id"]
                     )
                 except TaskError as invalid:
-                    if repaired or invalid.code != "json_invalid":
+                    if repaired or invalid.code not in JSON_ERROR_CODES:
                         raise
+                    if attempt >= self.max_attempts:
+                        raise
+                    attempt += 1
+                    self.last_attempt = attempt
                     repaired = True
-                    request.update(status="invalid", repair_used=True)
+                    request.update(status="invalid", repair_used=True,
+                                   error={"code": invalid.code, "message": str(invalid)})
+                    self.seal(request, "request_failed", request["error"])
+                    batch = self.batch(stage, source.note_id)
                     repair = {
                         **request,
                         "request_id": uuid4().hex,
+                        "batch_id": batch["batch_id"],
+                        "previous_request_id": request["request_id"],
                         "status": "prepared",
+                        "attempt": attempt,
                         "repair": True,
                         "repair_used": True,
                     }
@@ -352,16 +507,20 @@ class ChatSession:
                         "history_binding",
                         "original_round_id",
                         "empty_answer_evidence",
+                        "error",
                     ):
                         repair.pop(key, None)
                     repair["conversation_id"] = self.driver().conversation_id
                     repair["prompt"] = bound_prompt(
                         source, stage, repair["request_id"], str(invalid)
                     )
+                    request["superseded_by"] = repair["request_id"]
                     self.store.replace_chat_request(request, repair)
+                    self.persist(request)
+                    self.persist(repair)
+                    request = repair
                     self.throttle()
                     self.begin(repair["prompt"], source, repair)
-                    request = repair
                     answer = self.wait(request)
                     if answer is None:
                         predecessor = request
@@ -384,6 +543,8 @@ class ChatSession:
             except BrowserUnsupported:
                 raise
             except TaskError as exc:
+                if exc.code == "manual_review_required":
+                    raise
                 if request["status"] in {
                     "sending",
                     "submitted",
@@ -405,8 +566,15 @@ class ChatSession:
                     batch = None
                 self.last_attempt = attempt
                 if not exc.retryable or attempt >= self.max_attempts:
+                    if exc.code != "manual_review_required" and attempt >= self.max_attempts:
+                        if exc.code != "context_limit":
+                            self.seal(request, "request_failed", request["error"])
+                        self.exhausted(request)
                     exc.retryable = False
                     raise
+                if exc.code != "context_limit":
+                    self.seal(request, "request_failed", request["error"])
+                batch = None
                 attempt += 1
         raise BrowserUnsupported("无回复重试次数已耗尽")
 

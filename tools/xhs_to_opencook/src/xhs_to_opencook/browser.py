@@ -352,6 +352,7 @@ class SiteBrowser:
             self.chat_page.close()
         self.chat_page = self.context.new_page()
         self.history_messages = {}
+        empty_history = []
 
         def observe_history(response):
             if urlsplit(response.url).path != "/api/sns/web/v1/dqa/history/detail":
@@ -359,7 +360,18 @@ class SiteBrowser:
             try:
                 if not response.ok:
                     return
-                for item in response.json().get("data", {}).get("items", []):
+                payload = response.json()
+                items = payload.get("data", {}).get("items")
+                requested = parse_qs(urlsplit(response.url).query).get("conversation_id")
+                if (
+                    requested == [conversation_id] and payload.get("success") is True
+                    and payload.get("code") == 0 and items == []
+                ):
+                    empty_history.append({
+                        "conversation_id": conversation_id, "items": [],
+                        "observed_url": response.url, "observed_at": time.time(),
+                    })
+                for item in items or []:
                     message = item.get("message", {})
                     question = message.get("question", "")
                     if message.get("id") and question:
@@ -379,6 +391,10 @@ class SiteBrowser:
         )
         self.ensure_access(self.chat_page)
         self.wait_editor_ready()
+        if empty_history and self.chat_page.locator("[data-round-id]").count() == 0:
+            error = TaskError("history_unavailable", "旧会话历史接口确认无消息", retryable=False)
+            error.evidence = empty_history[-1]
+            raise error
         self.chat_page.wait_for_selector("[data-round-id]", timeout=20000)
         current = parse_qs(urlsplit(self.chat_page.url).query).get("conversationId", [None])[0]
         if current != conversation_id:

@@ -96,6 +96,24 @@ def test_stable_partial_without_signal_times_out(driver, source):
     assert (driver.raw_directory / "answer-partial.txt").is_file()
 
 
+def test_restore_confirmed_empty_history_reports_unavailable(driver):
+    driver.chat_page.close()
+    driver.context.route(
+        "**/api/sns/web/v1/dqa/history/detail?*",
+        lambda route: route.fulfill(json={"success": True, "code": 0, "data": {"items": []}}),
+    )
+    body = HTML.replace(
+        "window.mode='finish';",
+        "fetch('/api/sns/web/v1/dqa/history/detail?conversation_id=missing-chat');"
+        "window.mode='finish';",
+    )
+    driver.context.route(CHAT + "*", lambda route: route.fulfill(body=body))
+    with pytest.raises(TaskError) as error:
+        driver.restore_chat("missing-chat")
+    assert error.value.code == "history_unavailable"
+    assert error.value.evidence["conversation_id"] == "missing-chat"
+
+
 def test_finish_marker_after_text_stops_changing(driver, source, answer):
     driver.chat_page.evaluate("window.mode='delay'")
     assert driver.ask("test", source) == answer

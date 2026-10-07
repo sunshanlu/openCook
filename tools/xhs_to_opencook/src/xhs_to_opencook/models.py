@@ -7,6 +7,8 @@ from pydantic import BaseModel, ConfigDict, Field, StrictBool, StringConstraints
 
 from .errors import TaskError
 
+JSON_ERROR_CODES = frozenset({"json_syntax_invalid", "json_schema_invalid"})
+
 Text = Annotated[str, StringConstraints(strict=True, strip_whitespace=True, min_length=1)]
 DURATION = re.compile(
     r"^PT(?:\d+H(?:\d+M)?(?:\d+(?:\.\d+)?S)?|\d+M(?:\d+(?:\.\d+)?S)?|\d+(?:\.\d+)?S)$",
@@ -90,7 +92,7 @@ def parse_json_model(text: str, model):
     if payload.startswith("```"):
         lines = payload.splitlines()
         if lines[0].strip().lower() not in {"```", "```json"} or lines[-1].strip() != "```":
-            raise TaskError("json_invalid", "JSON 代码围栏不完整或语言不支持")
+            raise TaskError("json_syntax_invalid", "JSON 代码围栏不完整或语言不支持")
         payload = "\n".join(lines[1:-1])
 
     def reject_constant(value):
@@ -106,9 +108,12 @@ def parse_json_model(text: str, model):
 
     try:
         obj = json.loads(payload, parse_constant=reject_constant, object_pairs_hook=unique_keys)
+    except (ValueError, TypeError) as exc:
+        raise TaskError("json_syntax_invalid", f"JSON 格式或语法错误：{exc}") from exc
+    try:
         return model.model_validate(obj)
     except (ValueError, TypeError) as exc:
-        raise TaskError("json_invalid", f"JSON 校验失败：{exc}") from exc
+        raise TaskError("json_schema_invalid", f"JSON 数据结构校验失败：{exc}") from exc
 
 
 class BoundClassification(Classification):

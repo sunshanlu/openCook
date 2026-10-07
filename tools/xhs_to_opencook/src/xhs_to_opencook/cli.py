@@ -47,10 +47,12 @@ def main() -> int:
             if name in {"pipeline", "classify"}:
                 command.add_argument("--reclassify", action="store_true")
             if name in {"run", "pipeline", "classify", "extract"}:
-                command.add_argument("--chat-batch-size", type=positive_integer, default=50)
-                command.add_argument("--max-attempts", type=positive_integer, default=30)
+                command.add_argument("--chat-batch-size", type=positive_integer, default=5)
+                command.add_argument("--max-attempts", type=positive_integer, default=2)
+                command.add_argument("--retry-review", action="store_true",
+                                     help="人工审核后，重新尝试输入范围内的待审核任务")
             command.add_argument("--timeout", type=positive, default=180)
-            command.add_argument("--interval", type=positive, default=10)
+            command.add_argument("--interval", type=positive, default=2)
             command.add_argument("--non-interactive", action="store_true")
     args = parser.parse_args()
     try:

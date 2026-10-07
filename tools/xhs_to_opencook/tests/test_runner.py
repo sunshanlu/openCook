@@ -1,3 +1,4 @@
+import csv
 import json
 from types import SimpleNamespace
 
@@ -101,11 +102,22 @@ def test_one_repair_two_attempts_and_retry_next_run(setup):
     driver.answer = "{}"
     code, report = execute(args, driver)
     assert code == 2
-    assert driver.asks == 3 and driver.repairs == 1
+    assert driver.asks == 2 and driver.repairs == 1
     assert report["tasks"][0]["attempts"] == 2
-    assert report["tasks"][0]["error"]["code"] == "json_invalid"
+    assert report["tasks"][0]["error"]["code"] == "manual_review_required"
+    assert report["manual_review_count"] == 1
+    path = args.output / "manual_review.csv"
+    with path.open(encoding="utf-8-sig", newline="") as file:
+        rows = list(csv.DictReader(file))
+    assert rows[0]["URL"] == driver.source.url and rows[0]["失败阶段"] == "提取"
     driver.answer = good
+    assert execute(args, driver)[0] == 2
+    assert driver.asks == 2
+    args.retry_review = True
     assert execute(args, driver)[0] == 0
+    assert driver.asks == 3
+    with path.open(encoding="utf-8-sig", newline="") as file:
+        assert list(csv.DictReader(file))[0]["状态"] == "已解除待审核"
 
 
 def test_image_failure_is_text_success(setup):

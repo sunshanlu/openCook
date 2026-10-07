@@ -23,10 +23,11 @@ def install(driver):
                 driver._request_prompt, driver._request_source, repair=request.get("repair", False)
             )
         except TaskError as exc:
-            if exc.code == "json_invalid":
-                request.update(status="answered", answer="{}")
+            if exc.code in {"json_syntax_invalid", "json_schema_invalid"}:
+                answer = "{" if exc.code == "json_syntax_invalid" else "{}"
+                request.update(status="answered", answer=answer)
                 persist(request)
-                return "{}"
+                return answer
             raise
         try:
             data = json.loads(text)

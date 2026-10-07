@@ -49,12 +49,14 @@ def run(args, *, browser_factory=SiteBrowser, sleeper=time.sleep) -> int:
         chats = ChatSession(
             store,
             get_browser,
-            capacity=getattr(args, "chat_batch_size", 50),
-            max_attempts=getattr(args, "max_attempts", 30),
+            capacity=getattr(args, "chat_batch_size", 5),
+            max_attempts=getattr(args, "max_attempts", 2),
             interval=args.interval,
             timeout=args.timeout,
             sleeper=sleeper,
         )
+        review_scope = {identity for url in links
+                        if (identity := note_id(url) or store.resolve(url))}
         pending = chats.pending()
         if pending:
             if pending["stage"] != "extract":
@@ -104,6 +106,15 @@ def run(args, *, browser_factory=SiteBrowser, sleeper=time.sleep) -> int:
                         continue
                     seen_urls.add(url)
                     identity = note_id(url) or store.resolve(url)
+                    if identity and chats.review_for("extract", identity):
+                        if getattr(args, "retry_review", False):
+                            chats.release_review("extract", identity)
+                        else:
+                            task.update(status="awaiting_review", note_id=identity,
+                                        reason="manual_review_required")
+                            seen.add(identity)
+                            exit_code = 2
+                            continue
                     if identity in seen:
                         task.update(status="skipped", reason="duplicate_note", note_id=identity)
                         continue
@@ -151,9 +162,18 @@ def run(args, *, browser_factory=SiteBrowser, sleeper=time.sleep) -> int:
                                 else driver.open_source(url)
                             )
                             identity = source.note_id
+                            review_scope.add(identity)
                             task["note_id"] = identity
                             task["source"] = source.model_dump()
                             store.alias(url, identity)
+                            if chats.review_for("extract", identity):
+                                if getattr(args, "retry_review", False):
+                                    chats.release_review("extract", identity)
+                                else:
+                                    raise TaskError(
+                                        "manual_review_required", "当前视频等待人工审核",
+                                        retryable=False,
+                                    )
                             if identity in seen:
                                 task.update(status="skipped", reason="duplicate_note")
                                 break
@@ -255,7 +275,10 @@ def run(args, *, browser_factory=SiteBrowser, sleeper=time.sleep) -> int:
                     )
                     print(f"  {len(record['export_names'])} 道菜谱已保存", flush=True)
                 except TaskError as exc:
+                    pending = chats.pending()
                     task.update(status="failed", error={"code": exc.code, "message": str(exc)})
+                    if exc.code == "manual_review_required":
+                        task["status"] = "awaiting_review"
                     exit_code = 2
                     if identity:
                         seen.add(identity)
@@ -276,6 +299,8 @@ def run(args, *, browser_factory=SiteBrowser, sleeper=time.sleep) -> int:
                     report.update(
                         chat_batches=chats.batches(), pending_requests=chats.pending_rows()
                     )
+                    reviews = chats.write_reviews(output, review_scope)
+                    report.update(manual_review=reviews, manual_review_count=len(reviews))
                     write_outputs(output, results, report)
             if report["status"] == "running":
                 report["status"] = "partial" if exit_code else "complete"
