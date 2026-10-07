@@ -185,6 +185,16 @@ class Supervisor:
         self.last_loop = now
         control = read_json(self.directory / "control.json")
         action = control.get("action") if control.get("job_id") == self.job["job_id"] else None
+        if action == "resume":
+            if self.job["status"] in {"paused", "waiting", "stopped"}:
+                self.job.update(status="ready", probe_failures=0, wait_attempt=0, restarts=[],
+                                wait_episode=self.job.get("wait_episode", 0) + 1)
+            write_json(self.directory / "control.json", {"job_id": self.job["job_id"],
+                                                         "action": "running"})
+        if now - self.job.get("last_progress_notice", 0) >= 1800 \
+                and self.job["status"] in {"waiting", "waiting_access", "paused"}:
+            self.notify("progress", progress=True)
+            self.job["last_progress_notice"] = now
         if action in {"pause", "stop"}:
             if self.job.get("worker"):
                 terminate_owned(self.job["worker"])
@@ -203,11 +213,9 @@ class Supervisor:
                 return True
             return False
         if self.job["status"] == "paused":
-            if action == "resume":
-                self.job.update(status="ready", probe_failures=0, wait_attempt=0, restarts=[])
-            else:
-                self.save()
-                return True
+            self.outbox.flush(still_actionable=False)
+            self.save()
+            return True
         if self.job["status"] == "waiting":
             self.outbox.flush()
             if self.job.get("next_check") and now >= self.job["next_check"]:
@@ -230,11 +238,13 @@ class Supervisor:
             if resumed:
                 self.job["resume_grace_until"] = now + 60
             if worker.get("status") == "waiting" and worker.get("wait_kind") == "access":
-                self.job.update(message=worker["message"], reason="login_required",
+                self.job.update(status="waiting_access", message=worker["message"],
+                                reason="login_required",
                                 action_hint="请在专用Chrome完成登录或验证码，随后自动续跑")
                 self.notify(f"waiting:login:{self.job.get('wait_episode', 0)}")
             elif worker.get("status") == "running" and self.job.get("reason") == "login_required":
-                self.job.update(message="登录恢复，继续处理", reason=None, action_hint="无需操作")
+                self.job.update(status="running", message="登录恢复，继续处理", reason=None,
+                                action_hint="无需操作")
                 self.job["wait_episode"] = self.job.get("wait_episode", 0) + 1
             if worker.get("stage") and worker["stage"] != self.job.get("stage"):
                 previous = self.job.get("stage")
@@ -263,7 +273,7 @@ class Supervisor:
         if now - self.job.get("last_progress_notice", 0) >= 1800:
             self.notify("progress", progress=True)
             self.job["last_progress_notice"] = now
-        self.outbox.flush(still_actionable=self.job["status"] == "waiting")
+        self.outbox.flush(still_actionable=self.job["status"] in {"waiting", "waiting_access"})
         self.save()
         return True
 
@@ -273,9 +283,9 @@ class Supervisor:
                 # Recover supervisor crash: retire the owned orphan before replacement.
                 terminate_owned(self.job["worker"])
                 self.job.pop("worker", None)
-                if self.job["status"] == "running":
+                if self.job["status"] in {"running", "waiting_access"}:
                     self.job["status"] = "ready"
-            elif self.job["status"] == "running":
+            elif self.job["status"] in {"running", "waiting_access"}:
                 self.job["status"] = "ready"
             while self.step():
                 time.sleep(1)
@@ -334,15 +344,17 @@ def command(argv, state_default, *, parser):
             return 0
         if action == "resume":
             old_control = read_json(directory / "control.json")
-            if job["status"] == "running" and old_control.get("action") not in {"pause", "stop"}:
+            if job["status"] in {"running", "waiting_access"} \
+                    and old_control.get("action") not in {"pause", "stop"}:
                 print("任务正在运行，无需恢复。")
                 return 0
         write_json(directory / "control.json", {"job_id": job["job_id"], "action": action})
         if action == "resume":
-            job.update(status="ready", probe_failures=0, wait_attempt=0, restarts=[],
-                       wait_episode=job.get("wait_episode", 0) + 1)
-            write_json(path, job)
-            # Ask launchd to reload the persisted state in a fresh supervisor instance.
+            supervisor_identity = process_identity(job.get("supervisor_pid", 0))
+            if supervisor_identity and str(directory) in supervisor_identity:
+                print("已请求 resume，监督器将从原断点继续。")
+                return 0
+            # A stopped GUI job needs an explicit restart, never an automatic one.
             domain = f"gui/{os.getuid()}/{job['label']}"
             result = subprocess.run(["launchctl", "kickstart", "-k", domain],
                                     capture_output=True, text=True)

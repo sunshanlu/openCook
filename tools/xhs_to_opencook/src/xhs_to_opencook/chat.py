@@ -542,6 +542,7 @@ class ChatSession:
         }
         while True:
             try:
+                runtime.check()
                 deadline = recovery.get("wait_until")
                 if deadline:
                     while self.clock() < deadline:

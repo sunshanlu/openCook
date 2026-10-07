@@ -38,6 +38,7 @@ class WorkerRuntime:
         self.lock = threading.RLock()
         self.closed = threading.Event()
         self.last_tick = monotonic()
+        self.last_wall = clock()
         self.thread = None
         self.probing = os.environ.get("XHS_RECOVERY_PROBE") == "1"
 
@@ -60,6 +61,11 @@ class WorkerRuntime:
             current = self.monotonic()
             elapsed = current - self.last_tick
             self.last_tick = current
+            wall_elapsed = self.clock() - self.last_wall
+            self.last_wall = self.clock()
+            suspension = wall_elapsed - elapsed
+            if suspension > 30 and self.data.get("deadline"):
+                self.data["deadline"] += suspension
             key = self.data.get("item")
             # Long monotonic gaps are machine suspension, not active processing time.
             if key and 0 <= elapsed <= 30:
@@ -82,7 +88,9 @@ class WorkerRuntime:
         self.check()
         self.tick()
         self.data.update(item=f"{stage}:{identity}", stage=stage)
-        self.operation("prepare", 120)
+        # The chat recovery owner must receive budget exhaustion, not its caller.
+        self.data.update(operation="prepare", deadline=self.clock() + 120)
+        self.tick()
 
     def operation(self, name, seconds):
         with self.lock:
