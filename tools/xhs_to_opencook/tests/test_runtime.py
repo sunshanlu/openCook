@@ -246,3 +246,31 @@ def test_self_recipient_resolution_uses_identity_not_auth_availability(tmp_path)
     ))
     box.resolve_self()
     assert box.data["recipient"] == "self"
+
+
+def test_resume_intent_is_consumed_and_does_not_unlock_later_failure(tmp_path, monkeypatch):
+    write_json(tmp_path / "job.json", {
+        "job_id": "job", "status": "paused", "output": str(tmp_path),
+        "last_progress_notice": 1000,
+    })
+    write_json(tmp_path / "control.json", {"job_id": "job", "action": "resume"})
+    active = Supervisor(tmp_path, clock=lambda: 1000)
+    monkeypatch.setattr(active, "launch", lambda **kw: active.job.update(status="waiting"))
+    active.outbox.flush = lambda **kw: None
+    assert active.step()
+    assert read_json(tmp_path / "control.json")["action"] == "running"
+    active.job.update(status="waiting", next_check=None)
+    assert active.step() and active.job["status"] == "waiting"
+
+
+def test_suspension_extends_operation_deadline_without_spending_budget(tmp_path):
+    mono, wall = [1000], [1000]
+    active = WorkerRuntime(tmp_path, "job", clock=lambda: wall[0],
+                           monotonic=lambda: mono[0])
+    active.begin_item("classify", "note")
+    deadline = active.data["deadline"]
+    mono[0] += 1
+    wall[0] += 3601
+    active.tick()
+    assert active.data["deadline"] == deadline + 3600
+    assert active.items["budgets"]["classify:note"] == 1
