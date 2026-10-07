@@ -279,3 +279,22 @@ def test_launch_records_identity_after_exec(coordinator):
         assert owned_process(c.job["workers"]["classify"])
     finally:
         c.retire("classify")
+
+
+def test_empty_old_batch_without_pending_rotates_safely(tmp_path):
+    from xhs_to_opencook.errors import TaskError
+    store = Store(tmp_path)
+    store.stage_save('chat_batches', 'old', {'batch_id': 'old', 'stage': 'extract',
+                     'status': 'open', 'capacity': 5, 'submitted_notes': [],
+                     'conversation_id': 'empty-history'})
+    class Driver:
+        conversation_id = None
+        def restore_chat(self, cid):
+            raise TaskError('history_unavailable', 'empty history')
+        def new_chat(self):
+            pass
+    chat = ChatSession(store, lambda: Driver(), stage_scope='extract')
+    batch = chat.batch('extract', 'note')
+    assert batch['batch_id'] != 'old'
+    assert store.stage_get('chat_batches', 'old')['status'] == 'sealed'
+    store.close()

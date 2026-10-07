@@ -180,7 +180,16 @@ class ChatSession:
                 "created_at": now(),
             }
             self.store.stage_save("chat_batches", batch["batch_id"], batch)
-        self.load(batch)
+        try:
+            self.load(batch)
+        except TaskError as error:
+            if error.code != "history_unavailable" or self.pending(stage):
+                raise
+            # No unacknowledged submission exists: an empty old batch can be retired.
+            batch.update(status="sealed", sealed_reason="history_unavailable", sealed_at=now())
+            self.store.stage_save("chat_batches", batch["batch_id"], batch)
+            self.loaded_batch = None
+            return self.batch(stage, note)
         return batch
 
     def begin(self, prompt, source, request):
