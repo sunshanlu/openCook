@@ -281,6 +281,7 @@ def test_recovery_failures_review_and_continue_full_stage(setup, monkeypatch, sc
     from xhs_to_opencook.workflow import Workflow
 
     args, browser = setup
+    browser.verdicts[N3] = "non_tutorial"
     args.command = "collect"
     assert execute(args, browser)[0] == 0
     args.command = "classify"
@@ -346,8 +347,9 @@ def test_phase_order_scope_and_offline_export(setup):
     assert browser.events.index("extract") > max(
         i for i, x in enumerate(browser.events) if x == "classify"
     )
-    assert browser.events.count("new_chat") == 2
-    assert report["classification_counts"] == {"tutorial": 1, "non_tutorial": 1, "unknown": 1}
+    assert browser.events.count("new_chat") == 3
+    assert report["classification_counts"] == {"tutorial": 1, "non_tutorial": 1, "unknown": 0}
+    assert report["manual_review_count"] == 1
     collection = json.loads((args.output / "collection.json").read_text())
     assert collection["notes"][0]["profile_ids"] == [P1, P2]
     assert len((args.output / "tutorial_links.txt").read_text().splitlines()) == 1
@@ -356,7 +358,7 @@ def test_phase_order_scope_and_offline_export(setup):
     def unexpected(*a, **kw):
         pytest.fail("export must work offline")
 
-    assert run_workflow(args, browser_factory=unexpected) == 0
+    assert run_workflow(args, browser_factory=unexpected) == 2
     assert (args.output / "recipes.zip").is_file()
     browser.notes[P2] = [N2]
     args.command = "collect"
@@ -368,13 +370,13 @@ def test_phase_order_scope_and_offline_export(setup):
     assert len(json.loads((args.output / "recipes.json").read_text())) == 1
 
 
-def test_cache_unknown_retry_refresh_and_reclassification_excludes(setup):
+def test_cache_unknown_frozen_refresh_and_reclassification_excludes(setup):
     args, browser = setup
     execute(args, browser)
     browser.events.clear()
     args.command = "classify"
     execute(args, browser)
-    assert browser.events.count("classify") == 1
+    assert browser.events.count("classify") == 0
     args.command = "extract"
     execute(args, browser)
     assert browser.events.count("extract") == 0
@@ -419,7 +421,7 @@ def test_legacy_cache_classified_then_reused_and_failure_preserves_it(setup):
     store.close()
     browser.events.clear()
     execute(args, browser)
-    assert browser.events.count("classify") == 3
+    assert browser.events.count("classify") == 2
     assert browser.events.count("extract") == 0
     args.command, args.refresh = "extract", True
     browser.failure = TaskError("json_schema_invalid", "invalid")
@@ -554,6 +556,7 @@ def test_full_workflow_handles_empty_reply_then_navigation_failure(setup, monkey
     from xhs_to_opencook.workflow import Workflow
 
     args, browser = setup
+    browser.verdicts[N3] = "non_tutorial"
     args.command = "collect"
     execute(args, browser)
     args.command = "classify"
@@ -590,8 +593,9 @@ def test_full_workflow_handles_empty_reply_then_navigation_failure(setup, monkey
 
     monkeypatch.setattr(Workflow, 'driver', driver)
     code, report = execute(args, browser)
-    assert code == 2  # The fixture includes unknown classification.
-    assert report['status'] == 'partial' and report['pending_requests'] == []
+    assert code == (2 if exhausts else 0)
+    assert report['status'] == ('partial' if exhausts else 'complete')
+    assert report['pending_requests'] == []
     assert sends[0] == (N1, 1)
     if exhausts:
         assert sends[1][0] == N2

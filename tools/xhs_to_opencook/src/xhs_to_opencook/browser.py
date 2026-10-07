@@ -8,6 +8,7 @@ from urllib.parse import parse_qs, urlsplit
 from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import Page, expect, sync_playwright
 
+from . import runtime
 from .errors import BrowserUnsupported, TaskError
 from .links import note_id, profile_id, validate_url
 from .models import Source
@@ -91,6 +92,7 @@ class SiteBrowser:
 
     def ensure_access(self, page: Page, *, require_account: bool = False) -> bool:
         """Never solve challenges or dismiss login by pretending a page is accessible."""
+        runtime.check()
         paused = False
         while True:
             state = page.evaluate("""() => {
@@ -400,7 +402,9 @@ class SiteBrowser:
                     page.screenshot(
                         path=str(directory / f"{name}.png"), full_page=False, timeout=5000
                     )
-                    (directory / f"{name}.html").write_text(page.content(), encoding="utf-8")
+                    (directory / f"{name}.html").write_text(
+                        runtime.redact(page.content()), encoding="utf-8"
+                    )
 
     def restore_chat(self, conversation_id: str):
         self.prepare_chat_page()
@@ -545,15 +549,8 @@ class SiteBrowser:
         # Fail closed until the stop control has been verified for this page version.
         return self.confirm_idle()
 
-    def begin_request(self, prompt: str, source: Source, request: dict, persist):
+    def verify_reference(self, source, editor):
         page = self.chat_page
-        self.ensure_access(page)
-        editor = self.wait_editor_ready()
-        current = parse_qs(urlsplit(page.url).query).get("conversationId", [None])[0]
-        if request.get("conversation_id") and current != request["conversation_id"]:
-            raise BrowserUnsupported("发送前会话 ID 与批次不同")
-        if not self.confirm_idle():
-            raise TaskError("generation_busy", "上一轮生成未确认结束；当前请求尚未发送")
         # Only removable cards in the composer are current input references.
         composer = editor.locator('xpath=ancestor::*[contains(@class,"wendian-wrapper")][1]')
         if composer.count() != 1:
@@ -611,6 +608,26 @@ class SiteBrowser:
         except (PlaywrightError, ValueError, TypeError, AttributeError) as exc:
             self.ensure_access(page)
             raise TaskError("reference_mismatch", "链接未形成可确认的视频引用") from exc
+        return composer, evidence
+
+    def probe(self, source=None):
+        runtime.operation("recovery_probe", 120)
+        self.new_chat()
+        self.ensure_access(self.chat_page, require_account=True)
+        if source:
+            self.verify_reference(source, self.wait_editor_ready())
+
+    def begin_request(self, prompt: str, source: Source, request: dict, persist):
+        runtime.operation("prepare_submission", 120)
+        page = self.chat_page
+        self.ensure_access(page)
+        editor = self.wait_editor_ready()
+        current = parse_qs(urlsplit(page.url).query).get("conversationId", [None])[0]
+        if request.get("conversation_id") and current != request["conversation_id"]:
+            raise BrowserUnsupported("发送前会话 ID 与批次不同")
+        if not self.confirm_idle():
+            raise TaskError("generation_busy", "上一轮生成未确认结束；当前请求尚未发送")
+        composer, evidence = self.verify_reference(source, editor)
         print("  已确认视频引用，填写请求…", flush=True)
         editor.fill(prompt)
         page.wait_for_timeout(500)
@@ -633,6 +650,8 @@ class SiteBrowser:
         # Durable intent BEFORE Enter. A crash here requires history reconciliation.
         request.update(status="sending", prompt=prompt, reference=evidence, sent_at=time.time())
         persist(request)
+        runtime.check()
+        runtime.operation("confirm_submission", 30)
         editor.press("Enter")
         deadline = time.monotonic() + 15
         while time.monotonic() < deadline:
@@ -648,11 +667,13 @@ class SiteBrowser:
                 print("  已确认请求发送，等待点点回答…", flush=True)
                 return
             page.wait_for_timeout(250)
-        raise BrowserUnsupported("提交状态无法关联到唯一用户消息；保存请求并停止，禁止直接重发")
+        raise TaskError("submission_unknown", "提交状态无法关联到唯一用户消息；先核对再隔离",
+                        retryable=False)
 
     def wait_request(
         self, request: dict, timeout: float, persist, *, empty_grace: float | None = 5
     ) -> str:
+        runtime.operation("wait_answer", timeout + 30)
         started = time.monotonic()
         previous, finished_since = None, None
         empty_since = None

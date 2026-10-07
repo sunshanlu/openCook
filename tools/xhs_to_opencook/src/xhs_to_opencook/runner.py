@@ -1,3 +1,4 @@
+import os
 import shutil
 import sys
 import time
@@ -6,6 +7,7 @@ from pathlib import Path
 
 from playwright.sync_api import Error as PlaywrightError
 
+from . import runtime
 from .browser import SiteBrowser
 from .chat import ChatSession
 from .errors import SESSION_BLOCK_CODES, BrowserUnsupported, TaskError
@@ -108,6 +110,7 @@ def run(args, *, browser_factory=SiteBrowser, sleeper=time.sleep, clock=time.tim
                 identity = None
                 print(f"[{index}/{len(links)}] 处理视频", flush=True)
                 try:
+                    runtime.operation("open_source", 120)
                     validate_url(url)
                     if url in seen_urls:
                         task.update(status="skipped", reason="duplicate_link")
@@ -129,6 +132,12 @@ def run(args, *, browser_factory=SiteBrowser, sleeper=time.sleep, clock=time.tim
                     if identity:
                         try:
                             record = store.get(identity)
+                            if record and record.get("status") == "success" and pending \
+                                    and pending["note_id"] == identity \
+                                    and pending["status"] == "validated":
+                                chats.current = pending
+                                chats.accept()
+                                pending = None
                             if record and record.get("status") == "success":
                                 Source.model_validate(record["source"])
                                 Extraction.model_validate(record["extraction"])
@@ -166,6 +175,16 @@ def run(args, *, browser_factory=SiteBrowser, sleeper=time.sleep, clock=time.tim
                         else driver.open_source(url)
                     )
                     identity = source.note_id
+                    active = runtime.current()
+                    if active:
+                        active.begin_item("extract", identity)
+                        if os.environ.get("XHS_RECOVERY_PROBE"):
+                            try:
+                                driver.probe(source)
+                            except (TaskError, PlaywrightError) as error:
+                                runtime.block(getattr(error, "code", "probe_failed"), str(error),
+                                              kind="circuit")
+                            os.environ.pop("XHS_RECOVERY_PROBE", None)
                     review_scope.add(identity)
                     task["note_id"] = identity
                     task["source"] = source.model_dump()
@@ -244,7 +263,11 @@ def run(args, *, browser_factory=SiteBrowser, sleeper=time.sleep, clock=time.tim
                         raw_directory=f"raw/{identity}",
                     )
                     print(f"  {len(record['export_names'])} 道菜谱已保存", flush=True)
+                    if active:
+                        active.outcome("extract", identity)
                 except TaskError as exc:
+                    if exc.code == "runtime_wait":
+                        raise
                     pending = chats.pending()
                     task["attempts"] = getattr(chats, "last_attempt", 0)
                     task.update(status="failed", error={"code": exc.code, "message": str(exc)})
@@ -261,6 +284,13 @@ def run(args, *, browser_factory=SiteBrowser, sleeper=time.sleep, clock=time.tim
                         if not (store.get(identity) or {}).get("status") == "success":
                             store.save(identity, failed)
                     print(f"  {exc.code}: {exc}", file=sys.stderr, flush=True)
+                    if runtime.current() and exc.code in SESSION_BLOCK_CODES:
+                        runtime.block(exc.code, str(exc))
+                    if runtime.current() and exc.code == "manual_review_required":
+                        review = chats.review_for("extract", identity)
+                        runtime.current().outcome("extract", identity,
+                                                  (review.get("review_error") or {}).get("code")
+                                                  or "manual_review_required")
                     if (isinstance(exc, BrowserUnsupported) or exc.code in SESSION_BLOCK_CODES
                             or pending):
                         report["status"] = "blocked"
@@ -292,13 +322,19 @@ def run(args, *, browser_factory=SiteBrowser, sleeper=time.sleep, clock=time.tim
                 if identity and (store.get(identity) or {}).get("status") != "success":
                     store.save(identity, interrupted)
             exit_code = 130
-        except (PlaywrightError, OSError) as exc:
+        except (PlaywrightError, OSError, TaskError) as exc:
             report["status"] = "blocked"
             report["error"] = {"code": "runtime_error", "message": str(exc)}
             for task in report["tasks"]:
                 if task["status"] == "running":
                     task.update(status="failed", error=report["error"])
             exit_code = 1
+            if runtime.current() and runtime.current().data["status"] != "waiting":
+                runtime.current().data["error"] = f"{type(exc).__name__}: {exc}"
+        except Exception as exc:
+            if runtime.current():
+                runtime.current().data["error"] = f"{type(exc).__name__}: {exc}"
+            raise
         finally:
             report["finished_at"] = now()
             report["unprocessed_count"] = len(links) - len(report["tasks"])

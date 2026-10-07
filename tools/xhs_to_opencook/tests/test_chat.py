@@ -667,15 +667,16 @@ def test_exhausted_stuck_chat_is_sealed_before_next_video(tmp_path):
     store.close()
 
 
-def test_unknown_history_during_recovery_still_blocks(tmp_path):
+def test_unknown_history_is_isolated_and_reviewed(tmp_path):
     store, driver, manager = setup(tmp_path, timeout=1, cooldown=2)
     driver.idle = False
     driver.replies = [TaskError("answer_timeout", "no answer")] * 2
     driver.request_snapshot = lambda request: {"matches": 0}
-    with pytest.raises(BrowserUnsupported, match="历史中无法确认"):
+    with pytest.raises(TaskError, match="等待人工审核"):
         process(store, manager, 1)
-    assert len(driver.sent) == 1 and driver.new == 1
-    assert manager.pending()["status"] == "cooling"
+    assert len(driver.sent) == 1 and driver.new == 2
+    assert manager.pending() is None
+    assert manager.review_rows()[0]["review_error"]["code"] == "submission_unknown"
     store.close()
 
 
@@ -728,9 +729,10 @@ def test_unknown_submission_never_resent(tmp_path):
     manager.loaded_batch = None
     driver.failure = None
     driver.request_snapshot = lambda request: {"matches": 0}
-    with pytest.raises(BrowserUnsupported):
+    with pytest.raises(TaskError, match="等待人工审核"):
         process(store, manager, 1)
-    assert driver.new == 1 and not driver.sent
+    assert driver.new == 2 and not driver.sent
+    assert manager.pending() is None
     assert not manager.batches()[0]["submitted_notes"]
     store.close()
 

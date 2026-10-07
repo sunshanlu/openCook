@@ -31,7 +31,7 @@ def positive_integer(value: str) -> int:
     return number
 
 
-def main() -> int:
+def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="小红书点点视频菜谱 → openCook")
     commands = parser.add_subparsers(dest="command", required=True)
     for name in ("login", "run", "pipeline", "collect", "classify", "extract", "export"):
@@ -46,6 +46,9 @@ def main() -> int:
                 command.add_argument("--refresh", action="store_true")
             if name in {"pipeline", "classify"}:
                 command.add_argument("--reclassify", action="store_true")
+            if name == "pipeline":
+                command.add_argument("--skip-collect", action="store_true",
+                                     help="从已采集清单继续分类、提取和导出")
             if name in {"run", "pipeline", "classify", "extract"}:
                 command.add_argument("--chat-batch-size", type=positive_integer, default=5)
                 command.add_argument("--max-attempts", type=positive_integer, default=2)
@@ -54,26 +57,44 @@ def main() -> int:
             command.add_argument("--timeout", type=positive, default=180)
             command.add_argument("--interval", type=positive, default=2)
             command.add_argument("--non-interactive", action="store_true")
-    args = parser.parse_args()
+    argv = sys.argv[1:] if argv is None else argv
+    if argv and argv[0] in {"supervise", "status", "pause", "resume", "stop"}:
+        from .supervisor import command
+        return command(argv, state_directory(), parser=parser)
+    args = parser.parse_args(argv)
+    from .runtime import start_worker
+    runtime = start_worker()
+    code, error = 1, None
     try:
         if args.command == "login":
             with state_lock(args.state_dir), SiteBrowser(args.state_dir / "chrome") as browser:
                 browser.login()
             print("登录状态已保存。")
-            return 0
+            code = 0
+            return code
         if args.command == "run":
             from .runner import run
 
-            return run(args)
+            code = run(args)
+            return code
         from .workflow import run_workflow
 
-        return run_workflow(args)
+        code = run_workflow(args)
+        return code
     except (KeyboardInterrupt, EOFError):
         print("\n已停止；已完成记录可在下次运行时复用。", file=sys.stderr)
-        return 130
+        code = 130
+        return code
     except (TaskError, PlaywrightError, OSError, ValueError) as exc:
         print(f"错误：{exc}", file=sys.stderr)
-        return 1
+        error = str(exc)
+        return code
+    except Exception as exc:
+        error = f"{type(exc).__name__}: {exc}"
+        raise
+    finally:
+        if runtime:
+            runtime.finish(code, error)
 
 
 if __name__ == "__main__":

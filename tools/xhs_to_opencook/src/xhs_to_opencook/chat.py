@@ -13,6 +13,7 @@ from uuid import uuid4
 from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
+from . import runtime
 from .errors import SESSION_BLOCK_CODES, BrowserUnsupported, TaskError
 from .models import JSON_ERROR_CODES, parse_bound_answer
 from .prompts import CLASSIFICATION_VERSION, EXTRACTION_VERSION, bound_prompt
@@ -55,6 +56,9 @@ class ChatSession:
         self.sleeper, self.clock, self.cooldown = sleeper, clock, cooldown
         self.loaded_batch = None
         self.reset_browser = reset_browser
+
+    def pause(self, seconds):
+        runtime.sleep(seconds, self.sleeper)
 
     def pending_rows(self):
         return [r for r in self.store.stage_rows("chat_requests") if r["status"] in PENDING]
@@ -177,6 +181,7 @@ class ChatSession:
         return batch
 
     def begin(self, prompt, source, request):
+        runtime.check()
         try:
             self.driver().begin_request(prompt, source, request, self.persist)
         except PlaywrightError as exc:
@@ -209,9 +214,10 @@ class ChatSession:
     def throttle(self):
         sent = [r["sent_at"] for r in self.store.stage_rows("chat_requests") if r.get("sent_at")]
         if sent:
-            self.sleeper(max(0, self.interval - (self.clock() - max(sent))))
+            self.pause(max(0, self.interval - (self.clock() - max(sent))))
 
     def reconcile(self, request):
+        runtime.operation("restore_history", 90)
         batch = self.store.stage_get("chat_batches", request["batch_id"])
         # Repair possible crash between request commit and batch counter commit.
         if not batch.get("conversation_id") and request.get("conversation_id"):
@@ -296,7 +302,7 @@ class ChatSession:
                     request.update(status="answered")
                     self.persist(request)
                     return request["answer"]
-                self.sleeper(min(5, remaining))
+                self.pause(min(5, remaining))
                 continue
             print(
                 f"  冷却剩余 {int(remaining)} 秒；会话 {request.get('conversation_id')}", flush=True
@@ -317,7 +323,7 @@ class ChatSession:
                 request.update(status="cooling")
                 request.pop("answer", None)
                 self.persist(request)
-                self.sleeper(max(0, min(5, remaining) - (self.clock() - observed_at)))
+                self.pause(max(0, min(5, remaining) - (self.clock() - observed_at)))
         if request.get("cached_answer_wait") and driver.confirm_idle():
             request.update(status="answered")
             self.persist(request)
@@ -339,6 +345,8 @@ class ChatSession:
             self.store.stage_save("chat_batches", batch["batch_id"], batch)
 
     def exhausted(self, request, *, seal_reason=None, seal_evidence=None):
+        seal_reason = seal_reason or "manual_review"
+        seal_evidence = seal_evidence or request.get("review_error") or request.get("error") or {}
         error = TaskError(
             "manual_review_required",
             f"当前视频 {request['stage']} 已尝试 {request['attempt']} 次；等待人工审核并继续下一条",
@@ -441,7 +449,87 @@ class ChatSession:
                              sealed_at=now())
                 self.store.stage_save("chat_batches", batch["batch_id"], batch)
         self.loaded_batch = None
+        if runtime.current():
+            self.isolate_review(source, stage, directory, "page_recovery_exhausted",
+                                "页面恢复6次失败，含5分钟等待")
         self.exhausted(request, seal_reason="page_recovery_exhausted", seal_evidence=evidence)
+
+    def isolate_review(self, source, stage, directory, code, message):
+        """Retire an uncertain intent only after physically isolating its page."""
+        existing = self.review_for(stage, source.note_id)
+        if existing:
+            self.last_attempt = existing["attempt"]
+            raise TaskError("manual_review_required", "当前视频已转人工", retryable=False)
+        request = self.pending() or getattr(self, "current", None)
+        if not request or request["note_id"] != source.note_id or request["stage"] != stage:
+            if request and request["status"] in PENDING:
+                raise BrowserUnsupported("隔离请求与当前视频不一致")
+            batch = self.batch(stage, source.note_id)
+            request = {"request_id": uuid4().hex, "note_id": source.note_id, "stage": stage,
+                       "batch_id": batch["batch_id"], "status": "prepared", "attempt": 0,
+                       "source": source.model_dump(),
+                       "raw_directory": str(directory.relative_to(self.store.directory))}
+            self.persist(request)
+        driver = self.driver()
+        if runtime.current():
+            runtime.current().data.pop("item", None)
+            runtime.operation("isolate_session", 120)
+        if hasattr(driver, "diagnostics"):
+            driver.diagnostics(directory / "diagnostics")
+        write_json(directory / "isolation.json", {
+            "request_id": request["request_id"], "code": code, "message": message,
+            "observed_at": now(), "conversation_id": request.get("conversation_id"),
+        })
+        try:
+            if getattr(driver, "chat_page", None):
+                driver.chat_page.close()
+                driver.chat_page = None
+                driver.history_observer = None
+            driver.new_chat()
+        except (PlaywrightError, TaskError):
+            if not self.reset_browser:
+                runtime.block("isolation_failed", "旧会话无法隔离", kind="manual")
+            self.reset_browser()
+            try:
+                self.driver().new_chat()
+            except (PlaywrightError, TaskError):
+                runtime.block("isolation_failed", "专用浏览器重建失败", kind="manual")
+        request["review_error"] = {"code": code, "message": message}
+        self.loaded_batch = None
+        self.exhausted(request, seal_reason=code, seal_evidence={"isolated": True})
+
+    def resolve_unknown(self, source, stage, directory, error):
+        request = self.pending()
+        if not request:
+            raise error
+        end = self.clock() + 60
+        runtime.operation("reconcile_unknown_submission", 90)
+        driver = self.driver()
+        if hasattr(driver, "chat_page") and not driver.chat_page \
+                and not request.get("conversation_id"):
+            self.isolate_review(source, stage, directory, "submission_unknown", str(error))
+        while self.clock() < end:
+            runtime.check()
+            try:
+                driver = self.driver()
+                if request.get("conversation_id"):
+                    snapshot = self.reconcile(request)
+                else:
+                    snapshot = driver.request_snapshot(request)
+                if snapshot.get("matches") == 1 and snapshot.get("conversation_id"):
+                    request.update(status="submitted", conversation_id=snapshot["conversation_id"],
+                                   round_id=snapshot["round_id"])
+                    self.persist(request)
+                    return
+            except TaskError as exc:
+                if exc.code in SESSION_BLOCK_CODES:
+                    if runtime.current():
+                        runtime.block(exc.code, str(exc))
+                    raise
+            except PlaywrightError:
+                break
+            self.pause(min(5, max(0, end - self.clock())))
+        self.isolate_review(source, stage, directory, "submission_unknown", str(error))
 
     def process(self, source, stage, directory):
         """Own all recovery for one video; callers never repeat this operation."""
@@ -457,7 +545,7 @@ class ChatSession:
                 deadline = recovery.get("wait_until")
                 if deadline:
                     while self.clock() < deadline:
-                        self.sleeper(min(5, deadline - self.clock()))
+                        self.pause(min(5, deadline - self.clock()))
                     recovery["wait_until"] = None
                     write_json(path, recovery)
                 if recovery["failures"] >= 6:
@@ -465,9 +553,35 @@ class ChatSession:
                 driver = self.driver()
                 driver.raw_directory = directory
                 result = self._process(source, stage, directory)
+                if stage == "classify" and result.verdict == "unknown":
+                    self.isolate_review(source, stage, directory, "content_unknown",
+                                        "无法确认视频内容，等待人工判断")
                 path.unlink(missing_ok=True)
                 return result
             except TaskError as exc:
+                if runtime.current() and exc.code == "login_required":
+                    runtime.current().wait_access(
+                        lambda: self.driver().ensure_access(self.driver().chat_page), self.sleeper
+                    )
+                    self.loaded_batch = None
+                    continue
+                if runtime.current() and exc.code in SESSION_BLOCK_CODES:
+                    runtime.block(exc.code, str(exc))
+                if exc.code == "item_budget_exhausted":
+                    self.isolate_review(source, stage, directory, exc.code, str(exc))
+                uncertain = exc.code == "submission_unknown" or (
+                    isinstance(exc, BrowserUnsupported) and any(text in str(exc) for text in (
+                        "提交状态无法关联", "会话 ID 未确认", "历史中无法确认", "当前用户消息",
+                        "同一请求标识", "历史请求消息关联", "当前会话与持久请求不匹配",
+                        "当前提交未完成核对",
+                    ))
+                )
+                if uncertain:
+                    self.resolve_unknown(source, stage, directory, exc)
+                    self.loaded_batch = None
+                    continue
+                if exc.code == "runtime_wait":
+                    raise
                 if exc.code == "manual_review_required":
                     path.unlink(missing_ok=True)
                     raise
@@ -483,6 +597,8 @@ class ChatSession:
                     "type": type(exc).__name__, "message": str(exc),
                 })
                 raise
+            if runtime.current() and any(x in str(failure) for x in ("net::ERR_", "Connection")):
+                runtime.block("network_unavailable", str(failure))
             self.loaded_batch = None
             recovery.update(failures=recovery["failures"] + 1,
                             last_error={"type": type(failure).__name__, "message": str(failure)},
@@ -789,6 +905,7 @@ class ChatSession:
         self.exhausted(request)
 
     def accept(self):
+        runtime.operation("save_result", 120)
         # Called only AFTER the legacy recipe/classification cache commit.
         request = self.current
         request.update(status="complete")

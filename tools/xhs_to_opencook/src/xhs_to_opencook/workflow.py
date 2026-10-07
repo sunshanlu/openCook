@@ -1,5 +1,6 @@
 """Persistent profile collection, classification, extraction and cumulative export."""
 
+import os
 import shutil
 import sys
 import time
@@ -7,6 +8,7 @@ from contextlib import ExitStack
 
 from playwright.sync_api import Error as PlaywrightError
 
+from . import runtime
 from .browser import SiteBrowser
 from .chat import ChatSession
 from .errors import SESSION_BLOCK_CODES, BrowserUnsupported, TaskError
@@ -202,6 +204,9 @@ class Workflow:
                 item["classification"].get("status") != "success" for item in states
             ),
             pending_extraction_count=len(tutorials) - len(records),
+            extraction_success_count=sum(
+                item["extraction"].get("status") == "success" for item in states
+            ),
             recipe_count=sum(len(record["export_names"]) for record in records),
         )
         self.report["workflow_status"] = (
@@ -244,6 +249,8 @@ class Workflow:
 
     def collect(self):
         for identity, url in self.profiles.items():
+            if runtime.current() and f"collect:{identity}" in runtime.current().items["seen"]:
+                continue
             task = {"stage": "collect", "profile_id": identity, "status": "running"}
             self.report["tasks"].append(task)
             self.store.stage_save(
@@ -260,13 +267,48 @@ class Workflow:
                         self.store.collect_note(profile, note)
                     self.snapshot()
 
-                result = self.driver().collect_profile(url, save)
+                if runtime.current():
+                    runtime.current().begin_item("collect", identity)
+                if os.environ.get("XHS_RECOVERY_PROBE"):
+                    try:
+                        self.driver().probe()
+                    except (TaskError, PlaywrightError) as error:
+                        runtime.block(getattr(error, "code", "probe_failed"), str(error),
+                                      kind="circuit")
+                    os.environ.pop("XHS_RECOVERY_PROBE", None)
+                attempt = 0
+                while attempt < 6:
+                    try:
+                        runtime.operation("collect_profile", 35 * 60)
+                        result = self.driver().collect_profile(url, save)
+                        break
+                    except (TaskError, PlaywrightError) as error:
+                        if runtime.current() and getattr(error, "code", None) == "login_required":
+                            runtime.current().wait_access(
+                                lambda: self.driver().ensure_access(self.driver().page),
+                                self.sleeper
+                            )
+                            continue
+                        if isinstance(error, TaskError) and error.code in SESSION_BLOCK_CODES:
+                            runtime.block(error.code, str(error))
+                        if not self.chats.recoverable_page_error(error):
+                            raise
+                        if attempt == 5:
+                            result = {"status": "incomplete", "reason": str(error)}
+                            break
+                        runtime.sleep(300 if attempt == 2 else 5, self.sleeper)
+                        attempt += 1
+                        self.close()
                 task.update(result)
                 if result["status"] != "complete":
                     self.code = max(self.code, 2)
                 self.store.stage_save(
                     "profiles", identity, {"url": url, **result, "finished_at": now()}
                 )
+                if runtime.current():
+                    runtime.current().outcome("collect", identity,
+                                              None if result["status"] == "complete"
+                                              else "collection_incomplete")
                 # Missing card types stay explicit; collection never opens note pages.
                 for note in self.store.collected([identity]):
                     if note.get("type") in {"video", "normal"}:
@@ -278,6 +320,10 @@ class Workflow:
                     })
                     self.code = max(self.code, 2)
             except (TaskError, PlaywrightError) as exc:
+                if runtime.current() and isinstance(exc, TaskError) and exc.code in {
+                    "runtime_wait", *SESSION_BLOCK_CODES
+                }:
+                    raise
                 self.store.stage_save(
                     "profiles", identity, {"url": url, "status": "incomplete", "reason": str(exc)}
                 )
@@ -291,6 +337,9 @@ class Workflow:
                 self.snapshot()
 
     def process(self, stage, notes=None):
+        runtime.operation(f"stage_{stage}", 300)
+        if runtime.current():
+            runtime.current().data["stage"] = stage
         if notes is None:
             notes = [
                 n for n in self.store.collected(list(self.profiles)) if n.get("type") == "video"
@@ -303,6 +352,9 @@ class Workflow:
         for index, note in enumerate(notes, 1):
             identity = note["note_id"]
             classified, decision = classification_record(self.store, identity)
+            if runtime.current() and not pending \
+                    and f"{stage}:{identity}" in runtime.current().items["seen"]:
+                continue
             table = "classifications" if stage == "classify" else "extraction_runs"
             task = {"stage": stage, "note_id": identity, "status": "running", "attempts": 0}
             self.report["tasks"].append(task)
@@ -314,6 +366,17 @@ class Workflow:
                     self.code = max(self.code, 2)
                     continue
             cache = self.store.get(identity)
+            committed = (decision and stage == "classify") or (
+                stage == "extract" and cache and cache.get("status") == "success"
+            )
+            if committed and pending and pending["note_id"] == identity \
+                    and pending["status"] == "validated":
+                # A result commit can precede its request acknowledgement across a crash.
+                self.chats.current = pending
+                self.chats.accept()
+                pending = None
+                if runtime.current():
+                    runtime.current().outcome(stage, identity)
             if (
                 stage == "classify"
                 and not (pending and pending["note_id"] == identity)
@@ -363,6 +426,18 @@ class Workflow:
                     self.store.collect_note(
                         profile, {**note, "url": source.url, "source": source.model_dump()}
                     )
+                active = runtime.current()
+                if active:
+                    active.begin_item(stage, identity)
+                    if os.environ.get("XHS_RECOVERY_PROBE"):
+                        try:
+                            self.driver().probe(source)
+                        except (TaskError, PlaywrightError) as error:
+                            kind = "access" if getattr(error, "code", None) == "login_required" \
+                                else "circuit"
+                            runtime.block(getattr(error, "code", "probe_failed"), str(error),
+                                          kind=kind)
+                        os.environ.pop("XHS_RECOVERY_PROBE", None)
                 result = self.chats.process(source, stage, directory)
                 task["attempts"] = self.chats.current["attempt"]
                 driver = self.driver()
@@ -413,7 +488,12 @@ class Workflow:
                 self.chats.accept()
                 pending = None
                 task["status"] = "success"
+                if active:
+                    active.data["probe_succeeded"] = True
+                    active.outcome(stage, identity)
             except (TaskError, PlaywrightError) as exc:
+                if isinstance(exc, TaskError) and exc.code == "runtime_wait":
+                    raise
                 failure = (
                     exc if isinstance(exc, TaskError) else TaskError("browser_error", str(exc))
                 )
@@ -435,6 +515,11 @@ class Workflow:
                         "code": failure.code, "message": str(failure),
                     })
                 self.record_error(task, failure)
+                if runtime.current() and failure.code == "manual_review_required":
+                    review = self.chats.review_for(stage, identity)
+                    runtime.current().outcome(stage, identity,
+                                              (review.get("review_error") or {}).get("code")
+                                              or "manual_review_required")
                 if failure.code != "manual_review_required" or pending:
                     raise BrowserUnsupported("当前视频未安全结束；保存现场并停止") from exc
             except (KeyboardInterrupt, EOFError):
@@ -484,13 +569,21 @@ def run_workflow(args, *, browser_factory=SiteBrowser, sleeper=time.sleep, clock
                 raise TaskError(
                     "collection_required", "请先采集所有指定博主的主页", retryable=False
                 )
-            if args.command in {"collect", "pipeline"}:
+            if getattr(args, "skip_collect", False) and any(
+                not store.stage_get("profiles", identity) for identity in profiles
+            ):
+                raise TaskError("collection_required", "缓存续跑前须有博主采集记录",
+                                retryable=False)
+            if args.command in {"collect", "pipeline"} and not getattr(args, "skip_collect", False):
                 flow.collect()
             if args.command in {"classify", "pipeline"}:
                 flow.process("classify")
             if args.command in {"extract", "pipeline"}:
                 flow.process("extract")
             flow.report["status"] = "partial" if flow.code else "complete"
+            if flow.report.get("manual_review_count"):
+                flow.code = max(2, flow.code)
+                flow.report["status"] = "partial"
         except (KeyboardInterrupt, EOFError):
             flow.report["status"] = "interrupted"
             flow.code = 130
@@ -503,11 +596,31 @@ def run_workflow(args, *, browser_factory=SiteBrowser, sleeper=time.sleep, clock
                 },
             )
             flow.code = 1
+            if runtime.current() and runtime.current().data["status"] != "waiting":
+                runtime.current().data["error"] = f"{type(exc).__name__}: {exc}"
         finally:
             flow.report["finished_at"] = now()
-            flow.snapshot(
-                bundle=args.command in {"extract", "pipeline", "export"} or flow.code in {1, 130}
-            )
+            if runtime.current():
+                runtime.current().data.update(operation="export_outputs",
+                                              deadline=time.time() + 300)
+            for export_attempt in range(3):
+                try:
+                    flow.snapshot(
+                        bundle=args.command in {"extract", "pipeline", "export"}
+                        or flow.code in {1, 130}
+                    )
+                    break
+                except OSError:
+                    if not runtime.current() or export_attempt == 2:
+                        raise
+                    # Local export retries never re-enter video processing.
+                    time.sleep(1)
+            if flow.code in (0, 2) and (flow.report.get("manual_review_count")
+                                      or (args.command in {"pipeline", "export"}
+                                          and flow.report.get("workflow_status") != "complete")):
+                flow.code = 2
+                flow.report["status"] = "partial"
+                write_json(output / "report.json", flow.report)
             if flow.report["incomplete_profiles"] and flow.code == 0:
                 flow.code = 2
                 flow.report["status"] = "partial"
