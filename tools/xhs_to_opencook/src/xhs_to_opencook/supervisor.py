@@ -361,6 +361,8 @@ def command(argv, state_default, *, parser):
     if action == "status":
         identity = process_identity(job.get("supervisor_pid", 0))
         print(json.dumps({**job, "supervisor_alive": bool(identity and str(directory) in identity),
+                          "workers_alive": {s: owned_process(r)
+                                            for s, r in job.get("workers", {}).items()},
                           "worker_alive": owned_process(job.get("worker", {}))},
                          ensure_ascii=False, indent=2))
         return 0
@@ -385,6 +387,12 @@ def command(argv, state_default, *, parser):
                 print("已请求 resume，监督器将从原断点继续。")
                 return 0
             # A stopped GUI job needs an explicit restart, never an automatic one.
+            if not job.get("label"):
+                subprocess.Popen([sys.executable, "-m", "xhs_to_opencook.parallel", str(directory)],
+                                 cwd=job["cwd"], start_new_session=True,
+                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                print("已恢复前台并行任务；用 status 查询。")
+                return 0
             domain = f"gui/{os.getuid()}/{job['label']}"
             result = subprocess.run(["launchctl", "kickstart", "-k", domain],
                                     capture_output=True, text=True)
@@ -394,6 +402,16 @@ def command(argv, state_default, *, parser):
         return 0
     if job and job.get("status") not in {"completed", "partial", "stopped"}:
         parser.error("已有任务，请先使用 status/pause/resume/stop")
+    if action == "supervise" and getattr(args, "execution", "serial") == "parallel" \
+            and not getattr(args, "skip_collect", False):
+        from types import SimpleNamespace
+
+        from .workflow import run_workflow
+        collect_args = SimpleNamespace(**vars(args))
+        collect_args.command, collect_args.execution = "collect", "serial"
+        if run_workflow(collect_args) not in (0, 2):
+            return 1
+        args.skip_collect = True
     with state_lock(state), state_lock(directory):
         label = "com.opencook.xhs." + hashlib.sha256(str(state).encode()).hexdigest()[:12]
         subprocess.run(["launchctl", "bootout", f"gui/{os.getuid()}/{label}"],
@@ -407,11 +425,20 @@ def command(argv, state_default, *, parser):
             (directory / "items.json").rename(directory / f"items-{job['job_id']}.json")
         for name in ("worker.json", "control.json"):
             (directory / name).unlink(missing_ok=True)
-        write_json(path, job)
+        if getattr(args, "execution", "serial") == "parallel":
+            from .parallel import initialize
+            job = initialize(args, directory, job=job)
+        else:
+            write_json(path, job)
         launchd(directory, job)
     print(f"已启动托管任务 {job['job_id']}；用 status/pause/resume/stop 控制。")
     return 0
 
 
 if __name__ == "__main__":
-    Supervisor(Path(sys.argv[1])).run()
+    directory = Path(sys.argv[1])
+    if read_json(directory / "job.json").get("execution") == "parallel":
+        from .parallel import ParallelCoordinator
+        ParallelCoordinator(directory).run()
+    else:
+        Supervisor(directory).run()

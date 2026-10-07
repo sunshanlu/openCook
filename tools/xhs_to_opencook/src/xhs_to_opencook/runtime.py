@@ -118,7 +118,8 @@ class WorkerRuntime:
             write_json(self.path, self.data)
 
     def check(self):
-        control = read_json(self.directory / "control.json")
+        control_dir = Path(os.environ.get("XHS_CONTROL_DIR", self.directory))
+        control = read_json(control_dir / "control.json")
         if control.get("job_id") == self.job_id and control.get("action") in {"pause", "stop"}:
             raise KeyboardInterrupt()
         if self.data.get("journal_failed"):
@@ -173,6 +174,8 @@ class WorkerRuntime:
             self.block("circuit_open", "连续失败，等待恢复检查", kind="circuit")
 
     def wait_access(self, checker, sleeper=time.sleep):
+        if os.environ.get("XHS_PARALLEL_STAGE"):
+            self.block("login_required", "请在专用Chrome完成登录或验证码", kind="access")
         item = self.data.pop("item", None)
         self.data.update(status="waiting", reason="login_required", wait_kind="access",
                          message="请在专用Chrome完成登录或验证码")

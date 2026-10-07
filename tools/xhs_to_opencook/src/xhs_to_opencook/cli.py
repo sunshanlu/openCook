@@ -47,6 +47,9 @@ def main(argv=None) -> int:
             if name in {"pipeline", "classify"}:
                 command.add_argument("--reclassify", action="store_true")
             if name == "pipeline":
+                command.add_argument(
+                    "--execution", choices=("serial", "parallel"), default="serial"
+                )
                 command.add_argument("--skip-collect", action="store_true",
                                      help="从已采集清单继续分类、提取和导出")
             if name in {"run", "pipeline", "classify", "extract"}:

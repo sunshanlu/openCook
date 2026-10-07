@@ -45,6 +45,7 @@ class ChatSession:
         cooldown=600,
         max_attempts=2,
         reset_browser=None,
+        stage_scope=None,
     ):
         if isinstance(capacity, bool) or not isinstance(capacity, int) or capacity <= 0:
             raise ValueError("chat batch size must be a positive integer")
@@ -56,6 +57,7 @@ class ChatSession:
         self.sleeper, self.clock, self.cooldown = sleeper, clock, cooldown
         self.loaded_batch = None
         self.reset_browser = reset_browser
+        self.stage_scope = stage_scope
 
     def pause(self, seconds):
         runtime.sleep(seconds, self.sleeper)
@@ -65,6 +67,7 @@ class ChatSession:
 
     def pending(self, stage=None):
         rows = self.pending_rows()
+        stage = stage or self.stage_scope
         if stage:
             rows = [r for r in rows if r["stage"] == stage]
         if len(rows) > 1:
@@ -216,7 +219,8 @@ class ChatSession:
             raise
 
     def throttle(self):
-        sent = [r["sent_at"] for r in self.store.stage_rows("chat_requests") if r.get("sent_at")]
+        sent = [r["sent_at"] for r in self.store.stage_rows("chat_requests") if r.get("sent_at")
+                and (not self.stage_scope or r["stage"] == self.stage_scope)]
         if sent:
             self.pause(max(0, self.interval - (self.clock() - max(sent))))
 
@@ -487,7 +491,9 @@ class ChatSession:
             "observed_at": now(), "conversation_id": request.get("conversation_id"),
         })
         try:
-            if getattr(driver, "chat_page", None):
+            if hasattr(driver, "isolate_owned_page"):
+                driver.isolate_owned_page()
+            elif getattr(driver, "chat_page", None):
                 driver.chat_page.close()
                 driver.chat_page = None
                 driver.history_observer = None

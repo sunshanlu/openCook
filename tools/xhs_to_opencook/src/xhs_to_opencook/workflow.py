@@ -76,6 +76,7 @@ class Workflow:
             timeout=args.timeout,
             sleeper=sleeper,
             clock=clock,
+            stage_scope=getattr(args, "worker_stage", None),
         )
         self.code = 0
         self.report = {
@@ -553,6 +554,9 @@ class Workflow:
 
 
 def run_workflow(args, *, browser_factory=SiteBrowser, sleeper=time.sleep, clock=time.time):
+    if getattr(args, "execution", "serial") == "parallel":
+        from .parallel import run_parallel
+        return run_parallel(args)
     profiles = read_profiles(args.profiles)
     state, output = args.state_dir.resolve(), args.output.resolve()
     if output == state or output in state.parents or state in output.parents:

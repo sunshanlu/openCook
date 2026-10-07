@@ -52,7 +52,11 @@ class Store:
     def __init__(self, directory: Path):
         directory.mkdir(parents=True, exist_ok=True, mode=0o700)
         self.directory = directory
-        self.db = sqlite3.connect(directory / "cache.sqlite3")
+        self.db = sqlite3.connect(directory / "cache.sqlite3", timeout=30)
+        self.db.execute("PRAGMA busy_timeout=30000")
+        self.db.execute("PRAGMA journal_mode=WAL")
+        self.queue_job = None
+        self.queue_notes = set()
         self.db.execute(
             "CREATE TABLE IF NOT EXISTS records (id TEXT PRIMARY KEY, value TEXT NOT NULL)"
         )
@@ -72,7 +76,58 @@ class Store:
         self.db.execute("""CREATE TABLE IF NOT EXISTS profile_notes (
             profile_id TEXT NOT NULL, note_id TEXT NOT NULL, value TEXT NOT NULL,
             PRIMARY KEY(profile_id, note_id))""")
+        self.db.execute("""CREATE TABLE IF NOT EXISTS extraction_queue (
+            sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+            job_id TEXT NOT NULL, note_id TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'ready', owner TEXT, updated_at TEXT NOT NULL,
+            UNIQUE(job_id, note_id))""")
         self.db.commit()
+
+    def enqueue(self, job_id, note_id):
+        self.db.execute(
+            "INSERT OR IGNORE INTO extraction_queue(job_id,note_id,updated_at) VALUES(?,?,?)",
+            (job_id, note_id, now()),
+        )
+
+    def seed_queue(self, job_id, note_ids):
+        with self.db:
+            for note_id in note_ids:
+                self.enqueue(job_id, note_id)
+
+    def claim(self, job_id, owner):
+        # A single extractor owns the stage lock. Preserve its previous claim on restart.
+        self.db.execute("BEGIN IMMEDIATE")
+        try:
+            row = self.db.execute(
+                "SELECT note_id FROM extraction_queue WHERE job_id=? "
+                "AND status IN ('ready','claimed') "
+                "ORDER BY (status='claimed') DESC, sequence LIMIT 1", (job_id,),
+            ).fetchone()
+            if row:
+                self.db.execute(
+                    "UPDATE extraction_queue SET status='claimed',owner=?,updated_at=? "
+                    "WHERE job_id=? AND note_id=?", (owner, now(), job_id, row[0]),
+                )
+            self.db.commit()
+            return row[0] if row else None
+        except BaseException:
+            self.db.rollback()
+            raise
+
+    def finish_queue(self, job_id, note_id, status):
+        if status not in {'done', 'review', 'skipped'}:
+            raise ValueError("invalid queue terminal status")
+        with self.db:
+            self.db.execute(
+                "UPDATE extraction_queue SET status=?,updated_at=? WHERE job_id=? AND note_id=?",
+                (status, now(), job_id, note_id),
+            )
+
+    def queue_counts(self, job_id):
+        return dict(self.db.execute(
+            "SELECT status,count(*) FROM extraction_queue WHERE job_id=? GROUP BY status",
+            (job_id,),
+        ))
 
     def close(self):
         self.db.close()
@@ -151,14 +206,16 @@ class Store:
         }:
             raise ValueError("unsupported table")
         value = {**value, "updated_at": now()}
-        self.db.execute(
-            f"INSERT OR REPLACE INTO {table} VALUES (?, ?)",
-            (
-                identity,
-                json.dumps(value, ensure_ascii=False, allow_nan=False),
-            ),
-        )
-        self.db.commit()
+        with self.db:
+            self.db.execute(
+                f"INSERT OR REPLACE INTO {table} VALUES (?, ?)",
+                (identity, json.dumps(value, ensure_ascii=False, allow_nan=False)),
+            )
+            # Queue insertion shares the classification transaction, including rollback.
+            if table == "classifications" and self.queue_job and identity in self.queue_notes:
+                if value.get("status") == "success" \
+                        and value.get("classification", {}).get("verdict") == "tutorial":
+                    self.enqueue(self.queue_job, identity)
 
     def collect_note(self, profile: str, note: dict):
         note = {k: v for k, v in note.items() if k != "profile_ids"}

@@ -309,3 +309,27 @@ xhs-to-opencook extract --profiles reviewed-bloggers.txt --output ./output --ret
 普通续跑保持跳过该视频，再处理下一条。
 未知浏览器错误、代码异常或请求/视频/会话状态矛盾保存现场并停止本轮。
 外层在视频结束后检查没有未决请求才继续，不能把尚未恢复的请求当作普通失败跳过。
+
+### 并行分类与提取
+
+```bash
+xhs-to-opencook pipeline --profiles bloggers.txt --output ./output --execution parallel --skip-collect
+xhs-to-opencook supervise pipeline --profiles bloggers.txt --output ./output --execution parallel --skip-collect
+```
+
+默认仍为 `--execution serial`。并行模式由一个协调器管理分类、提取两个工作进程，
+共用专用 Chrome 登录配置，各有一个独立顶层窗口与点点会话。两边分别遵守
+`--interval`，同时各最多一个未决请求。已有教程先入持久队列，新确认教程追加队尾；
+队列暂空时提取等待，分类结束且队列排空后才结束自动处理。
+
+每阶段有独立心跳、预算、失败窗口与日志；工作进程退出只断开自己的浏览器连接。
+网络、账号、平台问题及连续失败触发两边共同等待；Chrome整体崩溃统一重建并核对
+两个原请求。局部工作进程问题独立恢复，需要人工时另一边可继续处理。
+`status` 显示 `workers`、`workers_alive` 与队列各状态；控制命令作用于整个任务。
+
+公共输出只由协调器发布。首份可用菜谱立即打包，此后每新增20条成功笔记、暂停、
+停止及结束时更新累计 ZIP；多菜品笔记按一条成功笔记计。ZIP原子替换，导出失败重试
+不会重新请求菜谱。浏览器连接信息位于 `supervision/browser.json`，CDP仅监听本机回环。
+
+并行模式不自动降级。首次切换须先验证实站两个会话同时生成不互相打断；生产迁移
+应暂停、核对未决请求并备份数据库与监督状态，保持原请求、次数和审核冻结。
