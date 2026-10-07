@@ -11,7 +11,7 @@ from uuid import uuid4
 
 from playwright.sync_api import Error as PlaywrightError
 
-from .errors import BrowserUnsupported, TaskError
+from .errors import SESSION_BLOCK_CODES, BrowserUnsupported, TaskError
 from .models import JSON_ERROR_CODES, parse_bound_answer
 from .prompts import CLASSIFICATION_VERSION, EXTRACTION_VERSION, bound_prompt
 from .storage import atomic_write, now, write_json
@@ -597,6 +597,10 @@ class ChatSession:
             except BrowserUnsupported:
                 raise
             except TaskError as exc:
+                if exc.code in SESSION_BLOCK_CODES:
+                    # Keep any submitted intent for reconciliation after access is restored.
+                    # A session restriction must never exhaust one video's attempt budget.
+                    raise
                 if exc.code == "manual_review_required":
                     raise
                 if request["status"] in {

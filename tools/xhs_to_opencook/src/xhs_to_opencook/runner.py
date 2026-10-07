@@ -8,7 +8,7 @@ from playwright.sync_api import Error as PlaywrightError
 
 from .browser import SiteBrowser
 from .chat import ChatSession
-from .errors import BrowserUnsupported, TaskError
+from .errors import SESSION_BLOCK_CODES, BrowserUnsupported, TaskError
 from .export import convert, cover_jpeg, estimates, write_outputs
 from .links import note_id, read_links, validate_url
 from .models import Extraction, Source
@@ -290,7 +290,7 @@ def run(args, *, browser_factory=SiteBrowser, sleeper=time.sleep) -> int:
                         if not (store.get(identity) or {}).get("status") == "success":
                             store.save(identity, failed)
                     print(f"  {exc.code}: {exc}", file=sys.stderr, flush=True)
-                    if isinstance(exc, BrowserUnsupported) or exc.code == "login_required":
+                    if isinstance(exc, BrowserUnsupported) or exc.code in SESSION_BLOCK_CODES:
                         report["status"] = "blocked"
                         exit_code = 1
                         break

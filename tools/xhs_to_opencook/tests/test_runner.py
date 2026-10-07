@@ -137,6 +137,22 @@ def test_adapter_failure_stops_batch(setup):
     assert driver.asks == 1 and report["unprocessed_count"] == 1
 
 
+def test_platform_restriction_stops_batch_before_next_link(setup, monkeypatch):
+    args, driver = setup
+    args.links.write_text(driver.source.url + "\nhttps://xhslink.com/a/other")
+
+    def restricted(url):
+        driver.opens += 1
+        raise TaskError("platform_restricted", "访问频繁 300013", retryable=False)
+
+    monkeypatch.setattr(driver, "open_source", restricted)
+    code, report = execute(args, driver)
+    assert code == 1 and report["status"] == "blocked"
+    assert report["tasks"][0]["error"]["code"] == "platform_restricted"
+    assert driver.opens == 1 and driver.asks == 0 and report["unprocessed_count"] == 1
+    assert report["manual_review_count"] == 0
+
+
 def test_interrupt_archives_partial_and_resumes(setup):
     args, driver = setup
     original = driver.ask

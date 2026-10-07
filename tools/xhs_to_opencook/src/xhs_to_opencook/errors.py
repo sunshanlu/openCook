@@ -1,3 +1,6 @@
+SESSION_BLOCK_CODES = frozenset({"login_required", "platform_restricted"})
+
+
 class TaskError(Exception):
     """An actionable, classified failure; safe to include in the local report."""
 

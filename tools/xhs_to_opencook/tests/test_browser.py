@@ -278,6 +278,29 @@ def test_noninteractive_login_requires_action(driver):
     assert error.value.code == "login_required"
 
 
+@pytest.mark.parametrize("interactive", [False, True])
+def test_security_limit_redirect_stops_before_link_failure(driver, source, interactive):
+    driver.interactive = interactive
+    error_url = "https://www.xiaohongshu.com/website-login/error?redirectPath=fixture"
+    driver.context.route(source.url, lambda route: route.fulfill(
+        status=302, headers={"location": error_url}, body=""))
+    driver.context.route(error_url, lambda route: route.fulfill(
+        content_type="text/html",
+        body="<title>安全限制</title><body>安全限制 访问频繁，请稍后再试 300013</body>"))
+    with pytest.raises(TaskError) as error:
+        driver.open_source(source.url)
+    assert error.value.code == "platform_restricted"
+    assert not error.value.retryable
+    assert driver.chat_page.locator(".user-message__text-wrapper").count() == 0
+
+
+def test_note_mentioning_security_limit_is_not_a_restriction(driver):
+    driver.chat_page.evaluate(
+        "document.body.innerHTML='<div>教程讨论安全限制、访问频繁和300013</div>'"
+    )
+    assert driver.ensure_access(driver.chat_page) is False
+
+
 def test_unsupported_editor_fails_closed(driver):
     driver.context.route(CHAT + "*", lambda route: route.fulfill(body="<body>Changed</body>"))
     # Keep this adapter-contract test quick without changing production timeouts.

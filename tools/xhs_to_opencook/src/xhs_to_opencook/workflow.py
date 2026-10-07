@@ -9,7 +9,7 @@ from playwright.sync_api import Error as PlaywrightError
 
 from .browser import SiteBrowser
 from .chat import ChatSession
-from .errors import BrowserUnsupported, TaskError
+from .errors import SESSION_BLOCK_CODES, BrowserUnsupported, TaskError
 from .export import convert, cover_jpeg, estimates, write_outputs
 from .links import read_profiles
 from .models import Classification, Extraction, Source
@@ -97,7 +97,7 @@ class Workflow:
             task["status"] = "awaiting_review"
         self.code = max(self.code, 2)
         print(f"  {failure.code}: {failure}", file=sys.stderr, flush=True)
-        if isinstance(failure, BrowserUnsupported) or failure.code == "login_required":
+        if isinstance(failure, BrowserUnsupported) or failure.code in SESSION_BLOCK_CODES:
             raise failure
 
     def snapshot(self, *, bundle=False):
@@ -252,7 +252,7 @@ class Workflow:
                             identity, {**note, "type": "video", "source": source.model_dump()}
                         )
                     except TaskError as exc:
-                        if isinstance(exc, BrowserUnsupported) or exc.code == "login_required":
+                        if isinstance(exc, BrowserUnsupported) or exc.code in SESSION_BLOCK_CODES:
                             raise
                         self.store.collect_note(
                             identity,

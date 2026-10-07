@@ -106,6 +106,26 @@ def process(store, manager, number, stage="classify"):
     return result
 
 
+def test_platform_restriction_preserves_second_attempt_for_resume(tmp_path):
+    store, driver, manager = setup(tmp_path)
+    driver.replies = [
+        TaskError("empty_answer", "（暂无内容）"),
+        TaskError("platform_restricted", "访问频繁 300013", retryable=False),
+    ]
+    with pytest.raises(TaskError) as error:
+        process(store, manager, 1)
+    assert error.value.code == "platform_restricted"
+    assert manager.pending()["status"] == "submitted"
+    assert manager.pending()["attempt"] == 2
+    assert manager.review_rows() == []
+    assert len(driver.sent) == 2
+    manager.loaded_batch = None
+    assert process(store, manager, 1).verdict == "tutorial"
+    assert len(driver.sent) == 2
+    assert manager.pending() is None
+    store.close()
+
+
 def test_50_51_boundary_and_restart(tmp_path):
     store, driver, manager = setup(tmp_path, capacity=50)
     for i in range(1, 51):

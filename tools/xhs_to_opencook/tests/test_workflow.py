@@ -117,6 +117,50 @@ def execute(args, browser):
     return code, json.loads((args.output / "report.json").read_text())
 
 
+def test_profile_pipeline_never_opens_collected_note_pages(setup, monkeypatch):
+    args, browser = setup
+
+    def unexpected_open(url):
+        pytest.fail("Collected video URLs must be submitted directly to Diandian")
+
+    monkeypatch.setattr(browser, "open_source", unexpected_open)
+    code, report = execute(args, browser)
+    assert code == 2  # The fixture includes an unknown classification.
+    assert browser.events.count("classify") == 3
+    assert browser.events.count("extract") == 1
+    assert report["recipe_count"] == 1
+    store = Store(args.state_dir)
+    saved = store.get(N1)["source"]
+    assert saved["note_id"] == N1
+    assert saved["author"].startswith("作者未记录")
+    assert saved["cover_url"] is None
+    store.close()
+
+
+def test_extraction_uses_saved_classification_source_without_note_navigation(setup, monkeypatch):
+    args, browser = setup
+    args.command = "collect"
+    execute(args, browser)
+    store = Store(args.state_dir)
+    saved = browser.open_source(f"https://www.xiaohongshu.com/explore/{N1}")
+    store.stage_save("classifications", N1, {
+        "status": "success", "source": saved.model_dump(),
+        "classification": {"note_id": N1, "verdict": "tutorial", "reason": "制作过程"},
+    })
+    store.close()
+    args.command = "extract"
+
+    def unexpected_open(url):
+        pytest.fail("Extraction should reuse the classification source")
+
+    monkeypatch.setattr(browser, "open_source", unexpected_open)
+    code, report = execute(args, browser)
+    assert code == 0 and report["recipe_count"] == 1
+    store = Store(args.state_dir)
+    assert store.get(N1)["source"] == saved.model_dump()
+    store.close()
+
+
 def test_empty_answer_exhaustion_continues_classification_and_extraction(setup, monkeypatch):
     from xhs_to_opencook.workflow import Workflow
 
@@ -362,6 +406,25 @@ def test_unsupported_stops_all_ai(setup):
     code, report = execute(args, browser)
     assert code == 1 and report["status"] == "blocked"
     assert browser.events.count("classify") == 1
+
+
+def test_platform_restriction_stops_before_next_video(setup, monkeypatch):
+    args, browser = setup
+    args.command = "collect"
+    execute(args, browser)
+    args.command = "classify"
+
+    def restricted(url):
+        browser.opens.append(url)
+        raise TaskError("platform_restricted", "访问频繁 300013", retryable=False)
+
+    monkeypatch.setattr(browser, "open_source", restricted)
+    code, report = execute(args, browser)
+    assert code == 1 and report["status"] == "blocked"
+    assert report["error"]["code"] == "platform_restricted"
+    assert len(browser.opens) == 1 and "classify" not in browser.events
+    assert report["manual_review_count"] == 0
+    assert (args.output / "recipes.zip").is_file()
 
 
 def test_atomic_replace_failure_preserves_previous(tmp_path, monkeypatch):

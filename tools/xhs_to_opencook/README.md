@@ -70,6 +70,10 @@ xhs-to-opencook export --profiles bloggers.txt --output ./output
 `classify/extract/export` 要求指定博主已有持久采集记录，不隐式采集。
 所有命令共用 `--state-dir`、运行锁和登录配置。`export` 无需浏览器，可在意外退出后离线打包。
 
+若跳转到小红书 `/website-login/error` 安全限制页（如“访问频繁，请稍后再试”、300013），
+记录 `platform_restricted` 并停止整批，交互模式也不会自动重试。限制解除前不要续跑；
+该情况不作为单条坏链接或人工审核失败。已提交的未决请求保留，恢复后先核对原回答。
+
 每次采集重新滚动全部可访问历史笔记，不因遇到旧笔记停止；按笔记 ID 去重。
 页面自身分页响应的明确 `has_more=false` 才表示已到末页。
 连续三轮无新增但没有可信末页信号时标记不完整；保留已采集记录、继续其他博主。

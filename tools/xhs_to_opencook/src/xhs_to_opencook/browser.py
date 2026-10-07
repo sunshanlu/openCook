@@ -84,6 +84,10 @@ class SiteBrowser:
                     '.login-container, .login-modal, .captcha-container, [role="dialog"]'
                 )].filter(visible).map(el => el.innerText || '').join(' ');
                 const text = (document.body?.innerText || '').slice(-12000);
+                // Restriction pages must stop the batch, not become bad-note failures.
+                // Match the dedicated error route, never words in ordinary note content.
+                const restricted = location.pathname === '/website-login/error'
+                    || location.pathname.startsWith('/website-login/error/');
                 const login = /扫码登录|手机号登录|登录后查看|登录后即可|登录后使用/.test(dialog)
                     || /扫码登录|手机号登录|登录后查看|登录后即可/.test(text);
                 const verify = challenge || /请完成验证|安全验证|拖动滑块|点击完成验证/.test(dialog)
@@ -91,8 +95,14 @@ class SiteBrowser:
                     || /captcha|verify|challenge/i.test(location.pathname);
                 const account = [...document.querySelectorAll('a[href*="/user/profile/"]')]
                     .some(el => visible(el) && el.innerText.trim() === '我');
-                return {login, verify, account};
+                return {login, verify, account, restricted};
             }""")
+            if state["restricted"]:
+                raise TaskError(
+                    "platform_restricted",
+                    "平台安全限制页面（访问频繁可能显示300013）；已停止整批，请等待限制解除",
+                    retryable=False,
+                )
             if state["verify"] or state["login"] or (require_account and not state["account"]):
                 self._pause("检测到验证码或需要登录，请手动完成")
                 paused = True
