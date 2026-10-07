@@ -203,8 +203,11 @@ class Supervisor:
                 return True
             return False
         if self.job["status"] == "paused":
-            self.save()
-            return True
+            if action == "resume":
+                self.job.update(status="ready", probe_failures=0, wait_attempt=0, restarts=[])
+            else:
+                self.save()
+                return True
         if self.job["status"] == "waiting":
             self.outbox.flush()
             if self.job.get("next_check") and now >= self.job["next_check"]:
@@ -329,11 +332,13 @@ def command(argv, state_default, *, parser):
         }:
             print("本批自动处理已结束，请用 supervise 显式启动新任务。")
             return 0
-        write_json(directory / "control.json", {"job_id": job["job_id"], "action": action})
         if action == "resume":
-            if job["status"] == "running":
+            old_control = read_json(directory / "control.json")
+            if job["status"] == "running" and old_control.get("action") not in {"pause", "stop"}:
                 print("任务正在运行，无需恢复。")
                 return 0
+        write_json(directory / "control.json", {"job_id": job["job_id"], "action": action})
+        if action == "resume":
             job.update(status="ready", probe_failures=0, wait_attempt=0, restarts=[],
                        wait_episode=job.get("wait_episode", 0) + 1)
             write_json(path, job)
