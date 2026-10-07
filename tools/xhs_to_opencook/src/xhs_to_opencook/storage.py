@@ -222,3 +222,21 @@ class Store:
                         json.dumps(request, ensure_ascii=False, allow_nan=False),
                     ),
                 )
+
+    def seal_chat_request(self, request: dict, batch: dict):
+        """Commit a sealed batch and its recovery intent as one durable transition."""
+        if request["batch_id"] != batch["batch_id"] or batch["status"] != "sealed":
+            raise ValueError("recovery request must belong to the sealed batch")
+        stamp = now()
+        rows = [
+            (table, identity, json.dumps({**value, "updated_at": stamp},
+                                         ensure_ascii=False, allow_nan=False))
+            for table, identity, value in (
+                ("chat_batches", batch["batch_id"], batch),
+                ("chat_requests", request["request_id"], request),
+            )
+        ]
+        with self.db:
+            for table, identity, value in rows:
+                self.db.execute(f"INSERT OR REPLACE INTO {table} VALUES (?, ?)",
+                                (identity, value))

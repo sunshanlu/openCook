@@ -1,5 +1,6 @@
 import csv
 import json
+import sqlite3
 
 import pytest
 
@@ -272,6 +273,89 @@ def test_pre_send_busy_retry_survives_restart_without_history_match(tmp_path):
     assert len(driver.sent) == 1 and driver.new == 2
     assert manager.current["attempt"] == 2
     store.close()
+
+
+@pytest.mark.parametrize("attempt", [1, 2])
+@pytest.mark.parametrize("interrupt_at", ["database_commit", "raw_write"])
+def test_busy_seal_commit_keeps_recovery_state_after_restart(
+    tmp_path, monkeypatch, attempt, interrupt_at,
+):
+    store, driver, manager = setup(tmp_path)
+    original_begin = driver.begin_request
+    driver.begin_request = lambda *args: (_ for _ in ()).throw(KeyboardInterrupt())
+    with pytest.raises(KeyboardInterrupt):
+        process(store, manager, 1)
+    request = manager.pending()
+    request["attempt"] = attempt
+    manager.persist(request)
+    driver.begin_request = lambda *args: (_ for _ in ()).throw(
+        TaskError("generation_busy", "上一轮仍忙碌")
+    )
+    original_transition = store.seal_chat_request
+
+    def interrupt_transition(*args):
+        original_transition(*args)
+        raise KeyboardInterrupt()
+
+    if interrupt_at == "database_commit":
+        monkeypatch.setattr(store, "seal_chat_request", interrupt_transition)
+    else:
+        from xhs_to_opencook import chat
+
+        original_write = chat.write_json
+
+        def interrupt_raw(path, value):
+            if value.get("status") in {"retry_ready", "manual_review"}:
+                raise KeyboardInterrupt()
+            original_write(path, value)
+
+        monkeypatch.setattr(chat, "write_json", interrupt_raw)
+    with pytest.raises(KeyboardInterrupt):
+        process(store, manager, 1)
+    request_id, batch_id = request["request_id"], request["batch_id"]
+    store.close()
+    resumed = Store(tmp_path)
+    saved = resumed.stage_get("chat_requests", request_id)
+    assert resumed.stage_get("chat_batches", batch_id)["status"] == "sealed"
+    assert saved["status"] == ("retry_ready" if attempt == 1 else "manual_review")
+    assert saved["retry_new_chat"] and saved["attempt"] == attempt
+    monkeypatch.undo()
+    driver.begin_request = original_begin
+    driver.request_snapshot = lambda r: pytest.fail("busy request was never submitted")
+    recovery = ChatSession(resumed, lambda: driver, clock=lambda: driver.clock,
+                           sleeper=lambda s: setattr(driver, "clock", driver.clock + s))
+    if attempt == 1:
+        process(resumed, recovery, 1)
+        assert recovery.current["attempt"] == 2
+    else:
+        with pytest.raises(TaskError, match="等待人工审核"):
+            process(resumed, recovery, 1)
+        assert not driver.sent
+        process(resumed, recovery, 2)
+    assert driver.new == 2 and len(driver.sent) == 1
+    resumed.close()
+
+
+def test_busy_transition_rolls_back_both_records_on_database_failure(tmp_path):
+    store, driver, manager = setup(tmp_path)
+    driver.begin_request = lambda *args: (_ for _ in ()).throw(KeyboardInterrupt())
+    with pytest.raises(KeyboardInterrupt):
+        process(store, manager, 1)
+    request = manager.pending()
+    batch = store.stage_get("chat_batches", request["batch_id"])
+    batch.update(status="sealed", sealed_reason="generation_busy")
+    request.update(status="retry_ready", retry_new_chat=True, retry_reason="generation_busy")
+    store.db.set_authorizer(lambda action, table, *args: sqlite3.SQLITE_DENY
+                            if action == sqlite3.SQLITE_INSERT and table == "chat_requests"
+                            else sqlite3.SQLITE_OK)
+    with pytest.raises(sqlite3.DatabaseError):
+        store.seal_chat_request(request, batch)
+    store.db.set_authorizer(None)
+    store.close()
+    resumed = Store(tmp_path)
+    assert resumed.stage_get("chat_batches", batch["batch_id"])["status"] == "open"
+    assert resumed.stage_get("chat_requests", request["request_id"])["status"] == "prepared"
+    resumed.close()
 
 
 def test_cached_answer_cooling_survives_restart_and_exhausts_to_review(tmp_path):

@@ -186,12 +186,11 @@ class ChatSession:
                     review_error={"code": exc.code, "message": str(exc)},
                     retry_new_chat=True, retry_reason=exc.code,
                 )
-                self.seal(request, exc.code, {"request_id": request["request_id"],
-                                             "submitted": False})
+                evidence = {"request_id": request["request_id"], "submitted": False}
                 if request["attempt"] >= self.max_attempts:
-                    self.exhausted(request)
+                    self.exhausted(request, seal_reason=exc.code, seal_evidence=evidence)
                 request.update(status="retry_ready", safe_to_retry=False)
-                self.persist(request)
+                self.seal(request, exc.code, evidence, with_request=True)
                 print("  上一轮仍忙碌，当前请求未发送；封存会话后换新会话重试。", flush=True)
                 return
             if request["status"] == "prepared":
@@ -317,14 +316,21 @@ class ChatSession:
             return request["answer"]
         return self.silence_retry(request)
 
-    def seal(self, request, reason, evidence):
+    def seal(self, request, reason, evidence, *, with_request=False):
         batch = self.store.stage_get("chat_batches", request["batch_id"])
         batch.update(
             status="sealed", sealed_reason=reason, evidence=evidence, sealed_at=now()
         )
-        self.store.stage_save("chat_batches", batch["batch_id"], batch)
+        if with_request:
+            self.store.seal_chat_request(request, batch)
+            if request.get("raw_directory"):
+                write_json(
+                    self.store.directory / request["raw_directory"] / "request.json", request
+                )
+        else:
+            self.store.stage_save("chat_batches", batch["batch_id"], batch)
 
-    def exhausted(self, request):
+    def exhausted(self, request, *, seal_reason=None, seal_evidence=None):
         error = TaskError(
             "manual_review_required",
             f"当前视频 {request['stage']} 已尝试 {request['attempt']} 次；等待人工审核并继续下一条",
@@ -336,7 +342,10 @@ class ChatSession:
             error={"code": error.code, "message": str(error)}, review_requested_at=now(),
         )
         self.last_attempt = request["attempt"]
-        self.persist(request)
+        if seal_reason is not None:
+            self.seal(request, seal_reason, seal_evidence, with_request=True)
+        else:
+            self.persist(request)
         raise error
 
     def silence_retry(self, request):

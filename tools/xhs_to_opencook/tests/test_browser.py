@@ -179,6 +179,98 @@ def test_new_chat_clears_history(driver):
     assert driver.chat_page.locator(".ai-message").count() == 0
 
 
+def test_submission_does_not_activate_window(driver, source, answer, monkeypatch):
+    def unexpected_activation():
+        pytest.fail("Routine submission must not bring Chrome to the foreground")
+
+    monkeypatch.setattr(driver.chat_page, "bring_to_front", unexpected_activation)
+    assert driver.ask("background submission", source) == answer
+
+
+def test_chat_rotation_reuses_page_and_clears_history(driver, source, answer, monkeypatch):
+    assert driver.ask("first", source) == answer
+    page = driver.chat_page
+    pages = driver.context.pages
+    driver.history_messages = {"first": {"server_message_id": "old"}}
+
+    def unexpected_activation():
+        pytest.fail("Chat rotation must not bring Chrome to the foreground")
+
+    monkeypatch.setattr(page, "bring_to_front", unexpected_activation)
+    driver.new_chat()
+    assert driver.chat_page is page
+    assert driver.context.pages == pages
+    assert driver.history_messages == {}
+    assert driver.chat_page.locator("[data-round-id]").count() == 0
+    driver.chat_page.evaluate("reply=>window.reply=reply", answer)
+    assert driver.ask("second", source) == answer
+
+
+def test_restore_reuses_page_and_removes_history_observer(driver, monkeypatch):
+    page = driver.chat_page
+    driver.context.route(
+        "**/api/sns/web/v1/dqa/history/detail?*",
+        lambda route: route.fulfill(json={"success": True, "code": 0, "data": {"items": []}}),
+    )
+    body = HTML.replace(
+        "window.mode='finish';",
+        "fetch('/api/sns/web/v1/dqa/history/detail?conversation_id=missing-chat');"
+        "window.mode='finish';",
+    )
+    driver.context.route(CHAT + "*", lambda route: route.fulfill(body=body))
+    removed = []
+    original = page.remove_listener
+
+    def remove_listener(event, listener):
+        removed.append(event)
+        original(event, listener)
+
+    monkeypatch.setattr(page, "remove_listener", remove_listener)
+    with pytest.raises(TaskError) as error:
+        driver.restore_chat("missing-chat")
+    assert error.value.code == "history_unavailable"
+    assert driver.chat_page is page
+    assert removed == ["response"]
+
+
+def test_reused_page_keeps_current_history_listener_until_navigation(driver, monkeypatch):
+    body = HTML.replace(
+        "window.mode='finish';",
+        "messages.innerHTML='<div data-round-id=old>original</div>';"
+        "fetch('/api/sns/web/v1/dqa/history/detail?conversation_id=restored');"
+        "window.mode='finish';",
+    )
+    driver.context.route(CHAT + "*", lambda route: route.fulfill(body=body))
+    driver.context.route(
+        "**/api/sns/web/v1/dqa/history/detail?*",
+        lambda route: route.fulfill(json={"data": {"items": [{"message": {
+            "id": "server-old", "question": "original",
+            "simple_data": {"base_info": {"text": "answer"}},
+        }}]}}),
+    )
+    page = driver.chat_page
+    removed = []
+    original = page.remove_listener
+
+    def remove_listener(event, listener):
+        removed.append(listener)
+        original(event, listener)
+
+    monkeypatch.setattr(page, "remove_listener", remove_listener)
+    driver.restore_chat("restored")
+    page.wait_for_function("document.readyState === 'complete'")
+    page.wait_for_timeout(100)
+    assert driver.history_messages["original"]["server_message_id"] == "server-old"
+    observer = driver.history_observer
+    assert observer is not None and removed == []
+    driver.context.route(CHAT + "*", lambda route: route.fulfill(body=HTML))
+    driver.new_chat()
+    assert driver.chat_page is page
+    assert removed == [observer]
+    assert driver.history_observer is None
+    assert driver.history_messages == {}
+
+
 def test_noninteractive_login_requires_action(driver):
     driver.chat_page.evaluate("document.body.innerHTML='<div>扫码登录</div>'")
     with pytest.raises(TaskError) as error:

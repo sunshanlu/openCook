@@ -30,6 +30,7 @@ class SiteBrowser:
         self.raw_directory = None
         self.verified_note_id = None
         self.history_messages = {}
+        self.history_observer = None
 
     def __enter__(self):
         self.profile.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -147,7 +148,6 @@ class SiteBrowser:
     def wait_editor_ready(self):
         """Wait for the live composer, including replacement after chat navigation."""
         page = self.chat_page
-        page.bring_to_front()
         print("  等待点点输入框加载并可编辑…", flush=True)
         deadline = time.monotonic() + 60
         editor = page.locator(EDITOR)
@@ -183,10 +183,17 @@ class SiteBrowser:
             raise BrowserUnsupported("点点输入框未加载完成或不可编辑；未填写、未发送") from exc
         raise BrowserUnsupported("点点输入框未在可见窗口内稳定就绪；未填写、未发送")
 
+    def prepare_chat_page(self):
+        # Reuse the tab: opening a new target can raise headed Chrome on macOS.
+        if self.chat_page and self.history_observer:
+            self.chat_page.remove_listener("response", self.history_observer)
+        self.history_observer = None
+        if not self.chat_page or self.chat_page.is_closed():
+            self.chat_page = self.context.new_page()
+        self.history_messages = {}
+
     def new_chat(self):
-        if self.chat_page and not self.chat_page.is_closed():
-            self.chat_page.close()
-        self.chat_page = self.context.new_page()
+        self.prepare_chat_page()
         self.chat_page.goto(CHAT, wait_until="domcontentloaded")
         self.ensure_access(self.chat_page)
         editor = self.chat_page.locator(EDITOR)
@@ -348,10 +355,7 @@ class SiteBrowser:
                     (directory / f"{name}.html").write_text(page.content(), encoding="utf-8")
 
     def restore_chat(self, conversation_id: str):
-        if self.chat_page and not self.chat_page.is_closed():
-            self.chat_page.close()
-        self.chat_page = self.context.new_page()
-        self.history_messages = {}
+        self.prepare_chat_page()
         empty_history = []
 
         def observe_history(response):
@@ -386,21 +390,29 @@ class SiteBrowser:
                 pass
 
         self.chat_page.on("response", observe_history)
-        self.chat_page.goto(
-            CHAT + "?conversationId=" + conversation_id, wait_until="domcontentloaded"
-        )
-        self.ensure_access(self.chat_page)
-        self.wait_editor_ready()
-        if empty_history and self.chat_page.locator("[data-round-id]").count() == 0:
-            error = TaskError("history_unavailable", "旧会话历史接口确认无消息", retryable=False)
-            error.evidence = empty_history[-1]
-            raise error
-        self.chat_page.wait_for_selector("[data-round-id]", timeout=20000)
-        current = parse_qs(urlsplit(self.chat_page.url).query).get("conversationId", [None])[0]
-        if current != conversation_id:
-            raise BrowserUnsupported("历史会话恢复后 ID 不匹配；停止提交")
-        self.conversation_id = conversation_id
-        self.verified_note_id = None
+        self.history_observer = observe_history
+        try:
+            self.chat_page.goto(
+                CHAT + "?conversationId=" + conversation_id, wait_until="domcontentloaded"
+            )
+            self.ensure_access(self.chat_page)
+            self.wait_editor_ready()
+            if empty_history and self.chat_page.locator("[data-round-id]").count() == 0:
+                error = TaskError(
+                    "history_unavailable", "旧会话历史接口确认无消息", retryable=False
+                )
+                error.evidence = empty_history[-1]
+                raise error
+            self.chat_page.wait_for_selector("[data-round-id]", timeout=20000)
+            current = parse_qs(urlsplit(self.chat_page.url).query).get("conversationId", [None])[0]
+            if current != conversation_id:
+                raise BrowserUnsupported("历史会话恢复后 ID 不匹配；停止提交")
+            self.conversation_id = conversation_id
+            self.verified_note_id = None
+        except BaseException:
+            self.chat_page.remove_listener("response", observe_history)
+            self.history_observer = None
+            raise
 
     def request_snapshot(self, request: dict) -> dict:
         self.ensure_access(self.chat_page)
