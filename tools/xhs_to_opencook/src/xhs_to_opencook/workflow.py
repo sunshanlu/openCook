@@ -274,7 +274,7 @@ class Workflow:
                         self.driver().probe()
                     except (TaskError, PlaywrightError) as error:
                         runtime.block(getattr(error, "code", "probe_failed"), str(error),
-                                      kind="circuit")
+                                      kind=runtime.wait_kind(error))
                     os.environ.pop("XHS_RECOVERY_PROBE", None)
                 attempt = 0
                 while attempt < 6:
@@ -283,6 +283,8 @@ class Workflow:
                         result = self.driver().collect_profile(url, save)
                         break
                     except (TaskError, PlaywrightError) as error:
+                        if runtime.current() and runtime.network_error(error):
+                            runtime.block("network_unavailable", str(error))
                         if runtime.current() and getattr(error, "code", None) == "login_required":
                             runtime.current().wait_access(
                                 lambda: self.driver().ensure_access(self.driver().page),
@@ -433,10 +435,8 @@ class Workflow:
                         try:
                             self.driver().probe(source)
                         except (TaskError, PlaywrightError) as error:
-                            kind = "access" if getattr(error, "code", None) == "login_required" \
-                                else "circuit"
                             runtime.block(getattr(error, "code", "probe_failed"), str(error),
-                                          kind=kind)
+                                          kind=runtime.wait_kind(error))
                         os.environ.pop("XHS_RECOVERY_PROBE", None)
                 result = self.chats.process(source, stage, directory)
                 task["attempts"] = self.chats.current["attempt"]

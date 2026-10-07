@@ -274,3 +274,36 @@ def test_suspension_extends_operation_deadline_without_spending_budget(tmp_path)
     active.tick()
     assert active.data["deadline"] == deadline + 3600
     assert active.items["budgets"]["classify:note"] == 1
+
+
+def test_reference_network_failure_waits_without_consuming_retry(tmp_path, monkeypatch):
+    from test_chat import process, setup
+    from playwright.sync_api import Error
+    store, driver, manager = setup(tmp_path)
+    clock = [1000]
+    active = worker(tmp_path / "supervision", clock)
+    monkeypatch.setattr(runtime, "_worker", active)
+    def send(*args):
+        try:
+            raise Error("net::ERR_CONNECTION_RESET")
+        except Error as cause:
+            raise TaskError("reference_mismatch", "引用暂未加载") from cause
+    driver.begin_request = send
+    with pytest.raises(TaskError, match="引用暂未加载"):
+        process(store, manager, 1)
+    assert manager.pending()["status"] == "prepared"
+    assert manager.pending()["attempt"] == 1 and not manager.review_rows()
+    assert active.data["wait_kind"] == "platform"
+    store.close()
+
+
+def test_login_wait_is_budget_free_and_resume_preserves_item(tmp_path):
+    clock = [1000]
+    active = worker(tmp_path, clock)
+    active.begin_item("classify", "n")
+    checked = []
+    active.wait_access(lambda: checked.append(True),
+                       sleeper=lambda seconds: clock.__setitem__(0, clock[0] + seconds))
+    assert checked == [True]
+    assert active.data["status"] == "running" and active.data["item"] == "classify:n"
+    assert active.items["budgets"]["classify:n"] == 0

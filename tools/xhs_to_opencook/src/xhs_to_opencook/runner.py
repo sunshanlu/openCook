@@ -183,7 +183,7 @@ def run(args, *, browser_factory=SiteBrowser, sleeper=time.sleep, clock=time.tim
                                 driver.probe(source)
                             except (TaskError, PlaywrightError) as error:
                                 runtime.block(getattr(error, "code", "probe_failed"), str(error),
-                                              kind="circuit")
+                                              kind=runtime.wait_kind(error))
                             os.environ.pop("XHS_RECOVERY_PROBE", None)
                     review_scope.add(identity)
                     task["note_id"] = identity
@@ -268,6 +268,13 @@ def run(args, *, browser_factory=SiteBrowser, sleeper=time.sleep, clock=time.tim
                 except TaskError as exc:
                     if exc.code == "runtime_wait":
                         raise
+                    if runtime.current() and runtime.network_error(exc):
+                        runtime.block("network_unavailable", str(exc))
+                    if runtime.current() and exc.code == "login_required":
+                        runtime.current().wait_access(
+                            lambda: get_browser().ensure_access(get_browser().page), sleeper
+                        )
+                        runtime.block("access_restored", "访问恢复，核对原任务继续")
                     pending = chats.pending()
                     task["attempts"] = getattr(chats, "last_attempt", 0)
                     task.update(status="failed", error={"code": exc.code, "message": str(exc)})
@@ -323,6 +330,9 @@ def run(args, *, browser_factory=SiteBrowser, sleeper=time.sleep, clock=time.tim
                     store.save(identity, interrupted)
             exit_code = 130
         except (PlaywrightError, OSError, TaskError) as exc:
+            if runtime.current() and runtime.network_error(exc):
+                runtime.current().data.update(status="waiting", reason="network_unavailable",
+                                              message="网络暂不可用", wait_kind="platform")
             report["status"] = "blocked"
             report["error"] = {"code": "runtime_error", "message": str(exc)}
             for task in report["tasks"]:

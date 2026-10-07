@@ -185,9 +185,13 @@ class ChatSession:
         try:
             self.driver().begin_request(prompt, source, request, self.persist)
         except PlaywrightError as exc:
+            if runtime.current() and runtime.network_error(exc):
+                runtime.block("network_unavailable", str(exc))
             self.loaded_batch = None
             raise BrowserUnsupported("提交期间浏览器关闭；保存意图，续跑先核对历史") from exc
         except TaskError as exc:
+            if runtime.current() and runtime.network_error(exc):
+                runtime.block("network_unavailable", str(exc))
             if self.recoverable_page_error(exc) and request["status"] == "prepared":
                 raise
             if (
@@ -255,6 +259,8 @@ class ChatSession:
             try:
                 return driver.wait_request(request, 6, self.persist)
             except TaskError as exc:
+                if runtime.current() and runtime.network_error(exc):
+                    runtime.block("network_unavailable", str(exc))
                 if exc.code not in {"answer_timeout", "empty_answer"}:
                     raise
                 if request.get("blocked_reason") in {
@@ -522,6 +528,8 @@ class ChatSession:
                     self.persist(request)
                     return
             except TaskError as exc:
+                if exc.code == "runtime_wait":
+                    raise
                 if exc.code in SESSION_BLOCK_CODES:
                     if runtime.current():
                         runtime.block(exc.code, str(exc))
@@ -598,7 +606,7 @@ class ChatSession:
                     "type": type(exc).__name__, "message": str(exc),
                 })
                 raise
-            if runtime.current() and any(x in str(failure) for x in ("net::ERR_", "Connection")):
+            if runtime.current() and runtime.network_error(failure):
                 runtime.block("network_unavailable", str(failure))
             self.loaded_batch = None
             recovery.update(failures=recovery["failures"] + 1,

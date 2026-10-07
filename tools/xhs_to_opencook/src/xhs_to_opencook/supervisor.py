@@ -63,6 +63,25 @@ def terminate_owned(record, *, grace=30):
         raise RuntimeError("旧工作进程未退出")
 
 
+def cleanup_children(worker):
+    """Only descendants journaled by this worker, with unchanged startup identity."""
+    for child in reversed(worker.get("children", [])):
+        if owned_process(child):
+            try:
+                os.kill(child["pid"], signal.SIGTERM)
+            except ProcessLookupError:
+                pass
+    end = time.monotonic() + 5
+    while time.monotonic() < end and any(owned_process(c) for c in worker.get("children", [])):
+        time.sleep(0.1)
+    for child in worker.get("children", []):
+        if owned_process(child):
+            try:
+                os.kill(child["pid"], signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+
+
 class Supervisor:
     def __init__(self, directory, *, clock=time.time):
         self.directory, self.clock = Path(directory), clock
@@ -152,7 +171,12 @@ class Supervisor:
 
     def complete_worker(self, code, worker):
         self.job.pop("worker", None)
+        if self.child and self.child.stdout:
+            self.child.stdout.close()
         self.child = None
+        if code is not None and code < 0:
+            self.crash("工作进程异常退出")
+            return
         if worker.get("status") == "waiting":
             if worker.get("wait_kind") == "access" and code == 130:
                 self.job["status"] = "paused"
@@ -171,8 +195,6 @@ class Supervisor:
         elif code == 130:
             self.job["status"] = "paused"
             self.save()
-        elif code is not None and code < 0:
-            self.crash("工作进程异常退出")
         elif worker.get("status") == "finished" and (worker.get("error") or code == 1):
             self.wait("runtime_error", worker.get("error", "程序或状态异常，请检查日志"), "manual")
         else:
@@ -202,6 +224,7 @@ class Supervisor:
                     self.child.wait(timeout=10)
                 self.job.pop("worker", None)
                 self.child = None
+                cleanup_children(read_json(self.directory / "worker.json"))
             self.job["status"] = "stopped" if action == "stop" else "paused"
             self.save()
             return action != "stop"
@@ -232,6 +255,7 @@ class Supervisor:
         if not alive or code is not None:
             if self.child:
                 self.drain_log()
+            cleanup_children(worker)
             self.complete_worker(code if code is not None else worker.get("exit_code"), worker)
             return True
         if worker.get("job_id") == self.job["job_id"]:
@@ -262,6 +286,7 @@ class Supervisor:
                     self.child.wait(timeout=10)
                 self.job.pop("worker", None)
                 self.child = None
+                cleanup_children(worker)
                 self.crash("工作进程心跳或操作截止时间超时")
         elif now - self.job.get("started_worker_at", now) > 60:
             terminate_owned(record)
@@ -287,6 +312,7 @@ class Supervisor:
                     self.job["status"] = "ready"
             elif self.job["status"] in {"running", "waiting_access"}:
                 self.job["status"] = "ready"
+            cleanup_children(read_json(self.directory / "worker.json"))
             while self.step():
                 time.sleep(1)
             self.save()

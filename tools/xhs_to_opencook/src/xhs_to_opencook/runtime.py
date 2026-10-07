@@ -3,6 +3,7 @@
 import json
 import os
 import re
+import subprocess
 import threading
 import time
 from contextlib import contextmanager
@@ -24,6 +25,26 @@ def redact(value):
         r'(?i)((?:xsec_token|access_token|authorization|cookie|password|secret)'
         r'[\s"\x27:=]+)[^\s&"\x27<>]+', r'\1<REDACTED>', str(value)
     )
+
+
+def network_error(error):
+    cause = error
+    while cause:
+        if any(text in str(cause) for text in (
+            "net::ERR_", "ECONNRESET", "ECONNREFUSED", "ENOTFOUND", "Connection refused"
+        )):
+            return True
+        cause = cause.__cause__
+    return False
+
+
+def wait_kind(error):
+    code = getattr(error, "code", None)
+    if code == "login_required":
+        return "access"
+    if code == "platform_restricted" or network_error(error):
+        return "platform"
+    return "circuit"
 
 
 class WorkerRuntime:
@@ -51,10 +72,32 @@ class WorkerRuntime:
     def _heartbeat(self):
         while not self.closed.wait(10):
             try:
+                self.register_children()
                 self.tick()
-            except OSError:
+            except (OSError, subprocess.TimeoutExpired):
                 # Surface journal failures on the main thread; do not silently lose control.
                 self.data["journal_failed"] = True
+
+    def register_children(self):
+        result = subprocess.run(["ps", "-axo", "pid=,ppid=,stat=,lstart=,command="],
+                                capture_output=True, text=True, timeout=5)
+        rows = []
+        for line in result.stdout.splitlines():
+            fields = line.strip().split(maxsplit=3)
+            if len(fields) == 4 and fields[0].isdigit() and fields[1].isdigit():
+                rows.append((int(fields[0]), int(fields[1]), fields[2], fields[3]))
+        owned = {os.getpid()}
+        descendants = []
+        changed = True
+        while changed:
+            changed = False
+            for pid, parent, state, identity in rows:
+                if parent in owned and pid not in owned and not state.startswith("Z"):
+                    owned.add(pid)
+                    descendants.append({"pid": pid, "identity": identity})
+                    changed = True
+        with self.lock:
+            self.data["children"] = descendants
 
     def tick(self):
         with self.lock:
