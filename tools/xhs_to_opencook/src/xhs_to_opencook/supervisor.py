@@ -126,8 +126,12 @@ class Supervisor:
         self.notify(f"waiting:{reason}:{self.job.get('wait_episode', 0)}")
 
     def launch(self, *, probe=False):
-        with state_lock(Path(self.job["state_dir"])):
-            pass
+        try:
+            with state_lock(Path(self.job["state_dir"])):
+                pass
+        except Exception as error:
+            self.wait("state_unavailable", str(error), "manual")
+            return
         self.directory.joinpath("worker.json").unlink(missing_ok=True)
         command = [sys.executable, "-m", "xhs_to_opencook.cli", *self.job["argv"]]
         if "--non-interactive" not in command:

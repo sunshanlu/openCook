@@ -508,7 +508,8 @@ class ChatSession:
         request = self.pending()
         if not request:
             raise error
-        end = self.clock() + 60
+        end = request.setdefault("reconcile_until", self.clock() + 60)
+        self.persist(request)
         runtime.operation("reconcile_unknown_submission", 90)
         driver = self.driver()
         if hasattr(driver, "chat_page") and not driver.chat_page \
@@ -525,11 +526,14 @@ class ChatSession:
                 if snapshot.get("matches") == 1 and snapshot.get("conversation_id"):
                     request.update(status="submitted", conversation_id=snapshot["conversation_id"],
                                    round_id=snapshot["round_id"])
+                    request.pop("reconcile_until", None)
                     self.persist(request)
                     return
             except TaskError as exc:
                 if exc.code == "runtime_wait":
                     raise
+                if runtime.current() and runtime.network_error(exc):
+                    runtime.block("network_unavailable", str(exc))
                 if exc.code in SESSION_BLOCK_CODES:
                     if runtime.current():
                         runtime.block(exc.code, str(exc))
