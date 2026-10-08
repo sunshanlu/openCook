@@ -352,3 +352,22 @@ xhs-to-opencook resume --worker extract
 无 `--worker` 的 pause/resume/stop 控制整个任务；按阶段恢复不会重启正常的一边。
 迁移前保持停止并备份，已验证且业务结果已提交的旧提取请求补齐确认；其他未决
 提取请求必须在原账号收尾。换账号前封存旧提取批次，成功缓存和审核记录保留。
+
+### 有上限的访问节奏试验
+
+新试验入口（已有任务须先停止，迁移续跑应保留当前job和items，不重置）：
+
+```bash
+xhs-to-opencook supervise pipeline --profiles bloggers.txt --output ./output --skip-collect \
+  --execution parallel --trial-stage classify --interval 15 \
+  --trial-batch-size 50 --trial-rest 900 --trial-batches 10
+```
+
+每账号发送意图、修正和重试计入批次；缓存和原已发请求恢复不占新名额。每批最多
+50次提交，上一请求收尾后休息15分钟，再处理下一批；10批最多500次，达到上限后
+等待评估，不自动开启新试验。配额与休息期限存SQLite，普通resume不重置计数。
+试验只启动指定阶段，另一阶段保持暂停；先分别评估后再决定并行运行。
+`job.json.experiment.progress`展示计数与休息期限，SQLite pacing_events记录时间、
+阶段试验账号、请求标识、发送意图和冻结事件，不保存登录凭证。
+出现platform_restricted立即冻结该账号，不再自动探测，处理后须显式resume。
+这些参数是试验起点，不代表平台认可的安全阈值。

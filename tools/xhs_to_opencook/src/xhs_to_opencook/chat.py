@@ -47,6 +47,7 @@ class ChatSession:
         reset_browser=None,
         stage_scope=None,
         account_id=None,
+        pacing=None,
     ):
         if isinstance(capacity, bool) or not isinstance(capacity, int) or capacity <= 0:
             raise ValueError("chat batch size must be a positive integer")
@@ -60,6 +61,7 @@ class ChatSession:
         self.reset_browser = reset_browser
         self.stage_scope = stage_scope
         self.account_id = account_id
+        self.pacing = pacing
 
     def pause(self, seconds):
         runtime.sleep(seconds, self.sleeper)
@@ -139,7 +141,14 @@ class ChatSession:
             if request.get("account_id", self.account_id) != self.account_id:
                 raise TaskError("account_mismatch", "禁止修改其他账号的请求", retryable=False)
             request["account_id"] = self.account_id
-        self.store.stage_save("chat_requests", request["request_id"], request)
+        if self.pacing and request.get("status") == "sending":
+            with self.store.db:
+                self.store.db.execute("BEGIN IMMEDIATE")
+                self.pacing.reserve(request)
+                self.store.db.execute("INSERT OR REPLACE INTO chat_requests VALUES (?,?)",
+                    (request["request_id"], json.dumps(request, ensure_ascii=False)))
+        else:
+            self.store.stage_save("chat_requests", request["request_id"], request)
         if request.get("conversation_id") and request.get("round_id"):
             batch = self.store.stage_get("chat_batches", request["batch_id"])
             existing = batch.get("conversation_id")
@@ -153,6 +162,10 @@ class ChatSession:
             write_json(self.store.directory / request["raw_directory"] / "request.json", request)
 
     def load(self, batch):
+        if self.pacing:
+            pending = self.pending()
+            if not pending or not (pending.get("sent_at") and pending["status"] != "prepared"):
+                self.pacing.ready()
         if self.account_id and batch.get("account_id") != self.account_id:
             raise TaskError("account_mismatch", "禁止恢复其他账号的会话", retryable=False)
         if self.loaded_batch == batch["batch_id"]:
@@ -171,6 +184,8 @@ class ChatSession:
         self.loaded_batch = batch["batch_id"]
 
     def batch(self, stage, note):
+        if self.pacing:
+            self.pacing.ready()
         self.throttle()
         rows = [b for b in self.batches() if b["stage"] == stage
                 and (not self.account_id or b.get("account_id") == self.account_id)]
@@ -209,6 +224,8 @@ class ChatSession:
 
     def begin(self, prompt, source, request):
         runtime.check()
+        if self.pacing:
+            self.pacing.ready()
         if self.account_id:
             request["account_id"] = self.account_id
         try:
@@ -583,6 +600,10 @@ class ChatSession:
         self.isolate_review(source, stage, directory, "submission_unknown", str(error))
 
     def process(self, source, stage, directory):
+        if self.pacing:
+            pending = self.pending()
+            if not pending or not pending.get("sent_at"):
+                self.pacing.ready()
         """Own all recovery for one video; callers never repeat this operation."""
         path = self.store.directory / "recovery" / f"{stage}-{source.note_id}.json"
         if self.review_for(stage, source.note_id):

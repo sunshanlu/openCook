@@ -61,6 +61,12 @@ def worker(directory, stage):
         ),
         time.sleep,
     )
+    if job.get("experiment"):
+        from .pacing import AccountPacing
+
+        flow.chats.pacing = AccountPacing(
+            store, job["experiment"]["id"], args.account_id, **job["experiment"]["settings"]
+        )
     # Workers publish no common files. Progress derives from the committed business DB.
     flow.snapshot = lambda **kw: None
     flow.archive = lambda identity: None
@@ -165,6 +171,18 @@ class ParallelCoordinator:
     def save(self):
         self.job.update(supervisor_pid=os.getpid(), supervisor_heartbeat_at=self.clock())
         self.job["queue"] = self.store.queue_counts(self.job["job_id"])
+        if self.job.get("experiment"):
+            from .pacing import AccountPacing
+
+            self.job["experiment"]["progress"] = {
+                s: AccountPacing(
+                    self.store,
+                    self.job["experiment"]["id"],
+                    self.job["accounts"][s]["account_id"],
+                    **self.job["experiment"]["settings"],
+                ).state()
+                for s in STAGES
+            }
         for record in self.job["workers"].values():
             record["next_check_label"] = (
                 time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(record["next_check"]))
@@ -353,6 +371,18 @@ class ParallelCoordinator:
         )
         if kind == "manual" or (kind == "circuit" and record.get("probe_failures", 0) >= 3):
             record["next_check"] = None
+        if record.get("reason") == "platform_restricted":
+            record["next_check"] = None
+            if self.job.get("experiment"):
+                from .pacing import AccountPacing
+
+                gate = AccountPacing(
+                    self.store,
+                    self.job["experiment"]["id"],
+                    self.job["accounts"][stage]["account_id"],
+                    **self.job["experiment"]["settings"],
+                )
+                gate.block("platform_restricted")
         self.save()
         self.notify(f"waiting:{stage}:{record['wait_attempt']}:{self.job.get('wait_episode', 0)}")
         self.publish(force=True)
@@ -445,6 +475,15 @@ class ParallelCoordinator:
                         and record["status"] != "running"
                         and record["status"] not in TERMINAL
                     ):
+                        if self.job.get("experiment"):
+                            from .pacing import AccountPacing
+
+                            AccountPacing(
+                                self.store,
+                                self.job["experiment"]["id"],
+                                self.job["accounts"][stage]["account_id"],
+                                **self.job["experiment"]["settings"],
+                            ).release()
                         record.update(
                             status="ready",
                             restarts=[],
@@ -657,6 +696,14 @@ def initialize(args, directory, *, job=None):
         "created_at": time.time(),
         "stage": "classify + extract",
     }
+    if getattr(args, "trial_stage", None):
+        value["experiment"] = {
+            "id": uuid4().hex, "stage": args.trial_stage,
+            "settings": {"interval": args.interval, "batch_size": args.trial_batch_size,
+                         "rest_seconds": args.trial_rest, "batches": args.trial_batches}}
+        for stage in STAGES:
+            if stage != args.trial_stage:
+                value["workers"][stage]["status"] = "paused"
     with StoreContext(args.state_dir) as store:
         from .accounts import migrate_accounts
 

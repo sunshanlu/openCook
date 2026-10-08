@@ -49,6 +49,10 @@ def main(argv=None) -> int:
             if name in {"pipeline", "classify"}:
                 command.add_argument("--reclassify", action="store_true")
             if name == "pipeline":
+                command.add_argument("--trial-stage", choices=("classify", "extract"))
+                command.add_argument("--trial-batch-size", type=positive_integer, default=50)
+                command.add_argument("--trial-rest", type=positive, default=900)
+                command.add_argument("--trial-batches", type=positive_integer, default=10)
                 command.add_argument(
                     "--execution", choices=("serial", "parallel"), default="serial"
                 )
