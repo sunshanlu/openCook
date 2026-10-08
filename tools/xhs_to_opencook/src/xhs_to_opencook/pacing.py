@@ -42,7 +42,8 @@ class AccountPacing:
                     account,
                     json.dumps(
                         {
-                            "count": 0,
+                            "started_at": self.clock(),
+                        "count": 0,
                             "last_sent": None,
                             "rest_until": None,
                             "blocked": False,
@@ -147,6 +148,8 @@ class AccountPacing:
     def reserve(self, request):
         """Commit the slot in the same transaction as the sending intent."""
         value = self.state()
+        if request["sent_at"] < value.get("started_at", 0):
+            return
         existing = self.store.db.execute(
             "SELECT 1 FROM pacing_slots WHERE experiment=? AND account=? AND request_id=?",
             (self.experiment, self.account, request["request_id"]),
