@@ -83,33 +83,126 @@ def parse_classification(text: str, expected: str) -> Classification:
 
 
 def parse_answer(text: str) -> Extraction:
-    return parse_json_model(text, Extraction)
+    return parse_json_model(text, Extraction, repair=True)
 
 
-def parse_json_model(text: str, model):
-    """Only parse actual JSON (optionally fenced); never reconstruct missing fields."""
+# Cutting inside these arrays would leave a valid-looking recipe that silently lost content.
+CORE_ARRAYS = frozenset({"recipes", "ingredients", "steps"})
+CORE_FIELDS = frozenset({"ingredients", "steps"})
+
+
+def salvage_truncated(payload: str) -> str | None:
+    """Close a JSON text cut off mid-way, dropping the unfinished tail.
+
+    Only a cut that falls in optional recipe fields is salvaged. A cut inside the recipe
+    list, ingredients or steps returns None, because closing those would hide missing content.
+    """
+    stack, in_string, escaped, start = [], False, False, 0
+    commas = []  # (index, closers, safe) for every comma outside strings
+    for index, char in enumerate(payload):
+        if in_string:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+                top = stack[-1] if stack else None
+                if top and top["type"] == "{" and top["expect_key"]:
+                    top["key"] = json.loads(payload[start : index + 1])
+            continue
+        if char == '"':
+            in_string, start = True, index
+        elif char in "{[":
+            stack.append({"type": char, "key": None, "expect_key": char == "{"})
+        elif char in "}]":
+            if not stack:
+                return None
+            stack.pop()
+        elif char == ":" and stack:
+            stack[-1]["expect_key"] = False
+        elif char == ",":
+            if stack and stack[-1]["type"] == "{":
+                stack[-1]["expect_key"] = True
+            commas.append((index, _closers(stack), _cut_is_safe(stack)))
+    candidates = []
+    tail = payload.rstrip()
+    ends_cleanly = tail and (tail[-1] in '"}]' or tail.endswith(("true", "false", "null")))
+    if stack and not in_string and ends_cleanly:
+        candidates.append((len(tail), _closers(stack), _cut_is_safe(stack)))
+    candidates += [(index, closers, safe) for index, closers, safe in reversed(commas)]
+    for end, closers, safe in candidates:
+        try:
+            json.loads(payload[:end] + closers)
+        except ValueError:
+            continue
+        return payload[:end] + closers if safe else None
+    return None
+
+
+def _closers(stack):
+    return "".join("}" if frame["type"] == "{" else "]" for frame in reversed(stack))
+
+
+def _cut_is_safe(stack):
+    # The innermost object's key names the field just finished, not a container we are inside.
+    keys = [frame["key"] for frame in stack[:-1] if frame["type"] == "{"]
+    if any(key in CORE_FIELDS for key in keys):
+        return False
+    return not (stack and stack[-1]["type"] == "[" and keys and keys[-1] in CORE_ARRAYS)
+
+
+def _unfence(text: str, lenient: bool) -> str:
     payload = text.strip()
     if payload.startswith("```"):
         lines = payload.splitlines()
-        if lines[0].strip().lower() not in {"```", "```json"} or lines[-1].strip() != "```":
+        closed = len(lines) > 1 and lines[-1].strip() == "```"
+        if lines[0].strip().lower() not in {"```", "```json"} or not (closed or lenient):
             raise TaskError("json_syntax_invalid", "JSON 代码围栏不完整或语言不支持")
-        payload = "\n".join(lines[1:-1])
+        payload = "\n".join(lines[1:-1] if closed else lines[1:])
+    return payload
 
-    def reject_constant(value):
-        raise ValueError(f"non-finite JSON number: {value}")
 
-    def unique_keys(pairs):
-        result = {}
-        for key, value in pairs:
-            if key in result:
-                raise ValueError(f"duplicate JSON key: {key}")
-            result[key] = value
-        return result
+def parse_json_model(text: str, model, *, repair: bool = False):
+    """Parse actual JSON (optionally fenced); never invent missing fields.
+
+    With repair, a text cut off inside optional fields is closed locally (see
+    salvage_truncated); anything else still fails with the original error.
+    """
+
+    def strict(payload):
+        def reject_constant(value):
+            raise ValueError(f"non-finite JSON number: {value}")
+
+        def unique_keys(pairs):
+            result = {}
+            for key, value in pairs:
+                if key in result:
+                    raise ValueError(f"duplicate JSON key: {key}")
+                result[key] = value
+            return result
+
+        return json.loads(payload, parse_constant=reject_constant, object_pairs_hook=unique_keys)
 
     try:
-        obj = json.loads(payload, parse_constant=reject_constant, object_pairs_hook=unique_keys)
-    except (ValueError, TypeError) as exc:
-        raise TaskError("json_syntax_invalid", f"JSON 格式或语法错误：{exc}") from exc
+        payload = _unfence(text, lenient=False)
+        obj = strict(payload)
+    except (TaskError, ValueError, TypeError) as exc:
+        failure = exc
+        if isinstance(exc, TaskError):
+            if exc.code != "json_syntax_invalid" or not repair:
+                raise
+        else:
+            failure = TaskError("json_syntax_invalid", f"JSON 格式或语法错误：{exc}")
+        if not repair:
+            raise failure from exc
+        try:
+            repaired = salvage_truncated(_unfence(text, lenient=True))
+            if repaired is None:
+                raise failure from exc
+            return model.model_validate(strict(repaired))
+        except (TaskError, ValueError, TypeError):
+            raise failure from exc
     try:
         return model.model_validate(obj)
     except (ValueError, TypeError) as exc:
@@ -128,7 +221,7 @@ class BoundExtraction(Model):
 
 def parse_bound_answer(text: str, stage: str, note: str, request: str):
     model = BoundClassification if stage == "classify" else BoundExtraction
-    result = parse_json_model(text, model)
+    result = parse_json_model(text, model, repair=stage != "classify")
     if result.note_id != note or result.request_id != request:
         raise TaskError("reference_mismatch", "回答的笔记 ID 或请求标识与当前提交不同")
     if stage == "classify":

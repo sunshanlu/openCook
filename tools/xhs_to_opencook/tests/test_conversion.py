@@ -126,3 +126,71 @@ def test_links_allowlist_bom_and_paths(tmp_path, source):
                 "https://name@xhslink.com/a", "https://xhslink.com:90/a"]:
         with pytest.raises(TaskError):
             validate_url(url)
+
+
+def cut(answer, marker, keep=0):
+    """The answer truncated just after the first `marker` (plus `keep` more characters)."""
+    return answer[: answer.index(marker) + len(marker) + keep]
+
+
+@pytest.mark.parametrize("marker,keep", [
+    ('"notes":["用干净容器"', 0),  # complete value, only brackets missing
+    ('"notes":["用干净容器",', 3),  # cut inside a later optional string
+    ('"notes":[', 0),  # empty optional list left open
+])
+def test_truncated_optional_tail_is_closed(payload, marker, keep):
+    payload["recipes"][0]["notes"].append("再加一条注意事项")
+    text = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+    recipe = parse_answer(cut(text, marker, keep)).recipes[0]
+    assert [step for step in recipe.steps] == ["拌匀", "冷藏一夜"]
+    assert len(recipe.ingredients) == 3
+    assert "再加一条注意事项" not in recipe.notes
+
+
+def test_truncated_fence_and_description_are_salvaged(payload):
+    payload["recipes"][0]["description"] = "清爽开胃"
+    payload["recipes"][0]["servings"] = 4
+    text = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+    truncated = "```json\n" + cut(text, '"description":"清爽开胃"')
+    recipe = parse_answer(truncated).recipes[0]
+    assert recipe.description == "清爽开胃"
+    assert recipe.servings is None
+
+
+@pytest.mark.parametrize("marker,keep", [
+    ('"steps":["拌匀"', 0),  # steps list cut: a step would silently vanish
+    ('"steps":["拌匀",', 2),
+    ('"ingredients":[{"name":"白糖"', 0),  # ingredients list cut
+    ('"original_amount":"三平勺","estimated":false', 0),  # inside an ingredient
+    ('"name":"腌萝卜"', 0),  # required lists not started yet
+])
+def test_truncation_in_core_content_is_never_closed(payload, marker, keep):
+    text = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+    with pytest.raises(TaskError) as error:
+        parse_answer(cut(text, marker, keep))
+    assert error.value.code == "json_syntax_invalid"
+
+
+def test_second_recipe_cut_off_is_not_silently_dropped(payload):
+    payload["recipes"].append(copy.deepcopy(payload["recipes"][0]))
+    text = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+    first_end = text.index('"用干净容器"]}') + len('"用干净容器"]}')
+    with pytest.raises(TaskError):
+        parse_answer(text[: first_end + 1])  # ends right after the comma before recipe two
+    with pytest.raises(TaskError):
+        parse_answer(text[: first_end + 40])
+
+
+def test_truncated_number_is_dropped_not_guessed(payload):
+    payload["recipes"][0]["servings"] = 45
+    text = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+    recipe = parse_answer(cut(text, '"servings":4')).recipes[0]  # could have been 45
+    assert recipe.servings is None  # dropped, never read as 4
+
+
+def test_repair_is_extraction_only(payload):
+    from xhs_to_opencook.models import Classification, parse_json_model
+
+    with pytest.raises(TaskError) as error:
+        parse_json_model('{"note_id":"6ac482bf000000001c02c2e0",', Classification)
+    assert error.value.code == "json_syntax_invalid"

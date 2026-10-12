@@ -3,7 +3,7 @@ import json
 from .models import Source
 
 CLASSIFICATION_VERSION = 3
-EXTRACTION_VERSION = 2
+EXTRACTION_VERSION = 3
 
 
 def classification_prompt(source: Source) -> str:
@@ -38,7 +38,11 @@ def recipe_prompt(source: Source) -> str:
         "缺失写未说明。只估算用量，不添加食材、操作、营养、份数或时间。"
         "可选description、servings、prep_time/cook_time/total_time；份数须为明确正整数，"
         "时间只填明确PT时长，否则省略或null；一夜/至熟留在steps或notes。"
-        "无法读取或无菜谱就说明，禁止编造。只输出完整紧凑JSON，无Markdown；"
+        "无法读取或无菜谱就说明，禁止编造。"
+        "输出务必精简以免被截断：每步不超过50字，notes最多3条且每条不超过30字，"
+        "description不超过40字，purpose不超过10字，不写寒暄和解释。"
+        "字段顺序固定：name、ingredients、steps在前，notes、description及时间在后。"
+        "只输出完整紧凑JSON，无Markdown；"
     )
 
 
