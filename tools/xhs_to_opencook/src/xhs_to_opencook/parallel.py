@@ -429,6 +429,7 @@ class ParallelCoordinator:
             stage=stage,
             playwright=self.playwright,
             account_id=self.job["accounts"][stage]["account_id"],
+            gate=self.throttle(stage),
             timeout=self.args.timeout,
             interactive=False,
         ) as browser:

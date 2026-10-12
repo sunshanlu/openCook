@@ -144,3 +144,22 @@ def test_two_profiles_have_separate_cookies_and_local_close(tmp_path):
         finally:
             first.close()
             second.close()
+
+
+def test_attach_navigation_is_counted_by_the_gate(tmp_path):
+    from xhs_to_opencook.parallel_browser import AttachedBrowser
+
+    calls = []
+
+    class Gate:
+        def access(self):
+            calls.append("access")
+
+    class Page:
+        def goto(self, url, **options):
+            calls.append("goto")
+
+    browser = AttachedBrowser(tmp_path / "profile", directory=tmp_path, stage="classify",
+                              gate=Gate())
+    browser.visit(Page(), "https://www.xiaohongshu.com/", wait_until="domcontentloaded")
+    assert calls == ["access", "goto"]  # Counted before the navigation happens.

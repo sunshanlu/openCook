@@ -111,8 +111,11 @@ class ChromeOwner:
 
 
 class AttachedBrowser(SiteBrowser):
-    def __init__(self, profile, *, directory, stage, playwright=None, account_id=None, **kwargs):
+    def __init__(
+        self, profile, *, directory, stage, playwright=None, account_id=None, gate=None, **kwargs
+    ):
         super().__init__(profile, **kwargs)
+        self.visit_gate = gate  # Set before __enter__, which may navigate while attaching.
         self.directory, self.stage = Path(directory), stage
         self.remote = None
         self.borrowed_playwright = playwright
@@ -142,7 +145,7 @@ class AttachedBrowser(SiteBrowser):
                             if page.url.startswith("about:"):
                                 from .browser import CHAT
 
-                                page.goto(CHAT, wait_until="domcontentloaded")
+                                self.visit(page, CHAT, wait_until="domcontentloaded")
                             self.verify_account()
                         return self
                 time.sleep(0.1)
