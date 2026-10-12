@@ -210,3 +210,38 @@ def test_ends_unfinished_tells_cut_off_from_malformed(text, expected):
     from xhs_to_opencook.models import ends_unfinished
 
     assert ends_unfinished(text) is expected
+
+
+@pytest.mark.parametrize("tail", ["}", "]}", " }\n", "}}]"])
+def test_stray_closers_after_a_complete_document_are_dropped(answer, tail):
+    assert parse_answer(answer + tail) == parse_answer(answer)
+
+
+@pytest.mark.parametrize("tail", ['{"recipes": []}', "说明", ',"x":1', "}说明", "\n```"])
+def test_anything_but_closers_after_the_document_is_still_rejected(answer, tail):
+    with pytest.raises(TaskError) as error:
+        parse_answer(answer + tail)
+    assert error.value.code == "json_syntax_invalid"
+
+
+def test_stray_closers_are_only_repaired_for_extraction(answer):
+    from xhs_to_opencook.models import Classification, parse_json_model
+
+    text = '{"note_id":"6ac482bf000000001c02c2e0","verdict":"tutorial","reason":"做法"}}'
+    with pytest.raises(TaskError) as error:
+        parse_json_model(text, Classification)
+    assert error.value.code == "json_syntax_invalid"
+    assert parse_json_model(text, Classification, repair=True).verdict == "tutorial"
+
+
+def test_stray_closers_keep_duplicate_key_protection(payload):
+    text = json.dumps(payload, ensure_ascii=False).replace('"name"', '"name": "x", "name"', 1)
+    with pytest.raises(TaskError):
+        parse_answer(text + "}")
+
+
+def test_a_complete_document_with_trailing_text_is_never_trimmed_as_truncated(payload):
+    payload["recipes"][0]["notes"] = ["不能被悄悄丢掉"]
+    text = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+    with pytest.raises(TaskError):
+        parse_answer(text + "以上是菜谱")

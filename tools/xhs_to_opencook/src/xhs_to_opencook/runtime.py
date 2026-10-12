@@ -150,16 +150,20 @@ class WorkerRuntime:
         finally:
             self.operation("processing", 180)
 
-    def outcome(self, stage, identity, code=None, *, neutral=False):
-        """Record how one item ended. A neutral failure is the item's fault, not the account's:
-        it neither opens the circuit nor counts as a failed probe, since the page answered."""
+    def outcome(self, stage, identity, code=None, *, neutral=False, answered=False):
+        """Record how one item ended.
+
+        A neutral failure is the item's fault, not the account's: it never counts toward the
+        circuit. An answered failure (the page replied but the reply was malformed) still
+        counts toward the circuit, because many in a row point at the prompt, but it proves the
+        account and page work, so it cannot fail a recovery probe."""
         key = f"{stage}:{identity}"
         with self.lock:
             self.tick()
             self.data.pop("item", None)
             if self.probing:
                 self.probing = False
-                if code and not neutral:
+                if code and not (neutral or answered):
                     self.items["seen"].append(key)
                     write_json(self.items_path, self.items)
                     self.block("probe_failed", "恢复试探仍失败，继续全局等待", kind="circuit")

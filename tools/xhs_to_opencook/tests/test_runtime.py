@@ -337,3 +337,23 @@ def test_login_wait_is_budget_free_and_resume_preserves_item(tmp_path):
     assert checked == [True]
     assert active.data["status"] == "running" and active.data["item"] == "classify:n"
     assert active.items["budgets"]["classify:n"] == 0
+
+
+def test_answered_failure_passes_a_probe_but_still_counts_toward_the_circuit(tmp_path):
+    clock = [1000]
+    active = worker(tmp_path, clock)
+    active.probing = True
+    active.outcome("extract", "a", "json_syntax_invalid", answered=True)
+    assert active.data["probe_succeeded"] is True  # The page replied: account and page work.
+    assert [x["code"] for x in active.items["outcomes"]] == ["json_syntax_invalid"]
+    active.outcome("extract", "b", "json_syntax_invalid", answered=True)
+    with pytest.raises(TaskError, match="连续失败"):
+        active.outcome("extract", "c", "json_syntax_invalid", answered=True)  # Still trips.
+
+
+def test_unanswered_failure_still_fails_a_probe(tmp_path):
+    clock = [1000]
+    active = worker(tmp_path, clock)
+    active.probing = True
+    with pytest.raises(TaskError, match="试探仍失败"):
+        active.outcome("extract", "a", "empty_answer", answered=False)

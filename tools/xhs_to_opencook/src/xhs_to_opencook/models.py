@@ -125,6 +125,8 @@ def salvage_truncated(payload: str) -> str | None:
             if stack and stack[-1]["type"] == "{":
                 stack[-1]["expect_key"] = True
             commas.append((index, _closers(stack), _cut_is_safe(stack)))
+    if not stack and not in_string:
+        return None  # Complete or malformed in the middle, not cut off: nothing to close.
     candidates = []
     tail = payload.rstrip()
     ends_cleanly = tail and (tail[-1] in '"}]' or tail.endswith(("true", "false", "null")))
@@ -166,6 +168,22 @@ def ends_unfinished(text: str) -> bool:
         elif char in "}]":
             depth -= 1
     return bool(payload.strip()) and (in_string or depth > 0)
+
+
+def drop_stray_closers(payload: str) -> str | None:
+    """A complete JSON document followed only by extra `}` or `]` -> the document itself.
+
+    Nothing is added or guessed: the whole document was already there, and anything other
+    than closing brackets after it (prose, a second value) leaves it unrepaired.
+    """
+    try:
+        _, end = json.JSONDecoder().raw_decode(payload.lstrip())
+    except ValueError:
+        return None
+    rest = payload.lstrip()[end:]
+    if rest.strip() and set(rest) <= set("}] \t\r\n"):
+        return payload.lstrip()[:end]
+    return None
 
 
 def _closers(stack):
@@ -225,7 +243,8 @@ def parse_json_model(text: str, model, *, repair: bool = False):
         if not repair:
             raise failure from exc
         try:
-            repaired = salvage_truncated(_unfence(text, lenient=True))
+            lenient = _unfence(text, lenient=True)
+            repaired = drop_stray_closers(lenient) or salvage_truncated(lenient)
             if repaired is None:
                 raise failure from exc
             return model.model_validate(strict(repaired))
