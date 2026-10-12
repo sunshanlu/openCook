@@ -25,10 +25,17 @@ from .supervisor import (
     rotate,
     terminate_owned,
 )
+from .throttle import AccessThrottle
 from .workflow import Workflow, classification_record
 
 STAGES = ("classify", "extract")
 TERMINAL = {"completed", "partial"}
+
+
+def gated(browser, flow):
+    """Count every page visit the browser makes against the account's access allowance."""
+    browser.visit_gate = flow.chats.pacing
+    return browser
 
 
 def worker(directory, stage):
@@ -56,17 +63,15 @@ def worker(directory, stage):
         args,
         store,
         profiles,
-        lambda profile, **kw: AttachedBrowser(
-            profile, directory=directory / stage, stage=stage, account_id=args.account_id, **kw
+        lambda profile, **kw: gated(
+            AttachedBrowser(
+                profile, directory=directory / stage, stage=stage, account_id=args.account_id, **kw
+            ),
+            flow,
         ),
         time.sleep,
     )
-    if job.get("experiment"):
-        from .pacing import AccountPacing
-
-        flow.chats.pacing = AccountPacing(
-            store, job["experiment"]["id"], args.account_id, **job["experiment"]["settings"]
-        )
+    flow.chats.pacing = AccessThrottle(store, args.account_id, **job.get("throttle", {}))
     # Workers publish no common files. Progress derives from the committed business DB.
     flow.snapshot = lambda **kw: None
     flow.archive = lambda identity: None
@@ -168,21 +173,15 @@ class ParallelCoordinator:
         )
         self.next_export = 0
 
+    def throttle(self, stage):
+        return AccessThrottle(
+            self.store, self.job["accounts"][stage]["account_id"], **self.job.get("throttle", {})
+        )
+
     def save(self):
         self.job.update(supervisor_pid=os.getpid(), supervisor_heartbeat_at=self.clock())
         self.job["queue"] = self.store.queue_counts(self.job["job_id"])
-        if self.job.get("experiment"):
-            from .pacing import AccountPacing
-
-            self.job["experiment"]["progress"] = {
-                s: AccountPacing(
-                    self.store,
-                    self.job["experiment"]["id"],
-                    self.job["accounts"][s]["account_id"],
-                    **self.job["experiment"]["settings"],
-                ).state()
-                for s in STAGES
-            }
+        self.job["throttle_progress"] = {s: self.throttle(s).state() for s in STAGES}
         for record in self.job["workers"].values():
             record["next_check_label"] = (
                 time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(record["next_check"]))
@@ -359,6 +358,8 @@ class ParallelCoordinator:
             if kind == "access"
             else (1800 if not attempt else 3600)
             if kind == "circuit"
+            else 300
+            if kind == "frozen"
             else (300, 900, 1800, 3600)[min(attempt, 3)]
         )
         record.update(
@@ -372,17 +373,10 @@ class ParallelCoordinator:
         if kind == "manual" or (kind == "circuit" and record.get("probe_failures", 0) >= 3):
             record["next_check"] = None
         if record.get("reason") == "platform_restricted":
-            record["next_check"] = None
-            if self.job.get("experiment"):
-                from .pacing import AccountPacing
-
-                gate = AccountPacing(
-                    self.store,
-                    self.job["experiment"]["id"],
-                    self.job["accounts"][stage]["account_id"],
-                    **self.job["experiment"]["settings"],
-                )
-                gate.block("platform_restricted")
+            # Backoff freeze: probe again only after the doubled rest has elapsed.
+            record["next_check"] = self.throttle(stage).freeze("platform_restricted")
+        elif record.get("reason") == "pacing_frozen":
+            record["next_check"] = self.throttle(stage).state()["frozen_until"]
         self.save()
         self.notify(f"waiting:{stage}:{record['wait_attempt']}:{self.job.get('wait_episode', 0)}")
         self.publish(force=True)
@@ -475,15 +469,7 @@ class ParallelCoordinator:
                         and record["status"] != "running"
                         and record["status"] not in TERMINAL
                     ):
-                        if self.job.get("experiment"):
-                            from .pacing import AccountPacing
-
-                            AccountPacing(
-                                self.store,
-                                self.job["experiment"]["id"],
-                                self.job["accounts"][stage]["account_id"],
-                                **self.job["experiment"]["settings"],
-                            ).release()
+                        self.throttle(stage).release()
                         record.update(
                             status="ready",
                             restarts=[],
@@ -696,14 +682,15 @@ def initialize(args, directory, *, job=None):
         "created_at": time.time(),
         "stage": "classify + extract",
     }
-    if getattr(args, "trial_stage", None):
-        value["experiment"] = {
-            "id": uuid4().hex, "stage": args.trial_stage,
-            "settings": {"interval": args.interval, "batch_size": args.trial_batch_size,
-                         "rest_seconds": args.trial_rest, "batches": args.trial_batches}}
-        for stage in STAGES:
-            if stage != args.trial_stage:
-                value["workers"][stage]["status"] = "paused"
+    value["throttle"] = {
+        k: v
+        for k, v in (
+            ("access_per_hour", getattr(args, "access_per_hour", None)),
+            ("send_per_hour", getattr(args, "send_per_hour", None)),
+            ("active_hours", getattr(args, "active_hours", None)),
+        )
+        if v is not None
+    }
     with StoreContext(args.state_dir) as store:
         from .accounts import migrate_accounts
 

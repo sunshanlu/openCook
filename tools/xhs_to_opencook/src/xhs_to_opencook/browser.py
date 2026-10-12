@@ -147,11 +147,19 @@ class SiteBrowser:
                 continue
             return paused
 
+    visit_gate = None
+
+    def visit(self, page, url, **options):
+        """Navigate, first waiting for and recording the account's access allowance."""
+        if self.visit_gate:
+            self.visit_gate.access()
+        return page.goto(url, **options)
+
     def open_source(self, url: str) -> Source:
         validate_url(url)
         if self.page.is_closed():
             self.page = self.context.new_page()
-        self.page.goto(url, wait_until="domcontentloaded", timeout=45000)
+        self.visit(self.page, url, wait_until="domcontentloaded", timeout=45000)
         self.ensure_access(self.page)
         expected = note_id(url)
         deadline = time.monotonic() + 20
@@ -241,7 +249,7 @@ class SiteBrowser:
 
     def new_chat(self):
         self.prepare_chat_page()
-        self.chat_page.goto(CHAT, wait_until="domcontentloaded")
+        self.visit(self.chat_page, CHAT, wait_until="domcontentloaded")
         self.ensure_access(self.chat_page)
         editor = self.chat_page.locator(EDITOR)
         try:
@@ -333,7 +341,7 @@ class SiteBrowser:
         seen = set()
         stagnant = 0
         try:
-            page.goto(url, wait_until="domcontentloaded", timeout=45000)
+            self.visit(page, url, wait_until="domcontentloaded", timeout=45000)
             page.wait_for_timeout(2000)
             self.ensure_access(page)
             while True:
@@ -461,8 +469,10 @@ class SiteBrowser:
         self.chat_page.on("response", observe_history)
         self.history_observer = observe_history
         try:
-            self.chat_page.goto(
-                CHAT + "?conversationId=" + conversation_id, wait_until="domcontentloaded"
+            self.visit(
+                self.chat_page,
+                CHAT + "?conversationId=" + conversation_id,
+                wait_until="domcontentloaded",
             )
             self.ensure_access(self.chat_page)
             self.wait_editor_ready()

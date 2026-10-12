@@ -333,7 +333,10 @@ def test_account_wait_only_retires_affected_stage(coordinator):
     c.account_wait('extract', {'reason': 'platform_restricted', 'wait_kind': 'platform'})
     assert retired == ['extract']
     assert c.job['workers']['extract']['status'] == 'waiting'
-    assert c.job['workers']['extract']['next_check'] is None
+    frozen = c.throttle('extract').state()
+    assert frozen['freeze_count'] == 1
+    assert c.job['workers']['extract']['next_check'] == frozen['frozen_until']
+    assert frozen['frozen_until'] - frozen['last_freeze_at'] == 7200
     assert c.job['workers']['classify']['status'] == 'running'
 
 
