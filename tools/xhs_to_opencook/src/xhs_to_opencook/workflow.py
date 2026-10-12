@@ -5,6 +5,7 @@ import shutil
 import sys
 import time
 from contextlib import ExitStack
+from datetime import UTC, datetime, timedelta
 
 from playwright.sync_api import Error as PlaywrightError
 
@@ -33,6 +34,27 @@ def classification_record(store, identity):
         return record, result
     except (ValueError, KeyError, TypeError):
         return None, None
+
+
+RECONCILE_DAYS = 30
+
+
+def incremental_base(previous, notes, force_full=False, clock=None):
+    """When the last complete pass began, if an incremental pass is allowed now; else None.
+
+    A full pass is required for a first run, an unfinished one, a forced one, or when the last
+    full pass is older than RECONCILE_DAYS (to catch deletions and edits the shortcut misses).
+    """
+    if force_full or not notes or previous.get("status") != "complete":
+        return None
+    full_at = previous.get("full_at") or (
+        previous.get("finished_at") if previous.get("end_signal") == "user_posted.has_more=false"
+        else None
+    )
+    if not full_at:
+        return None
+    age = (datetime.now(UTC) if clock is None else clock) - datetime.fromisoformat(full_at)
+    return full_at if age < timedelta(days=RECONCILE_DAYS) else None
 
 
 def collected_source(note, *records):
@@ -255,8 +277,12 @@ class Workflow:
                 continue
             task = {"stage": "collect", "profile_id": identity, "status": "running"}
             self.report["tasks"].append(task)
+            previous = self.store.stage_get("profiles", identity) or {}
+            full_at = incremental_base(previous, self.store.collected([identity]),
+                                       getattr(self.args, "full_collect", False))
             self.store.stage_save(
-                "profiles", identity, {"url": url, "status": "running", "started_at": now()}
+                "profiles", identity,
+                {"url": url, "status": "running", "started_at": now(), "full_at": full_at},
             )
             print(f"采集博主 {identity}", flush=True)
             try:
@@ -282,7 +308,11 @@ class Workflow:
                 while attempt < 6:
                     try:
                         runtime.operation("collect_profile", 35 * 60)
-                        result = self.driver().collect_profile(url, save)
+                        extra = (
+                            {"known": {n["note_id"] for n in self.store.collected([identity])}}
+                            if full_at else {}
+                        )
+                        result = self.driver().collect_profile(url, save, **extra)
                         break
                     except (TaskError, PlaywrightError) as error:
                         if runtime.current() and runtime.network_error(error):
@@ -306,8 +336,14 @@ class Workflow:
                 task.update(result)
                 if result["status"] != "complete":
                     self.code = max(self.code, 2)
+                if result["status"] == "complete" and result.get("end_signal") != (
+                    "incremental_known_run"
+                ):
+                    full_at = now()  # A full pass resets the 30-day reconciliation clock.
                 self.store.stage_save(
-                    "profiles", identity, {"url": url, **result, "finished_at": now()}
+                    "profiles", identity,
+                    {"url": url, **result, "finished_at": now(),
+                     "full_at": full_at if result["status"] == "complete" else None},
                 )
                 if runtime.current():
                     runtime.current().outcome("collect", identity,

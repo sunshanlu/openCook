@@ -48,6 +48,9 @@ def main(argv=None) -> int:
                 command.add_argument("--refresh", action="store_true")
             if name in {"pipeline", "classify"}:
                 command.add_argument("--reclassify", action="store_true")
+            if name in {"pipeline", "collect"}:
+                command.add_argument("--full-collect", action="store_true",
+                                     help="忽略增量，重滚博主全部历史并对账")
             if name == "pipeline":
                 command.add_argument("--access-per-hour", type=positive_integer)
                 command.add_argument("--send-per-hour", type=positive_integer)

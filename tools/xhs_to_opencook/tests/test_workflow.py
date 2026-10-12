@@ -34,8 +34,9 @@ class Browser:
     def __exit__(self, *args):
         pass
 
-    def collect_profile(self, url, save):
+    def collect_profile(self, url, save, known=None, stop_after=20):
         self.events.append("collect")
+        self.known_seen = known
         for identity in self.notes[profile_id(url)]:
             save(
                 [
@@ -648,3 +649,46 @@ def test_unknown_python_bug_marks_current_video_failed_and_stops(setup, monkeypa
     store = Store(args.state_dir)
     assert store.stage_get('classifications', N1)['status'] == 'failed'
     store.close()
+
+
+def test_incremental_base_rules():
+    from datetime import UTC, datetime, timedelta
+
+    from xhs_to_opencook.workflow import incremental_base
+
+    now = datetime(2026, 10, 12, tzinfo=UTC)
+    fresh = (now - timedelta(days=5)).isoformat()
+    stale = (now - timedelta(days=31)).isoformat()
+    done = {"status": "complete", "full_at": fresh}
+    notes = [{"note_id": "a"}]
+    assert incremental_base(done, notes, clock=now) == fresh
+    assert incremental_base(done, [], clock=now) is None  # nothing registered yet
+    assert incremental_base(done, notes, force_full=True, clock=now) is None
+    assert incremental_base({"status": "complete", "full_at": stale}, notes, clock=now) is None
+    assert incremental_base({"status": "incomplete", "full_at": fresh}, notes, clock=now) is None
+    assert incremental_base({"status": "complete"}, notes, clock=now) is None
+    legacy = {"status": "complete", "end_signal": "user_posted.has_more=false",
+              "finished_at": fresh}
+    assert incremental_base(legacy, notes, clock=now) == fresh  # pre-existing full passes count
+
+
+def test_known_run_counts_consecutive_registered_notes():
+    from xhs_to_opencook.browser import known_run
+
+    known = {"a", "b", "c"}
+    assert known_run(["n1", "a", "b", "n2", "c"], known) == 2
+    assert known_run(["a", "b", "c"], known) == 3
+    assert known_run(["n1", "n2"], known) == 0
+
+
+def test_second_collection_is_incremental_and_full_flag_overrides(setup):
+    args, browser = setup
+    args.command = "collect"
+    args.full_collect = False
+    execute(args, browser)
+    assert browser.known_seen is None  # First pass is always full.
+    execute(args, browser)
+    assert browser.known_seen == {N1}  # Last profile (P2) only has N1: known is per profile.
+    args.full_collect = True
+    execute(args, browser)
+    assert browser.known_seen is None

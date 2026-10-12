@@ -558,3 +558,30 @@ def test_account_identity_unique_and_missing(driver):
         a.href='/user/profile/'+ 'b'.repeat(24);a.innerText='我';document.body.append(a)}""")
     with pytest.raises(TaskError, match='唯一'):
         driver.account_identity()
+
+
+def test_incremental_collection_stops_after_known_run_without_has_more_false(driver):
+    profile = "4" * 24
+    url = f"https://www.xiaohongshu.com/user/profile/{profile}"
+    ids = [f"{i:024x}" for i in range(1, 8)]  # Newest first.
+    driver.context.route(
+        url,
+        lambda route: route.fulfill(
+            body=f"<script>fetch('/api/sns/web/v1/user_posted?user_id={profile}');</script>",
+            content_type="text/html",
+        ),
+    )
+    driver.context.route(
+        "**/api/sns/web/v1/user_posted?*",
+        lambda route: route.fulfill(json={"success": True, "data": {"has_more": True, "notes": [
+            {"note_id": nid, "type": "video", "xsec_token": "t", "display_title": nid,
+             "user": {"user_id": profile, "nick_name": "x"}, "cover": {"url_default": "u"}}
+            for nid in ids]}}),
+    )
+    driver.visit_gate = None
+    # Two new notes, then five already registered: a run of 3 is enough to stop.
+    result = driver.collect_profile(url, lambda notes: None, known=set(ids[2:]), stop_after=3)
+    assert result["status"] == "complete"
+    assert result["end_signal"] == "incremental_known_run"
+    # Without `known` the same page cannot be confirmed complete (has_more stays true).
+    assert driver.collect_profile(url, lambda notes: None)["status"] == "incomplete"

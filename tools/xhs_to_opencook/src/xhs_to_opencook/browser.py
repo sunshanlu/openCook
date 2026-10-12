@@ -37,6 +37,15 @@ def profile_note_metadata(card: dict) -> dict:
     }
 
 
+def known_run(order, known):
+    """Longest stretch of consecutive already-registered notes in listing order."""
+    best = run = 0
+    for nid in order:
+        run = run + 1 if nid in known else 0
+        best = max(best, run)
+    return best
+
+
 class SiteBrowser:
     def __init__(self, profile: Path, *, timeout: float = 180, interactive: bool = True):
         self.profile = profile
@@ -277,8 +286,12 @@ class SiteBrowser:
         self.verified_note_id = None
         self.wait_editor_ready()
 
-    def collect_profile(self, url: str, save_batch) -> dict:
-        """Observe only pagination triggered by ordinary page navigation and scrolling."""
+    def collect_profile(self, url: str, save_batch, known=None, stop_after=20) -> dict:
+        """Observe only pagination triggered by ordinary page navigation and scrolling.
+
+        With `known` (note ids already registered), stop once `stop_after` consecutive cards
+        are all known: the profile lists newest first, so nothing new can follow.
+        """
         identity = profile_id(url)
         page = self.context.new_page()
         pagination = {"observed": False, "has_more": None, "error": None}
@@ -339,6 +352,7 @@ class SiteBrowser:
 
         page.on("response", observe)
         seen = set()
+        order = []  # Note ids in the order the profile lists them.
         stagnant = 0
         try:
             self.visit(page, url, wait_until="domcontentloaded", timeout=45000)
@@ -385,6 +399,7 @@ class SiteBrowser:
                 if batch:
                     save_batch(list(batch.values()))
                 new = set(batch) - seen
+                order.extend(nid for nid in batch if nid not in seen)
                 seen.update(batch)
                 print(f"  已观察 {len(seen)} 条笔记", flush=True)
                 stagnant = 0 if new else stagnant + 1
@@ -398,6 +413,12 @@ class SiteBrowser:
                     return {
                         "status": "complete",
                         "end_signal": "user_posted.has_more=false",
+                        "observed_notes": len(seen),
+                    }
+                if known and known_run(order, known) >= stop_after:
+                    return {
+                        "status": "complete",
+                        "end_signal": "incremental_known_run",
                         "observed_notes": len(seen),
                     }
                 if stagnant >= 3:
