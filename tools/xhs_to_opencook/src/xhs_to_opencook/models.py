@@ -186,6 +186,40 @@ def drop_stray_closers(payload: str) -> str | None:
     return None
 
 
+def rebuild_closers(payload: str) -> str | None:
+    """Content is complete but the last run of closing brackets is garbled -> re-close it.
+
+    Only when everything after the first parse error is closing brackets; the text before the
+    error is kept verbatim and only the brackets are rewritten to match what is still open.
+    A cut-off text has nothing after its error, so it never takes this path.
+    """
+    try:
+        json.loads(payload)
+        return None
+    except json.JSONDecodeError as exc:
+        head, rest = payload[: exc.pos], payload[exc.pos :]
+    if not rest.strip() or not set(rest) <= set("}] \t\r\n"):
+        return None
+    stack, in_string, escaped = [], False, False
+    for char in head:
+        if in_string:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+        elif char == '"':
+            in_string = True
+        elif char in "{[":
+            stack.append({"type": char})
+        elif char in "}]" and stack:
+            stack.pop()
+    if in_string or not stack:
+        return None
+    return head.rstrip() + _closers(stack)
+
+
 def _closers(stack):
     return "".join("}" if frame["type"] == "{" else "]" for frame in reversed(stack))
 
@@ -244,7 +278,11 @@ def parse_json_model(text: str, model, *, repair: bool = False):
             raise failure from exc
         try:
             lenient = _unfence(text, lenient=True)
-            repaired = drop_stray_closers(lenient) or salvage_truncated(lenient)
+            repaired = (
+                drop_stray_closers(lenient)
+                or rebuild_closers(lenient)
+                or salvage_truncated(lenient)
+            )
             if repaired is None:
                 raise failure from exc
             return model.model_validate(strict(repaired))

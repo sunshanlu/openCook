@@ -245,3 +245,49 @@ def test_a_complete_document_with_trailing_text_is_never_trimmed_as_truncated(pa
     text = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
     with pytest.raises(TaskError):
         parse_answer(text + "以上是菜谱")
+
+
+def garble(answer, tail="]}}"):
+    """The last root `}` replaced by a wrong bracket run, as Diandian writes it: `…]}]]}}`."""
+    return answer[:-1] + tail
+
+
+@pytest.mark.parametrize("tail", ["]}}", "]}", "]]}}", "}]}"])
+def test_garbled_trailing_closers_are_rebuilt_without_touching_content(answer, tail):
+    assert parse_answer(garble(answer, tail)) == parse_answer(answer)
+
+
+def test_garbled_closers_after_escaped_quotes_still_track_strings(payload):
+    payload["recipes"][0]["steps"] = ['加"盐"\\拌匀', "出锅"]
+    text = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+    assert parse_answer(garble(text)).recipes[0].steps[0] == '加"盐"\\拌匀'
+
+
+@pytest.mark.parametrize("make", [
+    lambda a: garble(a) + "以上",  # prose after the brackets
+    lambda a: a[:-1] + "]x}",  # a non-bracket inside the garbled run
+    lambda a: a[: a.index('"steps"')] + "]}",  # a mid-document break, not the tail
+])
+def test_rebuild_refuses_anything_but_a_bracket_only_tail(answer, make):
+    with pytest.raises(TaskError) as error:
+        parse_answer(make(answer))
+    assert error.value.code == "json_syntax_invalid"
+
+
+def test_a_real_cut_in_core_content_never_reaches_the_bracket_rebuild(answer):
+    # A reply cut off by the output ceiling has no parse error before its end and nothing after
+    # it, so the rebuild (which needs a bracket-only tail after an error) cannot apply to it.
+    # What the reply listed before the model itself stopped is indistinguishable from output
+    # that was simply short, so that is out of scope here.
+    cut_in_steps = answer[: answer.index('"拌匀"') + len('"拌匀"')]
+    with pytest.raises(TaskError) as error:
+        parse_answer(cut_in_steps)
+    assert error.value.code == "json_syntax_invalid"
+
+
+def test_rebuild_is_extraction_only(answer):
+    from xhs_to_opencook.models import Classification, parse_json_model
+
+    text = '{"note_id":"6ac482bf000000001c02c2e0","verdict":"tutorial","reason":"x"]}}'
+    with pytest.raises(TaskError):
+        parse_json_model(text, Classification)
