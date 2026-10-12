@@ -382,3 +382,19 @@ def test_job_next_check_follows_earliest_waiting_stage_and_never_goes_stale(coor
     c.job["workers"]["extract"].update(status="running", next_check=None)
     c.save()
     assert c.job["next_check_label"] == "按各阶段状态继续"
+
+
+def test_job_level_wait_time_is_shown_only_while_the_job_is_waiting(coordinator):
+    import time as _time
+
+    c = coordinator
+    for record in c.job["workers"].values():
+        record.update(status="running", next_check=None)
+    c.job.update(status="waiting", next_check=1_800_000_000.0)
+    c.save()
+    assert c.job["next_check_label"] == _time.strftime(
+        "%Y-%m-%d %H:%M:%S", _time.localtime(1_800_000_000.0)
+    )
+    c.job.update(status="running")  # The shared wait ended but left its time behind.
+    c.save()
+    assert c.job["next_check_label"] == "按各阶段状态继续"

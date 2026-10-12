@@ -192,7 +192,11 @@ class ParallelCoordinator:
         due = [
             r["next_check"] for r in self.job["workers"].values()
             if r.get("next_check") and r.get("status") in {"waiting", "blocked"}
-        ] or ([self.job["next_check"]] if self.job.get("next_check") else [])
+        ] or (
+            [self.job["next_check"]]
+            if self.job.get("next_check") and self.job["status"] == "waiting"
+            else []
+        )
         self.job["next_check_label"] = (
             time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(min(due)))
             if due
@@ -515,7 +519,7 @@ class ParallelCoordinator:
         # This state is reserved for shared network/storage/coordinator faults.
         if self.job["status"] == "waiting":
             if self.job.get("next_check") and now >= self.job["next_check"]:
-                self.job.update(status="running", reason=None)
+                self.job.update(status="running", reason=None, next_check=None)
                 for record in self.job["workers"].values():
                     if record["status"] == "ready":
                         record["probing"] = True
