@@ -132,3 +132,56 @@ def test_state_survives_restart(tmp_path):
     store, gate = make(tmp_path, clock, access_per_hour=2)
     assert len(gate.used("access", clock[0])) == 1
     store.close()
+
+
+def test_sends_are_spread_across_the_hour_not_burst(tmp_path):
+    clock = [T0]
+    store, gate = make(tmp_path, clock, send_per_hour=4, send_interval=15)
+    full_speed(gate, clock)
+    chat = ChatSession(store, None, pacing=gate)
+    times = []
+    for index in range(4):
+        gate.ready("send")
+        chat.persist({"request_id": str(index), "status": "sending", "sent_at": clock[0]})
+        times.append(clock[0])
+    gaps = [b - a for a, b in zip(times, times[1:], strict=False)]
+    assert all(gap >= HOUR / 4 * 0.8 for gap in gaps)  # 900s average, 20% jitter floor
+    assert times[-1] - times[0] < HOUR  # The whole allowance still fits inside the hour.
+    store.close()
+
+
+def test_spacing_never_drops_below_the_send_interval_and_follows_the_ramp(tmp_path):
+    clock = [T0]
+    store, gate = make(tmp_path, clock, send_per_hour=7200, send_interval=15)
+    full_speed(gate, clock)
+    chat = ChatSession(store, None, pacing=gate)
+    gate.ready("send")
+    chat.persist({"request_id": "a", "status": "sending", "sent_at": clock[0]})
+    start = clock[0]
+    gate.ready("send")
+    assert clock[0] - start == 15  # 3600/7200 = 0.5s would be shorter than the floor
+    store.close()
+    clock = [T0]
+    store, gate = make(tmp_path / "ramp", clock, send_per_hour=40, send_interval=15)
+    chat = ChatSession(store, None, pacing=gate)
+    gate.ready("send")
+    chat.persist({"request_id": "a", "status": "sending", "sent_at": clock[0]})
+    start = clock[0]
+    gate.ready("send")
+    assert clock[0] - start >= HOUR / 20 * 0.8  # Ramp halves 40/h to 20/h: 180s spacing.
+    store.close()
+
+
+def test_spacing_survives_restart(tmp_path):
+    clock = [T0]
+    store, gate = make(tmp_path, clock, send_per_hour=4)
+    full_speed(gate, clock)
+    chat = ChatSession(store, None, pacing=gate)
+    gate.ready("send")
+    chat.persist({"request_id": "a", "status": "sending", "sent_at": clock[0]})
+    start = clock[0]
+    store.close()
+    store, gate = make(tmp_path, clock, send_per_hour=4)
+    gate.ready("send")
+    assert clock[0] - start >= HOUR / 4 * 0.8
+    store.close()

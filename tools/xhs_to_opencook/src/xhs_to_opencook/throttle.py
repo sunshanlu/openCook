@@ -29,6 +29,7 @@ class AccessThrottle:
         active_hours=6,
         access_gap=(30, 90),
         send_interval=15,
+        send_jitter=(0.8, 1.2),
         ramp_days=3,
         backoff_base=7200,
         backoff_cap=86400,
@@ -40,6 +41,7 @@ class AccessThrottle:
         self.access_per_hour, self.send_per_hour = access_per_hour, send_per_hour
         self.active_seconds = active_hours * HOUR
         self.access_gap, self.send_interval = access_gap, send_interval
+        self.send_jitter = send_jitter
         self.ramp_seconds = ramp_days * 86400
         self.backoff_base, self.backoff_cap = backoff_base, backoff_cap
         self.clock, self.sleeper, self.rng = clock, sleeper, rng
@@ -155,8 +157,10 @@ class AccessThrottle:
             until = max(until, events[len(events) - limit] + HOUR)
         if kind == "access":
             until = max(until, value["next_access_at"])
-        elif value["last_sent"] is not None:
-            until = max(until, value["last_sent"] + self.send_interval)
+        else:
+            if value["last_sent"] is not None:
+                until = max(until, value["last_sent"] + self.send_interval)
+            until = max(until, value.get("next_send_at", 0))
         return until
 
     def ready(self, kind="send"):
@@ -219,6 +223,9 @@ class AccessThrottle:
         if value["last_sent"] is not None and sent < value["last_sent"] + self.send_interval:
             raise TaskError("pacing_conflict", "提交间隔不足，禁止发送", retryable=False)
         value["last_sent"] = sent
+        # Spread the hourly allowance evenly instead of spending it in one burst.
+        spread = HOUR / self.limit("send", value, sent) * self.rng(*self.send_jitter)
+        value["next_send_at"] = sent + max(self.send_interval, spread)
         self.store.db.execute(
             "INSERT INTO throttle_events (account,kind,ref,at) VALUES(?,?,?,?)",
             (self.account, "send", request["request_id"], sent),
