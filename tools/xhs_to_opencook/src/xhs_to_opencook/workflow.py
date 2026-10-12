@@ -15,7 +15,7 @@ from .chat import ChatSession
 from .errors import SESSION_BLOCK_CODES, BrowserUnsupported, TaskError
 from .export import convert, cover_jpeg, estimates, write_outputs
 from .links import note_id, read_profiles, validate_url
-from .models import Classification, Extraction, Source
+from .models import Classification, Extraction, Source, ends_unfinished
 from .prompts import (
     CLASSIFICATION_VERSION,
     EXTRACTION_VERSION,
@@ -555,9 +555,15 @@ class Workflow:
                 self.record_error(task, failure)
                 if runtime.current() and failure.code == "manual_review_required":
                     review = self.chats.review_for(stage, identity)
-                    runtime.current().outcome(stage, identity,
-                                              (review.get("review_error") or {}).get("code")
-                                              or "manual_review_required")
+                    review_code = ((review.get("review_error") or {}).get("code")
+                                   or "manual_review_required")
+                    # A recipe longer than the reply ceiling is the video's problem, not the
+                    # account's, so it must not trip the account-level circuit.
+                    too_long = (stage == "extract" and review_code == "json_syntax_invalid"
+                                and ends_unfinished(review.get("answer") or ""))
+                    if too_long:
+                        task["too_long"] = True
+                    runtime.current().outcome(stage, identity, review_code, neutral=too_long)
                 if failure.code != "manual_review_required" or pending:
                     raise BrowserUnsupported("当前视频未安全结束；保存现场并停止") from exc
             except (KeyboardInterrupt, EOFError):

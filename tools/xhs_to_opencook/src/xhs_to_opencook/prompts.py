@@ -3,7 +3,7 @@ import json
 from .models import Source
 
 CLASSIFICATION_VERSION = 3
-EXTRACTION_VERSION = 3
+EXTRACTION_VERSION = 4
 
 
 def classification_prompt(source: Source) -> str:
@@ -39,17 +39,17 @@ def recipe_prompt(source: Source) -> str:
         "可选description、servings、prep_time/cook_time/total_time；份数须为明确正整数，"
         "时间只填明确PT时长，否则省略或null；一夜/至熟留在steps或notes。"
         "无法读取或无菜谱就说明，禁止编造。"
-        "输出务必精简以免被截断：每步不超过50字，notes最多3条且每条不超过30字，"
-        "description不超过40字，purpose不超过10字，不写寒暄和解释。"
-        "字段顺序固定：name、ingredients、steps在前，notes、description及时间在后。"
-        "只输出完整紧凑JSON，无Markdown；"
+        "回答字符数有硬上限，超出会被截断：必须单行紧凑输出，不换行、不缩进、冒号逗号后不加空格。"
+        "字段顺序固定：name、ingredients、steps在前，notes、description及时间在后。不写寒暄和解释。"
+        "只输出完整JSON，无Markdown；"
     )
 
 
 def repair_prompt(error: str) -> str:
     return (
         "修正当前视频JSON，返回完整结果；保持原食材、步骤、原始用量和估算标记，禁止编造。"
-        "时间不明确或非PT格式用null，文字时间留在steps/notes。只输出JSON。错误："
+        "时间不明确或非PT格式用null，文字时间留在steps/notes。单行紧凑输出，不换行不缩进。"
+        "只输出JSON。错误："
         + error[:400]
     )
 

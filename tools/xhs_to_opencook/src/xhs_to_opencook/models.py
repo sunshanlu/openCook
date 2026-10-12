@@ -140,6 +140,34 @@ def salvage_truncated(payload: str) -> str | None:
     return None
 
 
+def ends_unfinished(text: str) -> bool:
+    """True when the answer simply stops: a string, object or list is still open at the end.
+
+    That is the signature of a reply cut off at the output ceiling, as opposed to a reply
+    that is malformed somewhere in the middle.
+    """
+    try:
+        payload = _unfence(text, lenient=True)
+    except TaskError:
+        return False
+    depth, in_string, escaped = 0, False, False
+    for char in payload:
+        if in_string:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+        elif char == '"':
+            in_string = True
+        elif char in "{[":
+            depth += 1
+        elif char in "}]":
+            depth -= 1
+    return bool(payload.strip()) and (in_string or depth > 0)
+
+
 def _closers(stack):
     return "".join("}" if frame["type"] == "{" else "]" for frame in reversed(stack))
 

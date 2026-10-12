@@ -61,6 +61,36 @@ def test_probe_failure_waits_without_resetting_budget(tmp_path):
     assert read_json(active.items_path)["budgets"]["classify:n"] == 42
 
 
+def test_neutral_failures_never_open_the_circuit(tmp_path):
+    clock = [1000]
+    active = worker(tmp_path, clock)
+    for i in range(12):  # Far past both thresholds; none of them is the account's fault.
+        active.outcome("extract", str(i), "json_syntax_invalid", neutral=True)
+    assert active.items["outcomes"] == []
+    assert active.data.get("wait_kind") is None
+    assert len(active.items["seen"]) == 12  # Still counted once per video.
+    active.outcome("extract", "3", "json_syntax_invalid", neutral=True)
+    assert len(active.items["seen"]) == 12
+
+
+def test_neutral_failure_passes_a_recovery_probe(tmp_path):
+    clock = [1000]
+    active = worker(tmp_path, clock)
+    active.probing = True
+    active.outcome("extract", "long", "json_syntax_invalid", neutral=True)
+    assert active.data["probe_succeeded"] is True  # The page answered; the account is fine.
+
+
+def test_neutral_does_not_hide_real_failures(tmp_path):
+    clock = [1000]
+    active = worker(tmp_path, clock)
+    active.outcome("extract", "a", "empty")
+    active.outcome("extract", "b", "json_syntax_invalid", neutral=True)
+    active.outcome("extract", "c", "empty")
+    with pytest.raises(TaskError, match="连续失败"):
+        active.outcome("extract", "d", "empty")  # Three real, consecutive failures still trip.
+
+
 def test_pause_prevents_new_operations(tmp_path):
     clock = [1000]
     active = worker(tmp_path, clock)

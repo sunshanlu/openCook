@@ -194,3 +194,19 @@ def test_repair_is_extraction_only(payload):
     with pytest.raises(TaskError) as error:
         parse_json_model('{"note_id":"6ac482bf000000001c02c2e0",', Classification)
     assert error.value.code == "json_syntax_invalid"
+
+
+@pytest.mark.parametrize("text,expected", [
+    ('{"recipes":[{"name":"x","steps":["一步', True),  # cut inside a string
+    ('{"recipes":[{"name":"x","steps":["a","b"]', True),  # cut with objects still open
+    ('```json\n{"recipes":[{"name":"x"', True),  # unclosed fence and brackets
+    ('{"recipes":[{"name":"x" "steps":[]}]}', False),  # malformed but complete
+    ('{"recipes":[]}', False),
+    ('{"a":"含\\"引号\\"的字符串"}', False),  # escaped quotes do not end the string
+    ('{"a":"末尾是转义\\\\"}', False),
+    ('', False),
+])
+def test_ends_unfinished_tells_cut_off_from_malformed(text, expected):
+    from xhs_to_opencook.models import ends_unfinished
+
+    assert ends_unfinished(text) is expected

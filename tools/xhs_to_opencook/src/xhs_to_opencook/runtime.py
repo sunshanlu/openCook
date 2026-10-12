@@ -150,14 +150,16 @@ class WorkerRuntime:
         finally:
             self.operation("processing", 180)
 
-    def outcome(self, stage, identity, code=None):
+    def outcome(self, stage, identity, code=None, *, neutral=False):
+        """Record how one item ended. A neutral failure is the item's fault, not the account's:
+        it neither opens the circuit nor counts as a failed probe, since the page answered."""
         key = f"{stage}:{identity}"
         with self.lock:
             self.tick()
             self.data.pop("item", None)
             if self.probing:
                 self.probing = False
-                if code:
+                if code and not neutral:
                     self.items["seen"].append(key)
                     write_json(self.items_path, self.items)
                     self.block("probe_failed", "恢复试探仍失败，继续全局等待", kind="circuit")
@@ -166,6 +168,9 @@ class WorkerRuntime:
             if key in self.items["seen"]:
                 return
             self.items["seen"].append(key)
+            if neutral:
+                write_json(self.items_path, self.items)
+                return
             self.items["outcomes"] = (self.items["outcomes"] + [{"key": key, "code": code}])[-10:]
             write_json(self.items_path, self.items)
         recent = self.items["outcomes"]
