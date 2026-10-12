@@ -188,10 +188,16 @@ class ParallelCoordinator:
                 if record.get("next_check")
                 else "等待处理或运行中"
             )
-        if self.job.get("next_check"):
-            self.job["next_check_label"] = time.strftime(
-                "%Y-%m-%d %H:%M:%S", time.localtime(self.job["next_check"])
-            )
+        # The job-level time is the earliest stage check; never keep a stale one.
+        due = [
+            r["next_check"] for r in self.job["workers"].values()
+            if r.get("next_check") and r.get("status") in {"waiting", "blocked"}
+        ] or ([self.job["next_check"]] if self.job.get("next_check") else [])
+        self.job["next_check_label"] = (
+            time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(min(due)))
+            if due
+            else "按各阶段状态继续"
+        )
         self.job["action_hint"] = (
             "处理问题后执行 resume"
             if self.job["status"] == "waiting" and not self.job.get("next_check")
@@ -271,6 +277,8 @@ class ParallelCoordinator:
             status="running",
             started_at=self.clock(),
             probing=probe,
+            reason=None,
+            message="恢复检查中" if probe else "正常处理",
         )
         self.save()
 

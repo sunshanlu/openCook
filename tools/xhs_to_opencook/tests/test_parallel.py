@@ -366,3 +366,19 @@ def test_dead_account_chrome_restarts_only_its_worker(coordinator, monkeypatch):
     assert c.ensure_chrome('extract')
     assert c.job['workers']['extract']['status'] == 'ready'
     assert c.chromes['classify'].alive()
+
+
+def test_job_next_check_follows_earliest_waiting_stage_and_never_goes_stale(coordinator):
+    import time as _time
+
+    c = coordinator
+    c.job["next_check_label"] = "2026-10-08 10:54:40"  # Left over from an older job.
+    c.job["workers"]["classify"].update(status="running", next_check=None)
+    c.job["workers"]["extract"].update(status="waiting", next_check=1_800_000_000.0)
+    c.save()
+    assert c.job["next_check_label"] == _time.strftime(
+        "%Y-%m-%d %H:%M:%S", _time.localtime(1_800_000_000.0)
+    )
+    c.job["workers"]["extract"].update(status="running", next_check=None)
+    c.save()
+    assert c.job["next_check_label"] == "按各阶段状态继续"
