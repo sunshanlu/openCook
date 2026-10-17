@@ -1,0 +1,2594 @@
+{
+  "version": 1,
+  "created_at": "2026-10-17T09:16:27Z",
+  "updated_at": "2026-10-17T09:16:27Z",
+  "files": {
+    ".codegraph/.gitignore": {
+      "role": "index",
+      "sha256": "47c0dacebca9f56c9020b68584470dfc51f07650a3719904e98f4b447a5dd003",
+      "size": 229,
+      "normalized_sha256": "47c0dacebca9f56c9020b68584470dfc51f07650a3719904e98f4b447a5dd003"
+    },
+    ".gitattributes": {
+      "role": "index",
+      "sha256": "21fa16a2122e2b0360b47502c577428b645437e08e9e87ffba661f84853cb476",
+      "size": 291,
+      "normalized_sha256": "21fa16a2122e2b0360b47502c577428b645437e08e9e87ffba661f84853cb476"
+    },
+    ".github/FUNDING.yml": {
+      "role": "index",
+      "sha256": "6853f3cf41b6a63871ebda6561727ccb50f7dcc7ca6b6babde5543b1f2a53356",
+      "size": 998,
+      "normalized_sha256": "6853f3cf41b6a63871ebda6561727ccb50f7dcc7ca6b6babde5543b1f2a53356"
+    },
+    ".github/workflows/ci.yml": {
+      "role": "index",
+      "sha256": "573970195f8fec674fa8cc4bd0bc1bc71386a31c5550a22241ed859c98323217",
+      "size": 1596,
+      "normalized_sha256": "573970195f8fec674fa8cc4bd0bc1bc71386a31c5550a22241ed859c98323217"
+    },
+    ".gitignore": {
+      "role": "index",
+      "sha256": "497cb0caec5eb2e4bf565e718a62bef97115b13117f3e66032b2b5782b3b5096",
+      "size": 1006,
+      "normalized_sha256": "497cb0caec5eb2e4bf565e718a62bef97115b13117f3e66032b2b5782b3b5096"
+    },
+    "AGENTS.md": {
+      "role": "index",
+      "sha256": "ddb50101a5be7eb54bde0bdccb2ce15fbac13a0efed1b2851adc248c7a39bcb7",
+      "size": 13258,
+      "normalized_sha256": "ddb50101a5be7eb54bde0bdccb2ce15fbac13a0efed1b2851adc248c7a39bcb7"
+    },
+    "GLOSSARY.md": {
+      "role": "index",
+      "sha256": "4a9ab4dc6ff7221809ba43cae974cfdd8bd8c2b44417c402853fa8d5d90e22e6",
+      "size": 4390,
+      "normalized_sha256": "4a9ab4dc6ff7221809ba43cae974cfdd8bd8c2b44417c402853fa8d5d90e22e6"
+    },
+    "Gemfile": {
+      "role": "index",
+      "sha256": "ca508a52770a9e2ff7a6558a59937a21d591a5d96f2d49d41d63b4f84cceadd4",
+      "size": 177,
+      "normalized_sha256": "ca508a52770a9e2ff7a6558a59937a21d591a5d96f2d49d41d63b4f84cceadd4"
+    },
+    "LICENSE": {
+      "role": "index",
+      "sha256": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986",
+      "size": 35149,
+      "normalized_sha256": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986"
+    },
+    "README.md": {
+      "role": "index",
+      "sha256": "d819bc498c9c093e2f6a43dad7565c3574dece96235426d3d699ccf4b516d982",
+      "size": 8387,
+      "normalized_sha256": "d819bc498c9c093e2f6a43dad7565c3574dece96235426d3d699ccf4b516d982"
+    },
+    "aoci.code.txt": {
+      "role": "index",
+      "sha256": "12cbc237b863041b3ab7b6c6330091964cb014a20e624ec1f88de6056aed56c2",
+      "size": 21,
+      "normalized_sha256": "12cbc237b863041b3ab7b6c6330091964cb014a20e624ec1f88de6056aed56c2"
+    },
+    "aoci.meta.txt": {
+      "role": "index",
+      "sha256": "fbc304fa05182547e96f1f8404c7c30ad6c366bba9589523f1019c2c1da0427c",
+      "size": 1989,
+      "normalized_sha256": "fbc304fa05182547e96f1f8404c7c30ad6c366bba9589523f1019c2c1da0427c"
+    },
+    "aoci.txt": {
+      "role": "index",
+      "sha256": "b149dc603e27858b11f995e4e5c488c7933a3056fa0bf5f20efc7661e69146d7",
+      "size": 297,
+      "normalized_sha256": "b149dc603e27858b11f995e4e5c488c7933a3056fa0bf5f20efc7661e69146d7"
+    },
+    "app/.gitignore": {
+      "role": "index",
+      "sha256": "5c3174b74edc6f2b9e0743594b8bd3c7f31e4f4405758cc9872b3fe1de1d28b4",
+      "size": 6,
+      "normalized_sha256": "5c3174b74edc6f2b9e0743594b8bd3c7f31e4f4405758cc9872b3fe1de1d28b4"
+    },
+    "app/build.gradle.kts": {
+      "role": "index",
+      "sha256": "046c0dbe8e9fb987b26228fdab85396cc4ed5ab5265ccb68d31b111d20922cae",
+      "size": 8816,
+      "normalized_sha256": "046c0dbe8e9fb987b26228fdab85396cc4ed5ab5265ccb68d31b111d20922cae"
+    },
+    "app/proguard-rules.pro": {
+      "role": "index",
+      "sha256": "273163ea16255b069ac8a1d28a6a7a2efc96b82c256f48b4bbeef8bc8d8b3c89",
+      "size": 1920,
+      "normalized_sha256": "273163ea16255b069ac8a1d28a6a7a2efc96b82c256f48b4bbeef8bc8d8b3c89"
+    },
+    "app/schemas/com.food.opencook.data.local.OpenCookDatabase/1.json": {
+      "role": "index",
+      "sha256": "abda97cc86c9173c3ca70ff3adb4f09d9a61f5282d2cf951a814b277a2f4e176",
+      "size": 23158,
+      "normalized_sha256": "abda97cc86c9173c3ca70ff3adb4f09d9a61f5282d2cf951a814b277a2f4e176"
+    },
+    "app/schemas/com.food.opencook.data.local.OpenCookDatabase/2.json": {
+      "role": "index",
+      "sha256": "ef2979b808310fcdc9a6294fc61c2a4f480c4ef81ce2335df9386017c50810ed",
+      "size": 23309,
+      "normalized_sha256": "ef2979b808310fcdc9a6294fc61c2a4f480c4ef81ce2335df9386017c50810ed"
+    },
+    "app/schemas/com.food.opencook.data.local.OpenCookDatabase/3.json": {
+      "role": "index",
+      "sha256": "34f1fd99937dd37ceeafadf217e89ed4811041cdc60cdc4405ab07ca4e4b13bb",
+      "size": 24167,
+      "normalized_sha256": "34f1fd99937dd37ceeafadf217e89ed4811041cdc60cdc4405ab07ca4e4b13bb"
+    },
+    "app/schemas/com.food.opencook.data.local.OpenCookDatabase/4.json": {
+      "role": "index",
+      "sha256": "c7996343343a6c86af49c07f28e2d964cf24257d8241116e97310682808c6da2",
+      "size": 25224,
+      "normalized_sha256": "c7996343343a6c86af49c07f28e2d964cf24257d8241116e97310682808c6da2"
+    },
+    "app/schemas/com.food.opencook.data.local.OpenCookDatabase/5.json": {
+      "role": "index",
+      "sha256": "279e81c765349bf5155e386e46b153b1788eb01f6132587e1a49aa9865e9dd3a",
+      "size": 25360,
+      "normalized_sha256": "279e81c765349bf5155e386e46b153b1788eb01f6132587e1a49aa9865e9dd3a"
+    },
+    "app/schemas/com.food.opencook.data.local.OpenCookDatabase/6.json": {
+      "role": "index",
+      "sha256": "54056217faa65b6d5524837c1ad080ff8aa9e50175b3759a7ff510514b771d3d",
+      "size": 25561,
+      "normalized_sha256": "54056217faa65b6d5524837c1ad080ff8aa9e50175b3759a7ff510514b771d3d"
+    },
+    "app/src/androidTest/java/com/food/opencook/RecipeDaoTest.kt": {
+      "role": "index",
+      "sha256": "1d186f70b52869059bdc23ce3fdea782ce8457d1bb2b64089765746456b10902",
+      "size": 4381,
+      "normalized_sha256": "1d186f70b52869059bdc23ce3fdea782ce8457d1bb2b64089765746456b10902"
+    },
+    "app/src/debug/res/drawable/ic_dev_badge.xml": {
+      "role": "index",
+      "sha256": "1fc7a20b1ad39b6ab93df051af8daee2d96662f8c2351447c6b0bf5ee843cbc5",
+      "size": 2220,
+      "normalized_sha256": "1fc7a20b1ad39b6ab93df051af8daee2d96662f8c2351447c6b0bf5ee843cbc5"
+    },
+    "app/src/debug/res/drawable/ic_launcher_foreground_dev.xml": {
+      "role": "index",
+      "sha256": "849b1b6fffdb1d85525ada34b1314efcad2cea6cf0a3265a95c094bbc5041b1f",
+      "size": 1180,
+      "normalized_sha256": "849b1b6fffdb1d85525ada34b1314efcad2cea6cf0a3265a95c094bbc5041b1f"
+    },
+    "app/src/debug/res/mipmap-anydpi-v26/ic_launcher.xml": {
+      "role": "index",
+      "sha256": "fe526b3cfd9e695ac1a9d8a3341621c8125fd93a7a67dcadf9e4fba8191d2483",
+      "size": 1213,
+      "normalized_sha256": "fe526b3cfd9e695ac1a9d8a3341621c8125fd93a7a67dcadf9e4fba8191d2483"
+    },
+    "app/src/debug/res/mipmap-anydpi-v26/ic_launcher_round.xml": {
+      "role": "index",
+      "sha256": "a2c2a1dfc869d9ee74ebf3e8c7faca9bb599bab13dd4cde11e33c5de39b47593",
+      "size": 1219,
+      "normalized_sha256": "a2c2a1dfc869d9ee74ebf3e8c7faca9bb599bab13dd4cde11e33c5de39b47593"
+    },
+    "app/src/main/AndroidManifest.xml": {
+      "role": "index",
+      "sha256": "ab0e4f8f9692a0096a615ff6b17f24a74bd270a0b74dc933cac61a3d4d62b80b",
+      "size": 4055,
+      "normalized_sha256": "ab0e4f8f9692a0096a615ff6b17f24a74bd270a0b74dc933cac61a3d4d62b80b"
+    },
+    "app/src/main/java/com/food/opencook/MainActivity.kt": {
+      "role": "index",
+      "sha256": "9aff9efa546373b14037ff5e4a625541ca70f88336d856dff293f841c7524d38",
+      "size": 2902,
+      "normalized_sha256": "9aff9efa546373b14037ff5e4a625541ca70f88336d856dff293f841c7524d38"
+    },
+    "app/src/main/java/com/food/opencook/OpenCookApplication.kt": {
+      "role": "index",
+      "sha256": "f97edaaa988fd42cd98659d87bd14512b315b7eb796ac3239a57572759d63397",
+      "size": 4273,
+      "normalized_sha256": "f97edaaa988fd42cd98659d87bd14512b315b7eb796ac3239a57572759d63397"
+    },
+    "app/src/main/java/com/food/opencook/data/LocalDataWiper.kt": {
+      "role": "index",
+      "sha256": "9fc3800e82b883c1737125087784eb047be63c147823b0573b5ec3687af95dfa",
+      "size": 2156,
+      "normalized_sha256": "9fc3800e82b883c1737125087784eb047be63c147823b0573b5ec3687af95dfa"
+    },
+    "app/src/main/java/com/food/opencook/data/discovery/LanMonitor.kt": {
+      "role": "index",
+      "sha256": "64714eeede887cc62e94c1617f24775d0a582be9f2651c7acc30b44b4b14a0ae",
+      "size": 5810,
+      "normalized_sha256": "64714eeede887cc62e94c1617f24775d0a582be9f2651c7acc30b44b4b14a0ae"
+    },
+    "app/src/main/java/com/food/opencook/data/discovery/ServerDiscovery.kt": {
+      "role": "index",
+      "sha256": "4723b8f0f85d0c48ce7ad66e974b51195efdd7b7051772f7039cc1f2337f3daa",
+      "size": 9311,
+      "normalized_sha256": "4723b8f0f85d0c48ce7ad66e974b51195efdd7b7051772f7039cc1f2337f3daa"
+    },
+    "app/src/main/java/com/food/opencook/data/export/RecipeExporter.kt": {
+      "role": "index",
+      "sha256": "7fb41b8423e840a78af816337bb1a14c1a75e29e1f10adc9b4883a2f6614a657",
+      "size": 11048,
+      "normalized_sha256": "7fb41b8423e840a78af816337bb1a14c1a75e29e1f10adc9b4883a2f6614a657"
+    },
+    "app/src/main/java/com/food/opencook/data/export/RecipeMarkdown.kt": {
+      "role": "index",
+      "sha256": "a56ed47b8ce0c22dd407da623e09ec67ff402d7487cba42b9c48e75cca82baa5",
+      "size": 10239,
+      "normalized_sha256": "a56ed47b8ce0c22dd407da623e09ec67ff402d7487cba42b9c48e75cca82baa5"
+    },
+    "app/src/main/java/com/food/opencook/data/image/ImageEditor.kt": {
+      "role": "index",
+      "sha256": "114a6f168309da7ea71b76f336c2f5540a8924b6fd20a36492cebcb858bd424d",
+      "size": 4087,
+      "normalized_sha256": "114a6f168309da7ea71b76f336c2f5540a8924b6fd20a36492cebcb858bd424d"
+    },
+    "app/src/main/java/com/food/opencook/data/image/ImageSniff.kt": {
+      "role": "index",
+      "sha256": "77b370cb1ef23d20971bf8cd0432b63ab1babd8a17826fb047bbb48b8e8b9134",
+      "size": 2202,
+      "normalized_sha256": "77b370cb1ef23d20971bf8cd0432b63ab1babd8a17826fb047bbb48b8e8b9134"
+    },
+    "app/src/main/java/com/food/opencook/data/image/ImageStore.kt": {
+      "role": "index",
+      "sha256": "73fbb04690b4086bd7f84023306df32524e0a448c572cdfe927d7a489442f307",
+      "size": 5462,
+      "normalized_sha256": "73fbb04690b4086bd7f84023306df32524e0a448c572cdfe927d7a489442f307"
+    },
+    "app/src/main/java/com/food/opencook/data/local/OpenCookDatabase.kt": {
+      "role": "index",
+      "sha256": "ff6e23c06629d1d4823d0d7e08f8f46bc9758af47c5b2224f64582817e8fd061",
+      "size": 4136,
+      "normalized_sha256": "ff6e23c06629d1d4823d0d7e08f8f46bc9758af47c5b2224f64582817e8fd061"
+    },
+    "app/src/main/java/com/food/opencook/data/local/Transactor.kt": {
+      "role": "index",
+      "sha256": "6b86371b018c30010e25f5ac0c9ee57b4a2d7e42baa0606d7602cfd162c2cdd9",
+      "size": 1391,
+      "normalized_sha256": "6b86371b018c30010e25f5ac0c9ee57b4a2d7e42baa0606d7602cfd162c2cdd9"
+    },
+    "app/src/main/java/com/food/opencook/data/local/dao/GroceryOverrideDao.kt": {
+      "role": "index",
+      "sha256": "040701bb07354fffe194ed1edd38b05c01e58860a0c23c800d4e7f707572d170",
+      "size": 1389,
+      "normalized_sha256": "040701bb07354fffe194ed1edd38b05c01e58860a0c23c800d4e7f707572d170"
+    },
+    "app/src/main/java/com/food/opencook/data/local/dao/IngredientLinkDao.kt": {
+      "role": "index",
+      "sha256": "30b8b8140119db7a447473e5e2481b17fdfe25eee12f6cbffb73832c072cbb19",
+      "size": 1414,
+      "normalized_sha256": "30b8b8140119db7a447473e5e2481b17fdfe25eee12f6cbffb73832c072cbb19"
+    },
+    "app/src/main/java/com/food/opencook/data/local/dao/JobDao.kt": {
+      "role": "index",
+      "sha256": "e121b3012288b4a9e1a8b4e130719c31ecef6a2b89c1758a08ed025cee27bd7a",
+      "size": 3253,
+      "normalized_sha256": "e121b3012288b4a9e1a8b4e130719c31ecef6a2b89c1758a08ed025cee27bd7a"
+    },
+    "app/src/main/java/com/food/opencook/data/local/dao/MealDayDao.kt": {
+      "role": "index",
+      "sha256": "9deb4102141133a09ea39dbb7369e2213d74bd81f21e7b7aa8c30fb45016ff6f",
+      "size": 1909,
+      "normalized_sha256": "9deb4102141133a09ea39dbb7369e2213d74bd81f21e7b7aa8c30fb45016ff6f"
+    },
+    "app/src/main/java/com/food/opencook/data/local/dao/MealPlanDao.kt": {
+      "role": "index",
+      "sha256": "397294fd3c08d096deae96709bf6942b88a621a8142117c3b90512596ff95a25",
+      "size": 4762,
+      "normalized_sha256": "397294fd3c08d096deae96709bf6942b88a621a8142117c3b90512596ff95a25"
+    },
+    "app/src/main/java/com/food/opencook/data/local/dao/MessageDao.kt": {
+      "role": "index",
+      "sha256": "656aa6c3003494c38262b2444295e011eb90225b30b347fb9e30902c0e356ea6",
+      "size": 3321,
+      "normalized_sha256": "656aa6c3003494c38262b2444295e011eb90225b30b347fb9e30902c0e356ea6"
+    },
+    "app/src/main/java/com/food/opencook/data/local/dao/PantryDao.kt": {
+      "role": "index",
+      "sha256": "8bf9033626a49414baa13afdf2dbeee94d2d276a54fb469d08adcfe542bfdbf9",
+      "size": 1708,
+      "normalized_sha256": "8bf9033626a49414baa13afdf2dbeee94d2d276a54fb469d08adcfe542bfdbf9"
+    },
+    "app/src/main/java/com/food/opencook/data/local/dao/ProductCacheDao.kt": {
+      "role": "index",
+      "sha256": "2f2c49f6999a3a247a5085439479c357078d2c66b3414e58b358f6b64e5cec62",
+      "size": 1338,
+      "normalized_sha256": "2f2c49f6999a3a247a5085439479c357078d2c66b3414e58b358f6b64e5cec62"
+    },
+    "app/src/main/java/com/food/opencook/data/local/dao/RecipeDao.kt": {
+      "role": "index",
+      "sha256": "c4efdb22f88a3d36996c149d3fd3e2cc682a63a043681e28c5e6a2285adf9161",
+      "size": 10246,
+      "normalized_sha256": "c4efdb22f88a3d36996c149d3fd3e2cc682a63a043681e28c5e6a2285adf9161"
+    },
+    "app/src/main/java/com/food/opencook/data/local/dao/RecipeLikeDao.kt": {
+      "role": "index",
+      "sha256": "de5f9c24cf330039aca241baec289adfc8efea1ffb6fb6667ea3d58092b5caa0",
+      "size": 1728,
+      "normalized_sha256": "de5f9c24cf330039aca241baec289adfc8efea1ffb6fb6667ea3d58092b5caa0"
+    },
+    "app/src/main/java/com/food/opencook/data/local/dao/ShoppingDao.kt": {
+      "role": "index",
+      "sha256": "c62c0499bbef3c473ab28251e678911154899b4770d218444fe81e038413933b",
+      "size": 3600,
+      "normalized_sha256": "c62c0499bbef3c473ab28251e678911154899b4770d218444fe81e038413933b"
+    },
+    "app/src/main/java/com/food/opencook/data/local/entity/GroceryOverrideEntity.kt": {
+      "role": "index",
+      "sha256": "8e7a48d8081382c5085cfc0d3af5667265613ed84d84fb4f1789278cd296a4cd",
+      "size": 1738,
+      "normalized_sha256": "8e7a48d8081382c5085cfc0d3af5667265613ed84d84fb4f1789278cd296a4cd"
+    },
+    "app/src/main/java/com/food/opencook/data/local/entity/ImageEntity.kt": {
+      "role": "index",
+      "sha256": "6d36328de0ede1ead6d2d01225cdfe73c31f9129cfc6a7f6976d72de19366429",
+      "size": 1664,
+      "normalized_sha256": "6d36328de0ede1ead6d2d01225cdfe73c31f9129cfc6a7f6976d72de19366429"
+    },
+    "app/src/main/java/com/food/opencook/data/local/entity/IngredientEntity.kt": {
+      "role": "index",
+      "sha256": "911fcf15f6e889599d232bdb8a3549afb488e19cd81941396b582866403173f7",
+      "size": 1698,
+      "normalized_sha256": "911fcf15f6e889599d232bdb8a3549afb488e19cd81941396b582866403173f7"
+    },
+    "app/src/main/java/com/food/opencook/data/local/entity/IngredientLinkEntity.kt": {
+      "role": "index",
+      "sha256": "0daafdd37b7e8b2081c87914815ce7c1b8559d18a3888cb4618e75e90404f8ca",
+      "size": 1704,
+      "normalized_sha256": "0daafdd37b7e8b2081c87914815ce7c1b8559d18a3888cb4618e75e90404f8ca"
+    },
+    "app/src/main/java/com/food/opencook/data/local/entity/InstructionEntity.kt": {
+      "role": "index",
+      "sha256": "3e096242b2981e6ddffdc72277f51ef0263449ae7c3dadb8c4ebb4d2a4e77758",
+      "size": 1407,
+      "normalized_sha256": "3e096242b2981e6ddffdc72277f51ef0263449ae7c3dadb8c4ebb4d2a4e77758"
+    },
+    "app/src/main/java/com/food/opencook/data/local/entity/JobEntity.kt": {
+      "role": "index",
+      "sha256": "5729d4512ca3657328bbc6de9b9187ff4f2e07770e49305649ed2dcde42877e3",
+      "size": 2042,
+      "normalized_sha256": "5729d4512ca3657328bbc6de9b9187ff4f2e07770e49305649ed2dcde42877e3"
+    },
+    "app/src/main/java/com/food/opencook/data/local/entity/MealDayEntity.kt": {
+      "role": "index",
+      "sha256": "62d03ef1a80e87a7631c6eb49f4a997ae96262f45e5397c8f863c98a181274dc",
+      "size": 1965,
+      "normalized_sha256": "62d03ef1a80e87a7631c6eb49f4a997ae96262f45e5397c8f863c98a181274dc"
+    },
+    "app/src/main/java/com/food/opencook/data/local/entity/MealPlanEntity.kt": {
+      "role": "index",
+      "sha256": "909ce7e6febd3a56553b20e5982d5f7f71a42553e2f82512841eb0fef00c8b86",
+      "size": 2464,
+      "normalized_sha256": "909ce7e6febd3a56553b20e5982d5f7f71a42553e2f82512841eb0fef00c8b86"
+    },
+    "app/src/main/java/com/food/opencook/data/local/entity/MessageEntity.kt": {
+      "role": "index",
+      "sha256": "2ca4b101f7fa83b883cb38aa0b6079775ff07360ed44d87d7f69dc164967a788",
+      "size": 1500,
+      "normalized_sha256": "2ca4b101f7fa83b883cb38aa0b6079775ff07360ed44d87d7f69dc164967a788"
+    },
+    "app/src/main/java/com/food/opencook/data/local/entity/NutritionEntity.kt": {
+      "role": "index",
+      "sha256": "2e2e728161237fef0e138941f4f2e8e64b828ff455cb988691221ae7980e4d7e",
+      "size": 1829,
+      "normalized_sha256": "2e2e728161237fef0e138941f4f2e8e64b828ff455cb988691221ae7980e4d7e"
+    },
+    "app/src/main/java/com/food/opencook/data/local/entity/PantryItemEntity.kt": {
+      "role": "index",
+      "sha256": "462741d277c2ef80a318b377c67f0f1e81ef2f509387cbd26b84f5353594950e",
+      "size": 1110,
+      "normalized_sha256": "462741d277c2ef80a318b377c67f0f1e81ef2f509387cbd26b84f5353594950e"
+    },
+    "app/src/main/java/com/food/opencook/data/local/entity/ProductCacheEntity.kt": {
+      "role": "index",
+      "sha256": "f99b9ac0647673417fef1860cccd94e8b86a14b464deabd8990e7f6af736e75b",
+      "size": 1226,
+      "normalized_sha256": "f99b9ac0647673417fef1860cccd94e8b86a14b464deabd8990e7f6af736e75b"
+    },
+    "app/src/main/java/com/food/opencook/data/local/entity/RecipeEntity.kt": {
+      "role": "index",
+      "sha256": "7e0fe68d29acdb1f07b4ac2d7d597dc80ede83bdd0fb7ae9ec072338f8b54981",
+      "size": 2674,
+      "normalized_sha256": "7e0fe68d29acdb1f07b4ac2d7d597dc80ede83bdd0fb7ae9ec072338f8b54981"
+    },
+    "app/src/main/java/com/food/opencook/data/local/entity/RecipeLikeEntity.kt": {
+      "role": "index",
+      "sha256": "c42cb74f90c8947de2f30fa8dd54a606084cb0114be4a1903d16fd259667440e",
+      "size": 1378,
+      "normalized_sha256": "c42cb74f90c8947de2f30fa8dd54a606084cb0114be4a1903d16fd259667440e"
+    },
+    "app/src/main/java/com/food/opencook/data/local/entity/ShoppingItemEntity.kt": {
+      "role": "index",
+      "sha256": "df10d818b8c67c43d7466d04954d982e1f00c7eccfaeb8b6a9e5423313e25974",
+      "size": 2272,
+      "normalized_sha256": "df10d818b8c67c43d7466d04954d982e1f00c7eccfaeb8b6a9e5423313e25974"
+    },
+    "app/src/main/java/com/food/opencook/data/local/relation/RecipeListItem.kt": {
+      "role": "index",
+      "sha256": "0ef85d8dcc254e58100e19833106faf11471466d029291d979e12610b114ceb1",
+      "size": 2188,
+      "normalized_sha256": "0ef85d8dcc254e58100e19833106faf11471466d029291d979e12610b114ceb1"
+    },
+    "app/src/main/java/com/food/opencook/data/local/relation/RecipeWithDetails.kt": {
+      "role": "index",
+      "sha256": "ad87529be2dbe64b43ad93a8fc562a6a6482df846add509748d5166db3b16e98",
+      "size": 1829,
+      "normalized_sha256": "ad87529be2dbe64b43ad93a8fc562a6a6482df846add509748d5166db3b16e98"
+    },
+    "app/src/main/java/com/food/opencook/data/localization/LocalizedLists.kt": {
+      "role": "index",
+      "sha256": "b61edab7dd4b703422cf3b3e069a365bf8c5b4f9f2cf8523fb9eeac81d219845",
+      "size": 10526,
+      "normalized_sha256": "b61edab7dd4b703422cf3b3e069a365bf8c5b4f9f2cf8523fb9eeac81d219845"
+    },
+    "app/src/main/java/com/food/opencook/data/notification/JobNotifier.kt": {
+      "role": "index",
+      "sha256": "c9731d11582b47142b0edc0fd05016ec182c46b0c4fe3dca2d3bf1c145c38446",
+      "size": 3678,
+      "normalized_sha256": "c9731d11582b47142b0edc0fd05016ec182c46b0c4fe3dca2d3bf1c145c38446"
+    },
+    "app/src/main/java/com/food/opencook/data/peer/PeerAdvertiser.kt": {
+      "role": "index",
+      "sha256": "e9e6f33cc888b4245247bac38537f068d311669980727e58531a81be32e294f3",
+      "size": 9076,
+      "normalized_sha256": "e9e6f33cc888b4245247bac38537f068d311669980727e58531a81be32e294f3"
+    },
+    "app/src/main/java/com/food/opencook/data/peer/PeerStandbyService.kt": {
+      "role": "index",
+      "sha256": "a6eae503b6ab6947db3ac083cb3310ecdab364305fbfff6b2fa46b10ad7813b0",
+      "size": 7362,
+      "normalized_sha256": "a6eae503b6ab6947db3ac083cb3310ecdab364305fbfff6b2fa46b10ad7813b0"
+    },
+    "app/src/main/java/com/food/opencook/data/peer/PeerSyncServer.kt": {
+      "role": "index",
+      "sha256": "4b4f69c8f5447dc54446bb1356fa4620530a54fe85b712123dccf0032dca99e1",
+      "size": 8885,
+      "normalized_sha256": "4b4f69c8f5447dc54446bb1356fa4620530a54fe85b712123dccf0032dca99e1"
+    },
+    "app/src/main/java/com/food/opencook/data/recipeimport/HtmlText.kt": {
+      "role": "index",
+      "sha256": "3218ff300ba40f357d63bc9b0ddaee8d453db6311fb6748591a47ad884ba223a",
+      "size": 5406,
+      "normalized_sha256": "3218ff300ba40f357d63bc9b0ddaee8d453db6311fb6748591a47ad884ba223a"
+    },
+    "app/src/main/java/com/food/opencook/data/recipeimport/IngredientLineParser.kt": {
+      "role": "index",
+      "sha256": "6fe060c64ea8022f4570f2fabe1dba356c40723c20b2a7da2be2bd07e1e1c838",
+      "size": 9209,
+      "normalized_sha256": "6fe060c64ea8022f4570f2fabe1dba356c40723c20b2a7da2be2bd07e1e1c838"
+    },
+    "app/src/main/java/com/food/opencook/data/recipeimport/JsonLdExtractor.kt": {
+      "role": "index",
+      "sha256": "0ec454571e1ed14e2a2eb8569e0e02b589c5c9aed8a2f81333df9cf860c31792",
+      "size": 2193,
+      "normalized_sha256": "0ec454571e1ed14e2a2eb8569e0e02b589c5c9aed8a2f81333df9cf860c31792"
+    },
+    "app/src/main/java/com/food/opencook/data/recipeimport/RecipeBundle.kt": {
+      "role": "index",
+      "sha256": "a07cd60cdf2d9c97c48ae4299f2bf8055e1af868d01a9a1e43addd89b1442eda",
+      "size": 4575,
+      "normalized_sha256": "a07cd60cdf2d9c97c48ae4299f2bf8055e1af868d01a9a1e43addd89b1442eda"
+    },
+    "app/src/main/java/com/food/opencook/data/recipeimport/RecipeImportParser.kt": {
+      "role": "index",
+      "sha256": "7bc2c4a28e9c877fb5293468cb4d5af0803ef2362c2f062d2ab52daf67221c73",
+      "size": 18012,
+      "normalized_sha256": "7bc2c4a28e9c877fb5293468cb4d5af0803ef2362c2f062d2ab52daf67221c73"
+    },
+    "app/src/main/java/com/food/opencook/data/recipeimport/SourceCookbook.kt": {
+      "role": "index",
+      "sha256": "e5d97ad1d2c2711d97a98c250b72961dba8ddfb89f0853de3cbb94a47d62aa92",
+      "size": 3422,
+      "normalized_sha256": "e5d97ad1d2c2711d97a98c250b72961dba8ddfb89f0853de3cbb94a47d62aa92"
+    },
+    "app/src/main/java/com/food/opencook/data/remote/BaseUrlInterceptor.kt": {
+      "role": "index",
+      "sha256": "3eda392c25c4fad9776a736728c96b3b92d88dbc08528ba54d85da133b387fd0",
+      "size": 2192,
+      "normalized_sha256": "3eda392c25c4fad9776a736728c96b3b92d88dbc08528ba54d85da133b387fd0"
+    },
+    "app/src/main/java/com/food/opencook/data/remote/ImportApi.kt": {
+      "role": "index",
+      "sha256": "54f7ba60f982cce3b8f241bd70346771e56b4ce7af7ee386b192aff7202e150a",
+      "size": 1895,
+      "normalized_sha256": "54f7ba60f982cce3b8f241bd70346771e56b4ce7af7ee386b192aff7202e150a"
+    },
+    "app/src/main/java/com/food/opencook/data/remote/JobsApi.kt": {
+      "role": "index",
+      "sha256": "e3a3900d5a4c02ba5bdf8cd35a6f5b9dda820f7e2d3a2f7c00cf2c086519e9fd",
+      "size": 1665,
+      "normalized_sha256": "e3a3900d5a4c02ba5bdf8cd35a6f5b9dda820f7e2d3a2f7c00cf2c086519e9fd"
+    },
+    "app/src/main/java/com/food/opencook/data/remote/OpenFoodFactsApi.kt": {
+      "role": "index",
+      "sha256": "8732912eb3601532e06ff6f5770d4730559b9d9ed62020e6ea63315a1a6297d0",
+      "size": 1404,
+      "normalized_sha256": "8732912eb3601532e06ff6f5770d4730559b9d9ed62020e6ea63315a1a6297d0"
+    },
+    "app/src/main/java/com/food/opencook/data/remote/SyncApi.kt": {
+      "role": "index",
+      "sha256": "b713a654db501cdef81db42fff700b491978dcf752e697451473d4398ec7b492",
+      "size": 3137,
+      "normalized_sha256": "b713a654db501cdef81db42fff700b491978dcf752e697451473d4398ec7b492"
+    },
+    "app/src/main/java/com/food/opencook/data/remote/dto/Dtos.kt": {
+      "role": "index",
+      "sha256": "d54d2caff89246d99f4520bbf42bcb6c6a6b0f019d043414482ccbe2e3ee7749",
+      "size": 9903,
+      "normalized_sha256": "d54d2caff89246d99f4520bbf42bcb6c6a6b0f019d043414482ccbe2e3ee7749"
+    },
+    "app/src/main/java/com/food/opencook/data/remote/mapper/RecipeMapper.kt": {
+      "role": "index",
+      "sha256": "9961329c6272153fb62edbbdb33366b480504b18c6e61c3b8e7cef244dfccb03",
+      "size": 8279,
+      "normalized_sha256": "9961329c6272153fb62edbbdb33366b480504b18c6e61c3b8e7cef244dfccb03"
+    },
+    "app/src/main/java/com/food/opencook/data/settings/SettingsRepository.kt": {
+      "role": "index",
+      "sha256": "718fefaba1df81d613f699f23360bff5bb70a283d5a52cd030001590c6e1831e",
+      "size": 17151,
+      "normalized_sha256": "718fefaba1df81d613f699f23360bff5bb70a283d5a52cd030001590c6e1831e"
+    },
+    "app/src/main/java/com/food/opencook/di/CorrectionModule.kt": {
+      "role": "index",
+      "sha256": "0fd06807ccf41da49beb62045ac5ba026cb37806920cbe876dbfa19a978e6872",
+      "size": 1761,
+      "normalized_sha256": "0fd06807ccf41da49beb62045ac5ba026cb37806920cbe876dbfa19a978e6872"
+    },
+    "app/src/main/java/com/food/opencook/di/DatabaseModule.kt": {
+      "role": "index",
+      "sha256": "4e9d85328fc52d3afc0cf4a0d255bb17c314fe043afab161a3d6f89c3f82c020",
+      "size": 6069,
+      "normalized_sha256": "4e9d85328fc52d3afc0cf4a0d255bb17c314fe043afab161a3d6f89c3f82c020"
+    },
+    "app/src/main/java/com/food/opencook/di/NetworkModule.kt": {
+      "role": "index",
+      "sha256": "8223544300e1eb82157ad7052c92a54d0f2f9fb3a973eb11519dc0effc647867",
+      "size": 6012,
+      "normalized_sha256": "8223544300e1eb82157ad7052c92a54d0f2f9fb3a973eb11519dc0effc647867"
+    },
+    "app/src/main/java/com/food/opencook/di/SettingsModule.kt": {
+      "role": "index",
+      "sha256": "39bed36ad49767698c678811efcb9396404c297067cde7615b30b9502213084b",
+      "size": 1861,
+      "normalized_sha256": "39bed36ad49767698c678811efcb9396404c297067cde7615b30b9502213084b"
+    },
+    "app/src/main/java/com/food/opencook/di/SyncModule.kt": {
+      "role": "index",
+      "sha256": "5a22ca8ca4f468a50adbb298c778fd3f725736f7a144e72ee72540fda7d35c18",
+      "size": 1306,
+      "normalized_sha256": "5a22ca8ca4f468a50adbb298c778fd3f725736f7a144e72ee72540fda7d35c18"
+    },
+    "app/src/main/java/com/food/opencook/repository/GroceryOverrideRepository.kt": {
+      "role": "index",
+      "sha256": "93cc3ecfdb2d9b4e4ba1b075ade123bad99f3dda9e79823f5719728295dcd253",
+      "size": 3153,
+      "normalized_sha256": "93cc3ecfdb2d9b4e4ba1b075ade123bad99f3dda9e79823f5719728295dcd253"
+    },
+    "app/src/main/java/com/food/opencook/repository/IngredientLinkRepository.kt": {
+      "role": "index",
+      "sha256": "b939e9ae81abbbd4ea19b97f6cd5487b897991ddc791c9fe131eb56ca2d2de5f",
+      "size": 3457,
+      "normalized_sha256": "b939e9ae81abbbd4ea19b97f6cd5487b897991ddc791c9fe131eb56ca2d2de5f"
+    },
+    "app/src/main/java/com/food/opencook/repository/MealPlanRepository.kt": {
+      "role": "index",
+      "sha256": "7a0ae636b42fa00157e9f752f349e5e643636299ce26958dbce50e0d8d962ba5",
+      "size": 15077,
+      "normalized_sha256": "7a0ae636b42fa00157e9f752f349e5e643636299ce26958dbce50e0d8d962ba5"
+    },
+    "app/src/main/java/com/food/opencook/repository/PantryRepository.kt": {
+      "role": "index",
+      "sha256": "295989a78506a1f2f692a5b75e54057986d0f452952d597838722331d0dc316f",
+      "size": 3985,
+      "normalized_sha256": "295989a78506a1f2f692a5b75e54057986d0f452952d597838722331d0dc316f"
+    },
+    "app/src/main/java/com/food/opencook/repository/ProductLookupRepository.kt": {
+      "role": "index",
+      "sha256": "96ded6aa36035a4636965b09713a1314924f84636f9c9547deffc8818eee4388",
+      "size": 2508,
+      "normalized_sha256": "96ded6aa36035a4636965b09713a1314924f84636f9c9547deffc8818eee4388"
+    },
+    "app/src/main/java/com/food/opencook/repository/RecipeRepository.kt": {
+      "role": "index",
+      "sha256": "829b390af91c43637d30094f275144ecfbdeb77d350da42682fc17bb5e25f350",
+      "size": 24321,
+      "normalized_sha256": "829b390af91c43637d30094f275144ecfbdeb77d350da42682fc17bb5e25f350"
+    },
+    "app/src/main/java/com/food/opencook/repository/ShoppingRepository.kt": {
+      "role": "index",
+      "sha256": "40706895b4602196dd3006a0c5c2b3a1092b18d3deaa282e0efffa5d36efa7c1",
+      "size": 16689,
+      "normalized_sha256": "40706895b4602196dd3006a0c5c2b3a1092b18d3deaa282e0efffa5d36efa7c1"
+    },
+    "app/src/main/java/com/food/opencook/repository/SuggestionRepository.kt": {
+      "role": "index",
+      "sha256": "76f541e012b410991963996d2847eabd7a19dc3f453503dd4664befff3f73227",
+      "size": 3366,
+      "normalized_sha256": "76f541e012b410991963996d2847eabd7a19dc3f453503dd4664befff3f73227"
+    },
+    "app/src/main/java/com/food/opencook/share/ShareImportBus.kt": {
+      "role": "index",
+      "sha256": "655234b68088c779c18d44e099b09c448c47d564380ba3fc1554c9e55214b06a",
+      "size": 1612,
+      "normalized_sha256": "655234b68088c779c18d44e099b09c448c47d564380ba3fc1554c9e55214b06a"
+    },
+    "app/src/main/java/com/food/opencook/sync/Crdt.kt": {
+      "role": "index",
+      "sha256": "b97d1920447522e1265d2d69d8cc78012c3d8416545c1f6ed348902a31ea370a",
+      "size": 2306,
+      "normalized_sha256": "b97d1920447522e1265d2d69d8cc78012c3d8416545c1f6ed348902a31ea370a"
+    },
+    "app/src/main/java/com/food/opencook/sync/GroceryOverrideMessageEncoder.kt": {
+      "role": "index",
+      "sha256": "4a69b0bd955229fe66a1a647628136dc780c3edaf53d84f3775862479a00e841",
+      "size": 1838,
+      "normalized_sha256": "4a69b0bd955229fe66a1a647628136dc780c3edaf53d84f3775862479a00e841"
+    },
+    "app/src/main/java/com/food/opencook/sync/Hlc.kt": {
+      "role": "index",
+      "sha256": "e645484699e11b04e2f83d53870f26dc2e0f419158e334947b7739949de3a23e",
+      "size": 2313,
+      "normalized_sha256": "e645484699e11b04e2f83d53870f26dc2e0f419158e334947b7739949de3a23e"
+    },
+    "app/src/main/java/com/food/opencook/sync/HlcClock.kt": {
+      "role": "index",
+      "sha256": "71c506fce0475b167b7ae81ed1790434bd4ad908d1733b8d381ec7033e212f65",
+      "size": 2483,
+      "normalized_sha256": "71c506fce0475b167b7ae81ed1790434bd4ad908d1733b8d381ec7033e212f65"
+    },
+    "app/src/main/java/com/food/opencook/sync/ImportInboxSyncer.kt": {
+      "role": "index",
+      "sha256": "9822869857a3aca27b3405b00a0afd45dab41441a92408bd56508f5f7ed6995d",
+      "size": 5088,
+      "normalized_sha256": "9822869857a3aca27b3405b00a0afd45dab41441a92408bd56508f5f7ed6995d"
+    },
+    "app/src/main/java/com/food/opencook/sync/IngredientLinkMessageEncoder.kt": {
+      "role": "index",
+      "sha256": "e56163206a970010e73747da9416d69e84ffe2512c309436ae6de8d971ec021e",
+      "size": 2493,
+      "normalized_sha256": "e56163206a970010e73747da9416d69e84ffe2512c309436ae6de8d971ec021e"
+    },
+    "app/src/main/java/com/food/opencook/sync/MealDayMessageEncoder.kt": {
+      "role": "index",
+      "sha256": "245de048668b23856f73687a7da267d878c237874d933b39832e3f2052f34dbc",
+      "size": 1575,
+      "normalized_sha256": "245de048668b23856f73687a7da267d878c237874d933b39832e3f2052f34dbc"
+    },
+    "app/src/main/java/com/food/opencook/sync/MealPlanMessageEncoder.kt": {
+      "role": "index",
+      "sha256": "16c37fe2f9d57ce05005f573a53986f716756fd26760e4a23b4a98512a8d9900",
+      "size": 2823,
+      "normalized_sha256": "16c37fe2f9d57ce05005f573a53986f716756fd26760e4a23b4a98512a8d9900"
+    },
+    "app/src/main/java/com/food/opencook/sync/Merkle.kt": {
+      "role": "index",
+      "sha256": "101754ae826d4027c14a8943e775bcd4e73ee3dfeee3f350734c9628d9fbbf02",
+      "size": 3497,
+      "normalized_sha256": "101754ae826d4027c14a8943e775bcd4e73ee3dfeee3f350734c9628d9fbbf02"
+    },
+    "app/src/main/java/com/food/opencook/sync/MerkleWire.kt": {
+      "role": "index",
+      "sha256": "424450e51128a2a12d4332f510a90c433f171fabd20d740c32e728121cbbb059",
+      "size": 1496,
+      "normalized_sha256": "424450e51128a2a12d4332f510a90c433f171fabd20d740c32e728121cbbb059"
+    },
+    "app/src/main/java/com/food/opencook/sync/Message.kt": {
+      "role": "index",
+      "sha256": "867be5ca86ebfe22161bcc5118ad90856fdfbdeeccc76b6dc5db403203da669d",
+      "size": 1994,
+      "normalized_sha256": "867be5ca86ebfe22161bcc5118ad90856fdfbdeeccc76b6dc5db403203da669d"
+    },
+    "app/src/main/java/com/food/opencook/sync/MessageApplier.kt": {
+      "role": "index",
+      "sha256": "502b1dd98bbe5b8d552e595c6eca7a319faabf610630d9998bfb8feb1477d700",
+      "size": 18920,
+      "normalized_sha256": "502b1dd98bbe5b8d552e595c6eca7a319faabf610630d9998bfb8feb1477d700"
+    },
+    "app/src/main/java/com/food/opencook/sync/MessageCodec.kt": {
+      "role": "index",
+      "sha256": "44bb0c7d137eb7e0206dc5d20533b8e6770c59e98b27bb4b3e6d8ac2594626c5",
+      "size": 1611,
+      "normalized_sha256": "44bb0c7d137eb7e0206dc5d20533b8e6770c59e98b27bb4b3e6d8ac2594626c5"
+    },
+    "app/src/main/java/com/food/opencook/sync/MessageRecorder.kt": {
+      "role": "index",
+      "sha256": "828a4b5077d2cffa17dd7f5a26a812c8a19676cd525f0c70c6b92f47b436e305",
+      "size": 1927,
+      "normalized_sha256": "828a4b5077d2cffa17dd7f5a26a812c8a19676cd525f0c70c6b92f47b436e305"
+    },
+    "app/src/main/java/com/food/opencook/sync/PantryMessageEncoder.kt": {
+      "role": "index",
+      "sha256": "53fba3cc5ba0ad69465c7dc633367aa143a5132f6f60fbf0ec5bc2dcdb79226e",
+      "size": 1471,
+      "normalized_sha256": "53fba3cc5ba0ad69465c7dc633367aa143a5132f6f60fbf0ec5bc2dcdb79226e"
+    },
+    "app/src/main/java/com/food/opencook/sync/RecipeLikeMessageEncoder.kt": {
+      "role": "index",
+      "sha256": "dc4f1b965e49621e43a27e987cbd971ffa6de7b9aac051c5e7d891b609e03de1",
+      "size": 1769,
+      "normalized_sha256": "dc4f1b965e49621e43a27e987cbd971ffa6de7b9aac051c5e7d891b609e03de1"
+    },
+    "app/src/main/java/com/food/opencook/sync/RecipeMessageEncoder.kt": {
+      "role": "index",
+      "sha256": "d1987d1145e76d6aae0bcd198d3c77da1eef93d94e46d040d556409cb2176af4",
+      "size": 6445,
+      "normalized_sha256": "d1987d1145e76d6aae0bcd198d3c77da1eef93d94e46d040d556409cb2176af4"
+    },
+    "app/src/main/java/com/food/opencook/sync/ShoppingMessageEncoder.kt": {
+      "role": "index",
+      "sha256": "aeb097d2492c64adedda42a84671bd3d5b3fab6898864ab6b927ce8d12349a3d",
+      "size": 2158,
+      "normalized_sha256": "aeb097d2492c64adedda42a84671bd3d5b3fab6898864ab6b927ce8d12349a3d"
+    },
+    "app/src/main/java/com/food/opencook/sync/SyncClock.kt": {
+      "role": "index",
+      "sha256": "c086fc1233a34714653bec9227209cf830efdfd0acd8bb538d8f32f9237cba8e",
+      "size": 2183,
+      "normalized_sha256": "c086fc1233a34714653bec9227209cf830efdfd0acd8bb538d8f32f9237cba8e"
+    },
+    "app/src/main/java/com/food/opencook/sync/SyncEngine.kt": {
+      "role": "index",
+      "sha256": "2a7d412130909fe3790312d67e8225d9b8f239905063257d62059c0fe94ff0aa",
+      "size": 19689,
+      "normalized_sha256": "2a7d412130909fe3790312d67e8225d9b8f239905063257d62059c0fe94ff0aa"
+    },
+    "app/src/main/java/com/food/opencook/sync/SyncManager.kt": {
+      "role": "index",
+      "sha256": "53a8bc3c2c818c1753980041fb14c0efa15908d941fc3a2eff52a03276f397d7",
+      "size": 9704,
+      "normalized_sha256": "53a8bc3c2c818c1753980041fb14c0efa15908d941fc3a2eff52a03276f397d7"
+    },
+    "app/src/main/java/com/food/opencook/sync/SyncResponder.kt": {
+      "role": "index",
+      "sha256": "4f6dc5bd59498bd479c72134875f8a63e1348d8cac5302a85a6c00a7082c80ad",
+      "size": 3684,
+      "normalized_sha256": "4f6dc5bd59498bd479c72134875f8a63e1348d8cac5302a85a6c00a7082c80ad"
+    },
+    "app/src/main/java/com/food/opencook/sync/SyncStatus.kt": {
+      "role": "index",
+      "sha256": "f8eeb3f2e4856748440b53fa35f62f0cfd129e24fa45e6c92c322165c8881013",
+      "size": 3282,
+      "normalized_sha256": "f8eeb3f2e4856748440b53fa35f62f0cfd129e24fa45e6c92c322165c8881013"
+    },
+    "app/src/main/java/com/food/opencook/ui/AppBarViewModel.kt": {
+      "role": "index",
+      "sha256": "26b25fc837cf4759213ed045dace00a0c44dca8c331878403961416040beb5fb",
+      "size": 1912,
+      "normalized_sha256": "26b25fc837cf4759213ed045dace00a0c44dca8c331878403961416040beb5fb"
+    },
+    "app/src/main/java/com/food/opencook/ui/AppViewModel.kt": {
+      "role": "index",
+      "sha256": "4b8cdd28236af55b1fd052e428f7e896d635fd31bd04d159f65e91fbd0849101",
+      "size": 2472,
+      "normalized_sha256": "4b8cdd28236af55b1fd052e428f7e896d635fd31bd04d159f65e91fbd0849101"
+    },
+    "app/src/main/java/com/food/opencook/ui/LocalSnackbarHostState.kt": {
+      "role": "index",
+      "sha256": "eb18f3b36c81308ff23201ba9a0a2b7d4d96c1608823bf5e593711c64070cb97",
+      "size": 1251,
+      "normalized_sha256": "eb18f3b36c81308ff23201ba9a0a2b7d4d96c1608823bf5e593711c64070cb97"
+    },
+    "app/src/main/java/com/food/opencook/ui/OpenCookApp.kt": {
+      "role": "index",
+      "sha256": "663d9b53c8f40185f61321dd9f4f3aedce4f9a1bf35a18a829cc3576d6dab1ac",
+      "size": 20033,
+      "normalized_sha256": "663d9b53c8f40185f61321dd9f4f3aedce4f9a1bf35a18a829cc3576d6dab1ac"
+    },
+    "app/src/main/java/com/food/opencook/ui/ThemeViewModel.kt": {
+      "role": "index",
+      "sha256": "cb4964bff5524c9129de5eb931e92a6b2e7d363f9aff5167efad90f5d982867e",
+      "size": 1634,
+      "normalized_sha256": "cb4964bff5524c9129de5eb931e92a6b2e7d363f9aff5167efad90f5d982867e"
+    },
+    "app/src/main/java/com/food/opencook/ui/barcode/BarcodeAnalyzer.kt": {
+      "role": "index",
+      "sha256": "6611b6b19be862843119f4e5dc93509c0f4d65f9538a5c9d8329f89fa74f0076",
+      "size": 6660,
+      "normalized_sha256": "6611b6b19be862843119f4e5dc93509c0f4d65f9538a5c9d8329f89fa74f0076"
+    },
+    "app/src/main/java/com/food/opencook/ui/barcode/BarcodeScanScreen.kt": {
+      "role": "index",
+      "sha256": "4174ea3316e8519e664e41815a91d65fdec634c84852950dfac9cea859ea2aca",
+      "size": 11578,
+      "normalized_sha256": "4174ea3316e8519e664e41815a91d65fdec634c84852950dfac9cea859ea2aca"
+    },
+    "app/src/main/java/com/food/opencook/ui/barcode/BarcodeViewModel.kt": {
+      "role": "index",
+      "sha256": "cabdbaf0a0f09c42082849376c6700a374864c7c6f315afa41be4f473b94cc68",
+      "size": 3670,
+      "normalized_sha256": "cabdbaf0a0f09c42082849376c6700a374864c7c6f315afa41be4f473b94cc68"
+    },
+    "app/src/main/java/com/food/opencook/ui/capture/CameraCaptureScreen.kt": {
+      "role": "index",
+      "sha256": "fe73428ff7d72cb0c56dc69bd71dfe64570e2454ab634adf97b0fd0e83406325",
+      "size": 5385,
+      "normalized_sha256": "fe73428ff7d72cb0c56dc69bd71dfe64570e2454ab634adf97b0fd0e83406325"
+    },
+    "app/src/main/java/com/food/opencook/ui/capture/CameraViewModel.kt": {
+      "role": "index",
+      "sha256": "d164ab6ca357b424472f1921c771ebee19ada187afbcfba503219186eb5c882c",
+      "size": 1235,
+      "normalized_sha256": "d164ab6ca357b424472f1921c771ebee19ada187afbcfba503219186eb5c882c"
+    },
+    "app/src/main/java/com/food/opencook/ui/components/AppTopBar.kt": {
+      "role": "index",
+      "sha256": "176c507d5a227cfacb13028d4a0dc3cd53dd13e090b8f5207a1295c4d4899fd5",
+      "size": 9639,
+      "normalized_sha256": "176c507d5a227cfacb13028d4a0dc3cd53dd13e090b8f5207a1295c4d4899fd5"
+    },
+    "app/src/main/java/com/food/opencook/ui/components/AutocompleteAddField.kt": {
+      "role": "index",
+      "sha256": "206353e70e75c1ca4d230555b17d1d8a77b8d2b77740b6a145982cdd95d0b79a",
+      "size": 5784,
+      "normalized_sha256": "206353e70e75c1ca4d230555b17d1d8a77b8d2b77740b6a145982cdd95d0b79a"
+    },
+    "app/src/main/java/com/food/opencook/ui/components/AvailabilityBadge.kt": {
+      "role": "index",
+      "sha256": "1f46abb0d0095e545b2425fe01c0a9ae199ddab9dc7d19d4ddc391e41e947923",
+      "size": 4643,
+      "normalized_sha256": "1f46abb0d0095e545b2425fe01c0a9ae199ddab9dc7d19d4ddc391e41e947923"
+    },
+    "app/src/main/java/com/food/opencook/ui/components/CategoryHeader.kt": {
+      "role": "index",
+      "sha256": "7ac6785e11f1269542ce9a286fdf12ffe4e4beb7acfc2bd3480df7284455661e",
+      "size": 1679,
+      "normalized_sha256": "7ac6785e11f1269542ce9a286fdf12ffe4e4beb7acfc2bd3480df7284455661e"
+    },
+    "app/src/main/java/com/food/opencook/ui/components/CelebrationEffects.kt": {
+      "role": "index",
+      "sha256": "600374b9cb52cc89a57d2aa0413e936aab90ec2e3dc5335946d7fa36d8ade2e9",
+      "size": 7086,
+      "normalized_sha256": "600374b9cb52cc89a57d2aa0413e936aab90ec2e3dc5335946d7fa36d8ade2e9"
+    },
+    "app/src/main/java/com/food/opencook/ui/components/ConfettiOverlay.kt": {
+      "role": "index",
+      "sha256": "c6a56e1f99f22d834fd6cd93eb58afd57d725baa586291b55ca2dd1d64a4f8c1",
+      "size": 5745,
+      "normalized_sha256": "c6a56e1f99f22d834fd6cd93eb58afd57d725baa586291b55ca2dd1d64a4f8c1"
+    },
+    "app/src/main/java/com/food/opencook/ui/components/CookedBadge.kt": {
+      "role": "index",
+      "sha256": "9817ae1c60190123f9a6acaf46a951d2e2c79fa17e8bab09568f967742da9501",
+      "size": 2539,
+      "normalized_sha256": "9817ae1c60190123f9a6acaf46a951d2e2c79fa17e8bab09568f967742da9501"
+    },
+    "app/src/main/java/com/food/opencook/ui/components/EmptyState.kt": {
+      "role": "index",
+      "sha256": "3dacd002028a25b5be8710f28035793a1807d298cf9bdd18554cbd065f90ea3a",
+      "size": 3210,
+      "normalized_sha256": "3dacd002028a25b5be8710f28035793a1807d298cf9bdd18554cbd065f90ea3a"
+    },
+    "app/src/main/java/com/food/opencook/ui/components/KeepScreenOn.kt": {
+      "role": "index",
+      "sha256": "df11115cd3127c1a2e2c78a422ff95f531f2cdd733ff908aded147a6c2bfc1be",
+      "size": 1345,
+      "normalized_sha256": "df11115cd3127c1a2e2c78a422ff95f531f2cdd733ff908aded147a6c2bfc1be"
+    },
+    "app/src/main/java/com/food/opencook/ui/components/LikedBadge.kt": {
+      "role": "index",
+      "sha256": "7a5d96ababf0a0339ab2f388a562a92b669194d22cf98f972d5d997a220a9026",
+      "size": 2266,
+      "normalized_sha256": "7a5d96ababf0a0339ab2f388a562a92b669194d22cf98f972d5d997a220a9026"
+    },
+    "app/src/main/java/com/food/opencook/ui/components/LockPortraitOnCompact.kt": {
+      "role": "index",
+      "sha256": "44853d1d84453e804bff579c030ccebf2b6b1c297dd4685ee79cfddc3808d2c5",
+      "size": 2175,
+      "normalized_sha256": "44853d1d84453e804bff579c030ccebf2b6b1c297dd4685ee79cfddc3808d2c5"
+    },
+    "app/src/main/java/com/food/opencook/ui/components/RecipeCard.kt": {
+      "role": "index",
+      "sha256": "d10d46610848428858a765ce9a4b43040a42805fffb13013580f89c0c0b3669b",
+      "size": 7284,
+      "normalized_sha256": "d10d46610848428858a765ce9a4b43040a42805fffb13013580f89c0c0b3669b"
+    },
+    "app/src/main/java/com/food/opencook/ui/components/SectionHeader.kt": {
+      "role": "index",
+      "sha256": "26034f4a4b7612d1a5f94c12a3ed6739f7365a27f916c75f26882592902cd505",
+      "size": 1757,
+      "normalized_sha256": "26034f4a4b7612d1a5f94c12a3ed6739f7365a27f916c75f26882592902cd505"
+    },
+    "app/src/main/java/com/food/opencook/ui/components/SwipeActionRow.kt": {
+      "role": "index",
+      "sha256": "50b9de4161cc1cd739dc37f2889b49bd386f4dcb34257cac9bb626b68e64e4b4",
+      "size": 12613,
+      "normalized_sha256": "50b9de4161cc1cd739dc37f2889b49bd386f4dcb34257cac9bb626b68e64e4b4"
+    },
+    "app/src/main/java/com/food/opencook/ui/discover/BrowserData.kt": {
+      "role": "index",
+      "sha256": "d78c6ca6fd6612172281a019c24e96804b22025f1ddc152282277d8627bb18f2",
+      "size": 3364,
+      "normalized_sha256": "d78c6ca6fd6612172281a019c24e96804b22025f1ddc152282277d8627bb18f2"
+    },
+    "app/src/main/java/com/food/opencook/ui/discover/DiscoverScreen.kt": {
+      "role": "index",
+      "sha256": "4dfcc1f5a2170437fb5abb3ac6699ba3b42a8017ebf88b2d54283a896e735689",
+      "size": 14586,
+      "normalized_sha256": "4dfcc1f5a2170437fb5abb3ac6699ba3b42a8017ebf88b2d54283a896e735689"
+    },
+    "app/src/main/java/com/food/opencook/ui/discover/DiscoverSites.kt": {
+      "role": "index",
+      "sha256": "25001342c84deed2cae8394e4107a1ab9b4ac323cb6ac078e684cc7a19f996d2",
+      "size": 5264,
+      "normalized_sha256": "25001342c84deed2cae8394e4107a1ab9b4ac323cb6ac078e684cc7a19f996d2"
+    },
+    "app/src/main/java/com/food/opencook/ui/discover/DiscoverViewModel.kt": {
+      "role": "index",
+      "sha256": "3416c89738d24b1ed0432c879306663b7df4b47b2bebcc576e978b47d45a16d2",
+      "size": 3860,
+      "normalized_sha256": "3416c89738d24b1ed0432c879306663b7df4b47b2bebcc576e978b47d45a16d2"
+    },
+    "app/src/main/java/com/food/opencook/ui/discover/PageHtml.kt": {
+      "role": "index",
+      "sha256": "67318e01166bacef060e481dc1de93110436d6c9d7d62f77c5dd7935cc810335",
+      "size": 3267,
+      "normalized_sha256": "67318e01166bacef060e481dc1de93110436d6c9d7d62f77c5dd7935cc810335"
+    },
+    "app/src/main/java/com/food/opencook/ui/discover/WebImportScreen.kt": {
+      "role": "index",
+      "sha256": "623ff1503464914ce63dca5273083be497125d12ee0458600408315d619346f4",
+      "size": 19774,
+      "normalized_sha256": "623ff1503464914ce63dca5273083be497125d12ee0458600408315d619346f4"
+    },
+    "app/src/main/java/com/food/opencook/ui/mealplan/MealPlanPickScreen.kt": {
+      "role": "index",
+      "sha256": "5c5fa1550c76705b3cd52a97927d657978e5f449a2625a97b1227fdeb6c321d1",
+      "size": 15204,
+      "normalized_sha256": "5c5fa1550c76705b3cd52a97927d657978e5f449a2625a97b1227fdeb6c321d1"
+    },
+    "app/src/main/java/com/food/opencook/ui/mealplan/MealPlanReasons.kt": {
+      "role": "index",
+      "sha256": "a2c1abd1c611a98d9cab4bba3458aaa40372d1a66be93cd9ce61fb7b19703c65",
+      "size": 6986,
+      "normalized_sha256": "a2c1abd1c611a98d9cab4bba3458aaa40372d1a66be93cd9ce61fb7b19703c65"
+    },
+    "app/src/main/java/com/food/opencook/ui/mealplan/MealPlanReconciler.kt": {
+      "role": "index",
+      "sha256": "028d1be02bf16fe6293ced526726ad273ecda27dfa551325719aeb1e373abefb",
+      "size": 3536,
+      "normalized_sha256": "028d1be02bf16fe6293ced526726ad273ecda27dfa551325719aeb1e373abefb"
+    },
+    "app/src/main/java/com/food/opencook/ui/mealplan/MealPlanScreen.kt": {
+      "role": "index",
+      "sha256": "747c9bd08f16ac510411650d3c3100804b8fd8718963855b891e42c8f5d41297",
+      "size": 56469,
+      "normalized_sha256": "747c9bd08f16ac510411650d3c3100804b8fd8718963855b891e42c8f5d41297"
+    },
+    "app/src/main/java/com/food/opencook/ui/mealplan/MealPlanSlots.kt": {
+      "role": "index",
+      "sha256": "3255bec062baaeeaee7d8bf59576758431f427d2ed8838b115a73b04709a5451",
+      "size": 5109,
+      "normalized_sha256": "3255bec062baaeeaee7d8bf59576758431f427d2ed8838b115a73b04709a5451"
+    },
+    "app/src/main/java/com/food/opencook/ui/mealplan/MealPlanViewModel.kt": {
+      "role": "index",
+      "sha256": "99d4a4e275c6cfc1414708a6082eed1cf7e9e0e7d92b483113d4dfa22912eb1d",
+      "size": 33716,
+      "normalized_sha256": "99d4a4e275c6cfc1414708a6082eed1cf7e9e0e7d92b483113d4dfa22912eb1d"
+    },
+    "app/src/main/java/com/food/opencook/ui/mealplan/MealPlanner.kt": {
+      "role": "index",
+      "sha256": "87950a6184d01bd27879e9ac6eae931e826fcadec6114b7816edcac39c293022",
+      "size": 26380,
+      "normalized_sha256": "87950a6184d01bd27879e9ac6eae931e826fcadec6114b7816edcac39c293022"
+    },
+    "app/src/main/java/com/food/opencook/ui/mealplan/PlanSections.kt": {
+      "role": "index",
+      "sha256": "a06efef862b96850d35d908b9474ef35b58c3e4a3687db9df5fba2b9ad3ec8af",
+      "size": 2424,
+      "normalized_sha256": "a06efef862b96850d35d908b9474ef35b58c3e4a3687db9df5fba2b9ad3ec8af"
+    },
+    "app/src/main/java/com/food/opencook/ui/navigation/Routes.kt": {
+      "role": "index",
+      "sha256": "6743cd1c1ee99fc7fac6faac7e57890cdad3a7d0f73010b80ca5e81ef8e8c3a1",
+      "size": 4475,
+      "normalized_sha256": "6743cd1c1ee99fc7fac6faac7e57890cdad3a7d0f73010b80ca5e81ef8e8c3a1"
+    },
+    "app/src/main/java/com/food/opencook/ui/navigation/TopLevelDestination.kt": {
+      "role": "index",
+      "sha256": "10e2892ee059659c92c8fdf1149bddad541a3a58d0703d5fafc4a74aa5d18f71",
+      "size": 1793,
+      "normalized_sha256": "10e2892ee059659c92c8fdf1149bddad541a3a58d0703d5fafc4a74aa5d18f71"
+    },
+    "app/src/main/java/com/food/opencook/ui/onboarding/OnboardingScreen.kt": {
+      "role": "index",
+      "sha256": "5128eff58878067914f4e0b2cf95c6c8501501e93846f366d3bc9bf8aa83d158",
+      "size": 22067,
+      "normalized_sha256": "5128eff58878067914f4e0b2cf95c6c8501501e93846f366d3bc9bf8aa83d158"
+    },
+    "app/src/main/java/com/food/opencook/ui/onboarding/OnboardingViewModel.kt": {
+      "role": "index",
+      "sha256": "4aa2ed259877592bbb3f5dcc400effc31d8f579ed1ff97df5ed938b8dbca9ae3",
+      "size": 13921,
+      "normalized_sha256": "4aa2ed259877592bbb3f5dcc400effc31d8f579ed1ff97df5ed938b8dbca9ae3"
+    },
+    "app/src/main/java/com/food/opencook/ui/pantry/PantryScreen.kt": {
+      "role": "index",
+      "sha256": "14730879862771560d748b9adbf26bbdce2267966a2c4adad17a9c3e52503b27",
+      "size": 18921,
+      "normalized_sha256": "14730879862771560d748b9adbf26bbdce2267966a2c4adad17a9c3e52503b27"
+    },
+    "app/src/main/java/com/food/opencook/ui/pantry/PantryViewModel.kt": {
+      "role": "index",
+      "sha256": "1162caf387422924bdc7ff948942abfb95800c60f9ccd0f2c46b79b50b20cf0a",
+      "size": 3794,
+      "normalized_sha256": "1162caf387422924bdc7ff948942abfb95800c60f9ccd0f2c46b79b50b20cf0a"
+    },
+    "app/src/main/java/com/food/opencook/ui/recipeimport/ImportViewModel.kt": {
+      "role": "index",
+      "sha256": "4d5250bf95e400b1013592ba12cb2e189b6437c0848549e089bd5223df23ae00",
+      "size": 12298,
+      "normalized_sha256": "4d5250bf95e400b1013592ba12cb2e189b6437c0848549e089bd5223df23ae00"
+    },
+    "app/src/main/java/com/food/opencook/ui/recipes/AddToMealPlanSheet.kt": {
+      "role": "index",
+      "sha256": "8118be5fecf68823dc2b29c7c4a9c65471dcfab31a2a0ce2a21fcdec2bf8b6a4",
+      "size": 11885,
+      "normalized_sha256": "8118be5fecf68823dc2b29c7c4a9c65471dcfab31a2a0ce2a21fcdec2bf8b6a4"
+    },
+    "app/src/main/java/com/food/opencook/ui/recipes/RecipeDetailScreen.kt": {
+      "role": "index",
+      "sha256": "59679b11fea5e369d425b07d09dcee7444c57232da15713432639692b7736b3b",
+      "size": 40210,
+      "normalized_sha256": "59679b11fea5e369d425b07d09dcee7444c57232da15713432639692b7736b3b"
+    },
+    "app/src/main/java/com/food/opencook/ui/recipes/RecipeDetailViewModel.kt": {
+      "role": "index",
+      "sha256": "005aee311009de9bcf5b5dae84168c4ca2334c5a181f308ad7b0e6057cfa2419",
+      "size": 19931,
+      "normalized_sha256": "005aee311009de9bcf5b5dae84168c4ca2334c5a181f308ad7b0e6057cfa2419"
+    },
+    "app/src/main/java/com/food/opencook/ui/recipes/RecipeImageUrls.kt": {
+      "role": "index",
+      "sha256": "6f8e3a45e5513134ecc948bd0498c84a4407535651bf3850d53e6a1d1854868a",
+      "size": 1642,
+      "normalized_sha256": "6f8e3a45e5513134ecc948bd0498c84a4407535651bf3850d53e6a1d1854868a"
+    },
+    "app/src/main/java/com/food/opencook/ui/recipes/RecipesScreen.kt": {
+      "role": "index",
+      "sha256": "3d5c1d1c5844a5a92ba736a579309215f161b7f2283a0d2b38c19025bd6323a9",
+      "size": 36445,
+      "normalized_sha256": "3d5c1d1c5844a5a92ba736a579309215f161b7f2283a0d2b38c19025bd6323a9"
+    },
+    "app/src/main/java/com/food/opencook/ui/recipes/RecipesViewModel.kt": {
+      "role": "index",
+      "sha256": "bb410b112110ba44670373ada77b369bffb8e2c689eec6eaeea9b0833cd73f5b",
+      "size": 12558,
+      "normalized_sha256": "bb410b112110ba44670373ada77b369bffb8e2c689eec6eaeea9b0833cd73f5b"
+    },
+    "app/src/main/java/com/food/opencook/ui/recipes/StepTimers.kt": {
+      "role": "index",
+      "sha256": "c4b6639a7b2df273f09064d59473579e263062debb363fdc6c2a97e9738e52cd",
+      "size": 5198,
+      "normalized_sha256": "c4b6639a7b2df273f09064d59473579e263062debb363fdc6c2a97e9738e52cd"
+    },
+    "app/src/main/java/com/food/opencook/ui/retrospect/RetrospectScreen.kt": {
+      "role": "index",
+      "sha256": "53987b896be769e0f2646ec1de781175e2a58969a363a053db0f6d216c5bebab",
+      "size": 9218,
+      "normalized_sha256": "53987b896be769e0f2646ec1de781175e2a58969a363a053db0f6d216c5bebab"
+    },
+    "app/src/main/java/com/food/opencook/ui/retrospect/RetrospectViewModel.kt": {
+      "role": "index",
+      "sha256": "b74c8188a5e28c5671654a8b8cc87119dc7dd28c03f500da1f3d7bb01ce24b93",
+      "size": 3569,
+      "normalized_sha256": "b74c8188a5e28c5671654a8b8cc87119dc7dd28c03f500da1f3d7bb01ce24b93"
+    },
+    "app/src/main/java/com/food/opencook/ui/retrospect/Retrospective.kt": {
+      "role": "index",
+      "sha256": "a23fb86112f09a2df28256ea01eed0fcd05868e6780a9e5df64558e81ac543bb",
+      "size": 3235,
+      "normalized_sha256": "a23fb86112f09a2df28256ea01eed0fcd05868e6780a9e5df64558e81ac543bb"
+    },
+    "app/src/main/java/com/food/opencook/ui/review/ReviewScreen.kt": {
+      "role": "index",
+      "sha256": "3e5869f52c0ac51c294418e588d9dc3d12ce70516705972350588b59f14ff69d",
+      "size": 9569,
+      "normalized_sha256": "3e5869f52c0ac51c294418e588d9dc3d12ce70516705972350588b59f14ff69d"
+    },
+    "app/src/main/java/com/food/opencook/ui/review/ReviewSteps.kt": {
+      "role": "index",
+      "sha256": "5ca6ab6354d6a11dc7a5daba2ad80e96b2b77061d7d9f3210350e74b83f11c10",
+      "size": 51902,
+      "normalized_sha256": "5ca6ab6354d6a11dc7a5daba2ad80e96b2b77061d7d9f3210350e74b83f11c10"
+    },
+    "app/src/main/java/com/food/opencook/ui/review/ReviewViewModel.kt": {
+      "role": "index",
+      "sha256": "fb38a7101c10232fc878ad4e5af8051407ad6c81389126f4daed4f1c19b7164d",
+      "size": 22770,
+      "normalized_sha256": "fb38a7101c10232fc878ad4e5af8051407ad6c81389126f4daed4f1c19b7164d"
+    },
+    "app/src/main/java/com/food/opencook/ui/review/WizardScaffold.kt": {
+      "role": "index",
+      "sha256": "4cac48020e892cd99e5b30a94479bd4925fb742926238ad05f86e2f44adf2d58",
+      "size": 5662,
+      "normalized_sha256": "4cac48020e892cd99e5b30a94479bd4925fb742926238ad05f86e2f44adf2d58"
+    },
+    "app/src/main/java/com/food/opencook/ui/scan/AddRecipeSheet.kt": {
+      "role": "index",
+      "sha256": "802468cf56da452dfdf6c16f4a44340f34e30350f79e34a7587169a36302309a",
+      "size": 11854,
+      "normalized_sha256": "802468cf56da452dfdf6c16f4a44340f34e30350f79e34a7587169a36302309a"
+    },
+    "app/src/main/java/com/food/opencook/ui/scan/ScanViewModel.kt": {
+      "role": "index",
+      "sha256": "96c9d0dab9ac39e412617c0896d9d40645a36e90f97070da7b469827fe525585",
+      "size": 4189,
+      "normalized_sha256": "96c9d0dab9ac39e412617c0896d9d40645a36e90f97070da7b469827fe525585"
+    },
+    "app/src/main/java/com/food/opencook/ui/settings/AboutScreen.kt": {
+      "role": "index",
+      "sha256": "6544e15df3ae7344aea5566c0024f31262fc75f4b7205ac8a0e7ea1c32b29bd0",
+      "size": 3408,
+      "normalized_sha256": "6544e15df3ae7344aea5566c0024f31262fc75f4b7205ac8a0e7ea1c32b29bd0"
+    },
+    "app/src/main/java/com/food/opencook/ui/settings/AppearanceSettingsScreen.kt": {
+      "role": "index",
+      "sha256": "8aaf5fc18b79b910821bb976c9bae88bf054127673915ba035ccef1a2bb6dcfe",
+      "size": 7113,
+      "normalized_sha256": "8aaf5fc18b79b910821bb976c9bae88bf054127673915ba035ccef1a2bb6dcfe"
+    },
+    "app/src/main/java/com/food/opencook/ui/settings/HouseholdSettingsScreen.kt": {
+      "role": "index",
+      "sha256": "5f33f987f19402c2d762e16a2a61eda59102120d36433ba0662b895c6fc4fefd",
+      "size": 13904,
+      "normalized_sha256": "5f33f987f19402c2d762e16a2a61eda59102120d36433ba0662b895c6fc4fefd"
+    },
+    "app/src/main/java/com/food/opencook/ui/settings/SettingsComponents.kt": {
+      "role": "index",
+      "sha256": "f3c90214e66eb2c1518871255da841b3354736d16441dbf0af76e96da1b9f4bf",
+      "size": 5417,
+      "normalized_sha256": "f3c90214e66eb2c1518871255da841b3354736d16441dbf0af76e96da1b9f4bf"
+    },
+    "app/src/main/java/com/food/opencook/ui/settings/SettingsScreen.kt": {
+      "role": "index",
+      "sha256": "0f3f8a12b6f582077ab00b20a0e8f085ed335387362f8487aa422ed30c00619a",
+      "size": 7139,
+      "normalized_sha256": "0f3f8a12b6f582077ab00b20a0e8f085ed335387362f8487aa422ed30c00619a"
+    },
+    "app/src/main/java/com/food/opencook/ui/settings/SettingsViewModel.kt": {
+      "role": "index",
+      "sha256": "dd5fadfe73146f6d9cf921ea2adb4b56f797feeb12356fe3a2153c15bdc96328",
+      "size": 12636,
+      "normalized_sha256": "dd5fadfe73146f6d9cf921ea2adb4b56f797feeb12356fe3a2153c15bdc96328"
+    },
+    "app/src/main/java/com/food/opencook/ui/settings/SyncSettingsScreen.kt": {
+      "role": "index",
+      "sha256": "a3648690253b3afd4c47f0eb77b174d775b27c2816f0f2dbe87f30c0e4155445",
+      "size": 6431,
+      "normalized_sha256": "a3648690253b3afd4c47f0eb77b174d775b27c2816f0f2dbe87f30c0e4155445"
+    },
+    "app/src/main/java/com/food/opencook/ui/shoppinglist/ShoppingHubScreen.kt": {
+      "role": "index",
+      "sha256": "a45fdce34b18818a483331d5241fe1218698affeada7848c9fd9a24ade57ac19",
+      "size": 12702,
+      "normalized_sha256": "a45fdce34b18818a483331d5241fe1218698affeada7848c9fd9a24ade57ac19"
+    },
+    "app/src/main/java/com/food/opencook/ui/shoppinglist/ShoppingListScreen.kt": {
+      "role": "index",
+      "sha256": "520c70bc8ca3873765e38cb1e16d28c8a9af7c53abf8999207405d9ea55c0ce4",
+      "size": 28170,
+      "normalized_sha256": "520c70bc8ca3873765e38cb1e16d28c8a9af7c53abf8999207405d9ea55c0ce4"
+    },
+    "app/src/main/java/com/food/opencook/ui/shoppinglist/ShoppingListViewModel.kt": {
+      "role": "index",
+      "sha256": "7a23d89a2ae56656547e67d3fadc9ca2ae699ab60f2f9e11a2b03b669de496e0",
+      "size": 9088,
+      "normalized_sha256": "7a23d89a2ae56656547e67d3fadc9ca2ae699ab60f2f9e11a2b03b669de496e0"
+    },
+    "app/src/main/java/com/food/opencook/ui/status/ActiveJobsViewModel.kt": {
+      "role": "index",
+      "sha256": "032efb040752887c1ee846717895a6ced1d811be6d5a0239a555798d1eb4e29f",
+      "size": 5207,
+      "normalized_sha256": "032efb040752887c1ee846717895a6ced1d811be6d5a0239a555798d1eb4e29f"
+    },
+    "app/src/main/java/com/food/opencook/ui/status/StatusStrip.kt": {
+      "role": "index",
+      "sha256": "fa9a1e5721c7d42e1fd956f39dd82b039bac70c0bd413a2a33f82252fdcfe606",
+      "size": 6362,
+      "normalized_sha256": "fa9a1e5721c7d42e1fd956f39dd82b039bac70c0bd413a2a33f82252fdcfe606"
+    },
+    "app/src/main/java/com/food/opencook/ui/theme/Color.kt": {
+      "role": "index",
+      "sha256": "c8e1890757b38efb57f6fec7cae6a0869813700e8f163395410ef6bcd03c3989",
+      "size": 3935,
+      "normalized_sha256": "c8e1890757b38efb57f6fec7cae6a0869813700e8f163395410ef6bcd03c3989"
+    },
+    "app/src/main/java/com/food/opencook/ui/theme/Shape.kt": {
+      "role": "index",
+      "sha256": "377ed8ba8383d5372e844260303812946ff85b8009b08cde5488cb4347810544",
+      "size": 1235,
+      "normalized_sha256": "377ed8ba8383d5372e844260303812946ff85b8009b08cde5488cb4347810544"
+    },
+    "app/src/main/java/com/food/opencook/ui/theme/Spacing.kt": {
+      "role": "index",
+      "sha256": "49cde246d55d675e6a195965af55eac812c961d42244cde6eaeb7d1f9058a348",
+      "size": 1101,
+      "normalized_sha256": "49cde246d55d675e6a195965af55eac812c961d42244cde6eaeb7d1f9058a348"
+    },
+    "app/src/main/java/com/food/opencook/ui/theme/Theme.kt": {
+      "role": "index",
+      "sha256": "653288d1e3564d9c56a3a6009d1865c5e6b118d36ee1bf11530f3761b069b26d",
+      "size": 2015,
+      "normalized_sha256": "653288d1e3564d9c56a3a6009d1865c5e6b118d36ee1bf11530f3761b069b26d"
+    },
+    "app/src/main/java/com/food/opencook/ui/theme/Type.kt": {
+      "role": "index",
+      "sha256": "aba851cc34d102093ac463106818a3193bbcc511e1a0be76e3d0e4597e82db90",
+      "size": 3953,
+      "normalized_sha256": "aba851cc34d102093ac463106818a3193bbcc511e1a0be76e3d0e4597e82db90"
+    },
+    "app/src/main/java/com/food/opencook/util/CommonGroceries.kt": {
+      "role": "index",
+      "sha256": "ed73f0610b29d15e33912e3bad3ea2c189eba79e2a3e216e23b99f6f3736450b",
+      "size": 13511,
+      "normalized_sha256": "ed73f0610b29d15e33912e3bad3ea2c189eba79e2a3e216e23b99f6f3736450b"
+    },
+    "app/src/main/java/com/food/opencook/util/CookedStatus.kt": {
+      "role": "index",
+      "sha256": "8c44b74bcb17fc06f42a08d172afd391dc4dfb794f9950aba3e0da8ab879ff56",
+      "size": 2740,
+      "normalized_sha256": "8c44b74bcb17fc06f42a08d172afd391dc4dfb794f9950aba3e0da8ab879ff56"
+    },
+    "app/src/main/java/com/food/opencook/util/DateLabels.kt": {
+      "role": "index",
+      "sha256": "8965ab20fd5582388bd2c7b0530ece29047f7f8b7134a7e28d705d6d21e072b9",
+      "size": 2076,
+      "normalized_sha256": "8965ab20fd5582388bd2c7b0530ece29047f7f8b7134a7e28d705d6d21e072b9"
+    },
+    "app/src/main/java/com/food/opencook/util/DurationFormat.kt": {
+      "role": "index",
+      "sha256": "324b501a16b8c0d304b2ec873568ca2676b1a74be0c01548a7ca476c6df3ad78",
+      "size": 9455,
+      "normalized_sha256": "324b501a16b8c0d304b2ec873568ca2676b1a74be0c01548a7ca476c6df3ad78"
+    },
+    "app/src/main/java/com/food/opencook/util/GroceryCategories.kt": {
+      "role": "index",
+      "sha256": "f2d2cbc1464fdb4d01940f76db228c1b06aa106b719fa01b97af4671f10f7725",
+      "size": 5493,
+      "normalized_sha256": "f2d2cbc1464fdb4d01940f76db228c1b06aa106b719fa01b97af4671f10f7725"
+    },
+    "app/src/main/java/com/food/opencook/util/ImportCorrector.kt": {
+      "role": "index",
+      "sha256": "5a616b5daf3ea84c6a9c90f50239e23f20b37ff83fe140453ff2278d77d1c25b",
+      "size": 1399,
+      "normalized_sha256": "5a616b5daf3ea84c6a9c90f50239e23f20b37ff83fe140453ff2278d77d1c25b"
+    },
+    "app/src/main/java/com/food/opencook/util/IngredientCorrection.kt": {
+      "role": "index",
+      "sha256": "badf446d05c19d73ee0b114668d367a96dd4e6e49886dbacd63a6b056354428f",
+      "size": 7011,
+      "normalized_sha256": "badf446d05c19d73ee0b114668d367a96dd4e6e49886dbacd63a6b056354428f"
+    },
+    "app/src/main/java/com/food/opencook/util/IngredientLexicon.kt": {
+      "role": "index",
+      "sha256": "38b5cf9a2d7957d64d1c6b550b07764eafd05cf3e267fc19c1f62877bf1317fb",
+      "size": 5270
+    },
+    "app/src/main/java/com/food/opencook/util/IngredientMatch.kt": {
+      "role": "index",
+      "sha256": "5d9e1d7b009d6df664373b8e8066a2583b1353a9261b596ee7a9674261682160",
+      "size": 13157,
+      "normalized_sha256": "5d9e1d7b009d6df664373b8e8066a2583b1353a9261b596ee7a9674261682160"
+    },
+    "app/src/main/java/com/food/opencook/util/IngredientStaples.kt": {
+      "role": "index",
+      "sha256": "b1130be3d55199311f270d06550da0f6293022b840f0334193cbda6e8219f8cd",
+      "size": 4240,
+      "normalized_sha256": "b1130be3d55199311f270d06550da0f6293022b840f0334193cbda6e8219f8cd"
+    },
+    "app/src/main/java/com/food/opencook/util/LearnedIngredientLinks.kt": {
+      "role": "index",
+      "sha256": "1b45215549c365938743ebf2cc8938f7bf0bd6020c874ef2f516b4334984ca68",
+      "size": 2164,
+      "normalized_sha256": "1b45215549c365938743ebf2cc8938f7bf0bd6020c874ef2f516b4334984ca68"
+    },
+    "app/src/main/java/com/food/opencook/util/Numbers.kt": {
+      "role": "index",
+      "sha256": "c5ba5b7836b1e1af3ba3fdaf3480177f807b09d9b3c7bc5eb41733966524e1ba",
+      "size": 12467,
+      "normalized_sha256": "c5ba5b7836b1e1af3ba3fdaf3480177f807b09d9b3c7bc5eb41733966524e1ba"
+    },
+    "app/src/main/java/com/food/opencook/util/PlanWindow.kt": {
+      "role": "index",
+      "sha256": "03e4b28935efa63cddc40bb952d472b225f2b7b566ec1928a44a3eae872839fa",
+      "size": 4306,
+      "normalized_sha256": "03e4b28935efa63cddc40bb952d472b225f2b7b566ec1928a44a3eae872839fa"
+    },
+    "app/src/main/java/com/food/opencook/util/ProteinGroups.kt": {
+      "role": "index",
+      "sha256": "37f524fff6023578def08d37e8f14a7af5e4b0173d5b8004133dfa408be54379",
+      "size": 3506,
+      "normalized_sha256": "37f524fff6023578def08d37e8f14a7af5e4b0173d5b8004133dfa408be54379"
+    },
+    "app/src/main/java/com/food/opencook/util/RecipeAvailability.kt": {
+      "role": "index",
+      "sha256": "37a9d7c6dc13da96f9aa2b6766da1f8f5a76ad3448fd05ec43920a970d279e4b",
+      "size": 2182,
+      "normalized_sha256": "37a9d7c6dc13da96f9aa2b6766da1f8f5a76ad3448fd05ec43920a970d279e4b"
+    },
+    "app/src/main/java/com/food/opencook/util/Scripts.kt": {
+      "role": "index",
+      "sha256": "62d99bc4d65d739f19a850dbf32cebc539df7584f1acf2060e9270ad2315870c",
+      "size": 2190,
+      "normalized_sha256": "62d99bc4d65d739f19a850dbf32cebc539df7584f1acf2060e9270ad2315870c"
+    },
+    "app/src/main/java/com/food/opencook/util/WeekDates.kt": {
+      "role": "index",
+      "sha256": "232a41fdbd369350b116776e3c0ce6767273d61037f46a9a4a2f47035d979bf2",
+      "size": 1618,
+      "normalized_sha256": "232a41fdbd369350b116776e3c0ce6767273d61037f46a9a4a2f47035d979bf2"
+    },
+    "app/src/main/java/com/food/opencook/work/LocalBackupWorker.kt": {
+      "role": "index",
+      "sha256": "bb9c96efee76f918a75740ceb5dca5b8208d935ecd9e5ebed71871671550bb03",
+      "size": 3496,
+      "normalized_sha256": "bb9c96efee76f918a75740ceb5dca5b8208d935ecd9e5ebed71871671550bb03"
+    },
+    "app/src/main/java/com/food/opencook/work/PollJobWorker.kt": {
+      "role": "index",
+      "sha256": "f2462f6b46431cf0c227d4c76b2e5bfdc5d2939df1a9279642aa32b7c5d5500d",
+      "size": 2558,
+      "normalized_sha256": "f2462f6b46431cf0c227d4c76b2e5bfdc5d2939df1a9279642aa32b7c5d5500d"
+    },
+    "app/src/main/java/com/food/opencook/work/SyncWorker.kt": {
+      "role": "index",
+      "sha256": "0722f6c3141eb644418e125b836640553bcded31e0801f16662b9b4fd780e822",
+      "size": 2056,
+      "normalized_sha256": "0722f6c3141eb644418e125b836640553bcded31e0801f16662b9b4fd780e822"
+    },
+    "app/src/main/java/com/food/opencook/work/UploadJobWorker.kt": {
+      "role": "index",
+      "sha256": "e24d67f83b47053d691dcd227afb5be6fedd0f8a25dc709c963b980976c043f0",
+      "size": 2094,
+      "normalized_sha256": "e24d67f83b47053d691dcd227afb5be6fedd0f8a25dc709c963b980976c043f0"
+    },
+    "app/src/main/java/com/food/opencook/work/WorkScheduler.kt": {
+      "role": "index",
+      "sha256": "4b67ae4cce0e28dd832759dce29746cbe88354350eb39bb8b6c43da5e5606979",
+      "size": 6373,
+      "normalized_sha256": "4b67ae4cce0e28dd832759dce29746cbe88354350eb39bb8b6c43da5e5606979"
+    },
+    "app/src/main/res/drawable/ic_launcher_background.xml": {
+      "role": "index",
+      "sha256": "1e089c459dc2bac9843db0c7870d49eb9f1a957dc01c5af49fade4eff74fae46",
+      "size": 1167,
+      "normalized_sha256": "1e089c459dc2bac9843db0c7870d49eb9f1a957dc01c5af49fade4eff74fae46"
+    },
+    "app/src/main/res/drawable/ic_launcher_foreground.xml": {
+      "role": "index",
+      "sha256": "07014b963e62c003c4f77dffc159247621e76ca906375829ed2f574575fcf9df",
+      "size": 2189,
+      "normalized_sha256": "07014b963e62c003c4f77dffc159247621e76ca906375829ed2f574575fcf9df"
+    },
+    "app/src/main/res/drawable/ic_launcher_monochrome.xml": {
+      "role": "index",
+      "sha256": "3b703675f37906cc070f974d8df05018ad0e27c52e4c3d6a7c8b218e98738784",
+      "size": 2129,
+      "normalized_sha256": "3b703675f37906cc070f974d8df05018ad0e27c52e4c3d6a7c8b218e98738784"
+    },
+    "app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml": {
+      "role": "index",
+      "sha256": "fc78cdf5761819b9a84edecb3eb28909fd6a0d0432d508f7f9173a095d886503",
+      "size": 1110,
+      "normalized_sha256": "fc78cdf5761819b9a84edecb3eb28909fd6a0d0432d508f7f9173a095d886503"
+    },
+    "app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml": {
+      "role": "index",
+      "sha256": "fc78cdf5761819b9a84edecb3eb28909fd6a0d0432d508f7f9173a095d886503",
+      "size": 1110,
+      "normalized_sha256": "fc78cdf5761819b9a84edecb3eb28909fd6a0d0432d508f7f9173a095d886503"
+    },
+    "app/src/main/res/values-de/arrays.xml": {
+      "role": "index",
+      "sha256": "332696162f1a00f78fe55adcbec28d605c0f1b83b00e00a68f9114f90a05f236",
+      "size": 15057,
+      "normalized_sha256": "332696162f1a00f78fe55adcbec28d605c0f1b83b00e00a68f9114f90a05f236"
+    },
+    "app/src/main/res/values-de/strings.xml": {
+      "role": "index",
+      "sha256": "3ee072a1ae3c6c946a2f58b7cb3a1e0e31fb60fadbdba56215e2ef84d2cefea9",
+      "size": 42532,
+      "normalized_sha256": "3ee072a1ae3c6c946a2f58b7cb3a1e0e31fb60fadbdba56215e2ef84d2cefea9"
+    },
+    "app/src/main/res/values-fr/arrays.xml": {
+      "role": "index",
+      "sha256": "e7ac1a9be6eca17d2d5d70be33b4e6e61cb128d6d63298695332d8f249e40f3b",
+      "size": 17180,
+      "normalized_sha256": "e7ac1a9be6eca17d2d5d70be33b4e6e61cb128d6d63298695332d8f249e40f3b"
+    },
+    "app/src/main/res/values-fr/strings.xml": {
+      "role": "index",
+      "sha256": "048e8c1ac0d2b4dc5cc4a371e732dcb5bb02803c4884a56e08cf88f2eaceac7c",
+      "size": 44778,
+      "normalized_sha256": "048e8c1ac0d2b4dc5cc4a371e732dcb5bb02803c4884a56e08cf88f2eaceac7c"
+    },
+    "app/src/main/res/values-night/colors.xml": {
+      "role": "index",
+      "sha256": "1930c70b832fe731c5de3f2720038e557bc6ec860e1ffb2aed5483f48e2dff4a",
+      "size": 968,
+      "normalized_sha256": "1930c70b832fe731c5de3f2720038e557bc6ec860e1ffb2aed5483f48e2dff4a"
+    },
+    "app/src/main/res/values-night/themes.xml": {
+      "role": "index",
+      "sha256": "39222b1769d71ff923a15980a96033cd709f8602c029c0492039c9b998bdb14c",
+      "size": 1053,
+      "normalized_sha256": "39222b1769d71ff923a15980a96033cd709f8602c029c0492039c9b998bdb14c"
+    },
+    "app/src/main/res/values-zh/arrays.xml": {
+      "role": "index",
+      "sha256": "b71a78242a3a921c2d747741216511b79c28338312d6a0eb6a5224a7c1e593f3",
+      "size": 20844,
+      "normalized_sha256": "b71a78242a3a921c2d747741216511b79c28338312d6a0eb6a5224a7c1e593f3"
+    },
+    "app/src/main/res/values-zh/strings.xml": {
+      "role": "index",
+      "sha256": "894223e2ca129d643ecd5eca1a08d1e031c3afc1cb3610f37286f00ad20a4082",
+      "size": 39983,
+      "normalized_sha256": "894223e2ca129d643ecd5eca1a08d1e031c3afc1cb3610f37286f00ad20a4082"
+    },
+    "app/src/main/res/values/arrays.xml": {
+      "role": "index",
+      "sha256": "c5488f9ed915711f651eb15610ddcf4a94cdd4638b50a484f1544b5b7685a458",
+      "size": 16177,
+      "normalized_sha256": "c5488f9ed915711f651eb15610ddcf4a94cdd4638b50a484f1544b5b7685a458"
+    },
+    "app/src/main/res/values/colors.xml": {
+      "role": "index",
+      "sha256": "2c07b178917f61bd54deced66c305df275a4299960e1111d06b68be01a180a31",
+      "size": 1330,
+      "normalized_sha256": "2c07b178917f61bd54deced66c305df275a4299960e1111d06b68be01a180a31"
+    },
+    "app/src/main/res/values/strings.xml": {
+      "role": "index",
+      "sha256": "df73a87e61876eb4c727f08c6b29798d72fb98a75775d861eeb6248b8d12ea86",
+      "size": 40583,
+      "normalized_sha256": "df73a87e61876eb4c727f08c6b29798d72fb98a75775d861eeb6248b8d12ea86"
+    },
+    "app/src/main/res/values/themes.xml": {
+      "role": "index",
+      "sha256": "21d2bd57ebbc6b6f99e2300b31ae4fbe3f24854ff971aff58c22b79253f254aa",
+      "size": 1872,
+      "normalized_sha256": "21d2bd57ebbc6b6f99e2300b31ae4fbe3f24854ff971aff58c22b79253f254aa"
+    },
+    "app/src/main/res/xml/network_security_config.xml": {
+      "role": "index",
+      "sha256": "7476b8a2083ecce05b026f76be5152758049ba5942cfe0dacb2f41e05241ebb8",
+      "size": 1354,
+      "normalized_sha256": "7476b8a2083ecce05b026f76be5152758049ba5942cfe0dacb2f41e05241ebb8"
+    },
+    "app/src/test/java/com/food/opencook/AutoEntryIdTest.kt": {
+      "role": "index",
+      "sha256": "b8501a43d2f757cdc3410d238f4754593b29595037ca0d46649424309d790a83",
+      "size": 2276,
+      "normalized_sha256": "b8501a43d2f757cdc3410d238f4754593b29595037ca0d46649424309d790a83"
+    },
+    "app/src/test/java/com/food/opencook/BackupArchiveTest.kt": {
+      "role": "index",
+      "sha256": "71c45e96039f4fecf081c6e43726029c417caa953f2b85fc31ab279ac64aabf9",
+      "size": 6375,
+      "normalized_sha256": "71c45e96039f4fecf081c6e43726029c417caa953f2b85fc31ab279ac64aabf9"
+    },
+    "app/src/test/java/com/food/opencook/BackupRoundTripTest.kt": {
+      "role": "index",
+      "sha256": "337fdc14babfa45dc586d9496ebc8610059f2223dcd612f2e7607c5c2910db29",
+      "size": 8064,
+      "normalized_sha256": "337fdc14babfa45dc586d9496ebc8610059f2223dcd612f2e7607c5c2910db29"
+    },
+    "app/src/test/java/com/food/opencook/BarcodeAndSuggestionTest.kt": {
+      "role": "index",
+      "sha256": "83c65c958d1e11696bfc9ab17c4aabb0bc07940268ab2bf70df98ff8767231f3",
+      "size": 2468,
+      "normalized_sha256": "83c65c958d1e11696bfc9ab17c4aabb0bc07940268ab2bf70df98ff8767231f3"
+    },
+    "app/src/test/java/com/food/opencook/ChineseMatchingTest.kt": {
+      "role": "index",
+      "sha256": "8e6357093f85f25e9ac3a5bfdc3715cc9344ed4f549dc47a6d3856cbdf5d741a",
+      "size": 10377,
+      "normalized_sha256": "8e6357093f85f25e9ac3a5bfdc3715cc9344ed4f549dc47a6d3856cbdf5d741a"
+    },
+    "app/src/test/java/com/food/opencook/ChineseWordListsTest.kt": {
+      "role": "index",
+      "sha256": "e6ad356531adb4c1a6198278408417c00b02083313947fb9e4cbd180e043e322",
+      "size": 12826,
+      "normalized_sha256": "e6ad356531adb4c1a6198278408417c00b02083313947fb9e4cbd180e043e322"
+    },
+    "app/src/test/java/com/food/opencook/DiscoverSitesTest.kt": {
+      "role": "index",
+      "sha256": "1917f05fc72ae751e4b9b90e2b576eea965eacdc6f4a6f0a22d223d04e2ad84a",
+      "size": 6935,
+      "normalized_sha256": "1917f05fc72ae751e4b9b90e2b576eea965eacdc6f4a6f0a22d223d04e2ad84a"
+    },
+    "app/src/test/java/com/food/opencook/DurationFormatTest.kt": {
+      "role": "index",
+      "sha256": "9b6ff18f4c42e36ed16180be7854f87006e64e651bf5c5e9fe24848c58204666",
+      "size": 7191,
+      "normalized_sha256": "9b6ff18f4c42e36ed16180be7854f87006e64e651bf5c5e9fe24848c58204666"
+    },
+    "app/src/test/java/com/food/opencook/FontScaleTest.kt": {
+      "role": "index",
+      "sha256": "66dc03e08c997a5841cb7db0ad317ba5c0127069d736b2aa4c130da51e71ee60",
+      "size": 3572,
+      "normalized_sha256": "66dc03e08c997a5841cb7db0ad317ba5c0127069d736b2aa4c130da51e71ee60"
+    },
+    "app/src/test/java/com/food/opencook/FrenchMatchingTest.kt": {
+      "role": "index",
+      "sha256": "50dcc58cd1583fc3441473793ab82be60bf119c2619fd17414fd501c57049049",
+      "size": 5258,
+      "normalized_sha256": "50dcc58cd1583fc3441473793ab82be60bf119c2619fd17414fd501c57049049"
+    },
+    "app/src/test/java/com/food/opencook/GroceryCategoriesTest.kt": {
+      "role": "index",
+      "sha256": "ded2b4f9fdba81ec3aab071aca72f85ed880eaeaeeec3e3d02c364b75ec6be3a",
+      "size": 4333,
+      "normalized_sha256": "ded2b4f9fdba81ec3aab071aca72f85ed880eaeaeeec3e3d02c364b75ec6be3a"
+    },
+    "app/src/test/java/com/food/opencook/GroceryOverrideSyncTest.kt": {
+      "role": "index",
+      "sha256": "890823a0d75531be00f62aa5441285ff908128b45ed401386fa9aa538e532c81",
+      "size": 2248,
+      "normalized_sha256": "890823a0d75531be00f62aa5441285ff908128b45ed401386fa9aa538e532c81"
+    },
+    "app/src/test/java/com/food/opencook/HlcTest.kt": {
+      "role": "index",
+      "sha256": "6af4c7f1bdc9b43d748f04e6b36f8dc7030eb818e8f9f365c292f59c743ddfa8",
+      "size": 2813,
+      "normalized_sha256": "6af4c7f1bdc9b43d748f04e6b36f8dc7030eb818e8f9f365c292f59c743ddfa8"
+    },
+    "app/src/test/java/com/food/opencook/HtmlTextTest.kt": {
+      "role": "index",
+      "sha256": "1236b756b7b558dfff1d3fa4b6138d476da14fe39384966967cda35107c52b46",
+      "size": 3906,
+      "normalized_sha256": "1236b756b7b558dfff1d3fa4b6138d476da14fe39384966967cda35107c52b46"
+    },
+    "app/src/test/java/com/food/opencook/IngredientCorrectionTest.kt": {
+      "role": "index",
+      "sha256": "b188a5b4582bee439216611b5a32d4eed6837e56108833e77a1f2b5037a5cb79",
+      "size": 5300,
+      "normalized_sha256": "b188a5b4582bee439216611b5a32d4eed6837e56108833e77a1f2b5037a5cb79"
+    },
+    "app/src/test/java/com/food/opencook/IngredientLineParserTest.kt": {
+      "role": "index",
+      "sha256": "7cc62b444eca8e51391f8712ea4abcf124b509496b26e5be72fdad2fa0d9aff2",
+      "size": 4801,
+      "normalized_sha256": "7cc62b444eca8e51391f8712ea4abcf124b509496b26e5be72fdad2fa0d9aff2"
+    },
+    "app/src/test/java/com/food/opencook/IngredientLinkSyncTest.kt": {
+      "role": "index",
+      "sha256": "1354561568848bf5e8741e6bdbe1c249cfeb348412abb7ceabf0b5684603fece",
+      "size": 2631,
+      "normalized_sha256": "1354561568848bf5e8741e6bdbe1c249cfeb348412abb7ceabf0b5684603fece"
+    },
+    "app/src/test/java/com/food/opencook/IngredientMatchTest.kt": {
+      "role": "index",
+      "sha256": "5a69b8c1c4874b9fcf2bc43d131ee67c6f121599ffa37fb7fe6ba5f12e747037",
+      "size": 9429,
+      "normalized_sha256": "5a69b8c1c4874b9fcf2bc43d131ee67c6f121599ffa37fb7fe6ba5f12e747037"
+    },
+    "app/src/test/java/com/food/opencook/IngredientStaplesTest.kt": {
+      "role": "index",
+      "sha256": "6dbaa2de5c9162a9b561ed78275e4add3db3040ce0a8dab1caa5de167ecd0e1c",
+      "size": 4302,
+      "normalized_sha256": "6dbaa2de5c9162a9b561ed78275e4add3db3040ce0a8dab1caa5de167ecd0e1c"
+    },
+    "app/src/test/java/com/food/opencook/JsonLdExtractorTest.kt": {
+      "role": "index",
+      "sha256": "c442f9d452b2cd696ccdfed4d011b1c2ef81f934bb18c032797e48eddc0898a8",
+      "size": 3410,
+      "normalized_sha256": "c442f9d452b2cd696ccdfed4d011b1c2ef81f934bb18c032797e48eddc0898a8"
+    },
+    "app/src/test/java/com/food/opencook/MealPlanCleanupTest.kt": {
+      "role": "index",
+      "sha256": "f4c472a19f65d70aaae7525527012866556174b5578de8d4817a5105b26bd732",
+      "size": 8105,
+      "normalized_sha256": "f4c472a19f65d70aaae7525527012866556174b5578de8d4817a5105b26bd732"
+    },
+    "app/src/test/java/com/food/opencook/MealPlanReconcilerTest.kt": {
+      "role": "index",
+      "sha256": "78a215d4bce9fda6c328dd7dd82ef1a26f782bd408f198fafaac49dfa4b47609",
+      "size": 3464,
+      "normalized_sha256": "78a215d4bce9fda6c328dd7dd82ef1a26f782bd408f198fafaac49dfa4b47609"
+    },
+    "app/src/test/java/com/food/opencook/MealPlanSlotsTest.kt": {
+      "role": "index",
+      "sha256": "204a62309297e9336ed6772197b11ac87ac3f1b6874ce65c3d077d5ffa2482bf",
+      "size": 6391,
+      "normalized_sha256": "204a62309297e9336ed6772197b11ac87ac3f1b6874ce65c3d077d5ffa2482bf"
+    },
+    "app/src/test/java/com/food/opencook/MealPlannerTest.kt": {
+      "role": "index",
+      "sha256": "24780d6e639cc636f5157a2809d86eadebde76dd1cd483f91c9eb781eec14cfb",
+      "size": 23543,
+      "normalized_sha256": "24780d6e639cc636f5157a2809d86eadebde76dd1cd483f91c9eb781eec14cfb"
+    },
+    "app/src/test/java/com/food/opencook/MealTypesTest.kt": {
+      "role": "index",
+      "sha256": "b991c2ce41c1ca5c21586b9fa2f0e33803ac367e0506303ee51611ccc1d8ef3e",
+      "size": 3855,
+      "normalized_sha256": "b991c2ce41c1ca5c21586b9fa2f0e33803ac367e0506303ee51611ccc1d8ef3e"
+    },
+    "app/src/test/java/com/food/opencook/NumbersTest.kt": {
+      "role": "index",
+      "sha256": "cccfa122497701cf4908ea74a2be651b07e8414845f5c86437fe33e29f669e02",
+      "size": 6621,
+      "normalized_sha256": "cccfa122497701cf4908ea74a2be651b07e8414845f5c86437fe33e29f669e02"
+    },
+    "app/src/test/java/com/food/opencook/PageHtmlTest.kt": {
+      "role": "index",
+      "sha256": "233b7003b20bd2fa9e8de2e8a9c1af1e54c23f47d6b8e23a1ea2c6f937955439",
+      "size": 3085,
+      "normalized_sha256": "233b7003b20bd2fa9e8de2e8a9c1af1e54c23f47d6b8e23a1ea2c6f937955439"
+    },
+    "app/src/test/java/com/food/opencook/PeerSyncExchangeTest.kt": {
+      "role": "index",
+      "sha256": "401eaf1a6f8c74e006e4297db6d3494069f2d1436d6488a3dd99f3b65fdaea75",
+      "size": 5677,
+      "normalized_sha256": "401eaf1a6f8c74e006e4297db6d3494069f2d1436d6488a3dd99f3b65fdaea75"
+    },
+    "app/src/test/java/com/food/opencook/PlanWindowTest.kt": {
+      "role": "index",
+      "sha256": "74c5ba7a01d7c09b68abed7e343470d65a214bd8b2310fb49420d1371b88f013",
+      "size": 7140,
+      "normalized_sha256": "74c5ba7a01d7c09b68abed7e343470d65a214bd8b2310fb49420d1371b88f013"
+    },
+    "app/src/test/java/com/food/opencook/ProteinGroupsTest.kt": {
+      "role": "index",
+      "sha256": "1088c933ae2b261a74377a5cffbd61b53ca2ca088f5e14002c83ab8d9e11caf7",
+      "size": 2626,
+      "normalized_sha256": "1088c933ae2b261a74377a5cffbd61b53ca2ca088f5e14002c83ab8d9e11caf7"
+    },
+    "app/src/test/java/com/food/opencook/RecipeBundleTest.kt": {
+      "role": "index",
+      "sha256": "37892f35cc385f2016e401712de641d344264e686715dcb4859818e65b3ff4dc",
+      "size": 3548,
+      "normalized_sha256": "37892f35cc385f2016e401712de641d344264e686715dcb4859818e65b3ff4dc"
+    },
+    "app/src/test/java/com/food/opencook/RecipeExportTest.kt": {
+      "role": "index",
+      "sha256": "d05b1111426afe1b6bce8a42895915fa0f6ce4727e53dc6f535a61b58173de17",
+      "size": 10754,
+      "normalized_sha256": "d05b1111426afe1b6bce8a42895915fa0f6ce4727e53dc6f535a61b58173de17"
+    },
+    "app/src/test/java/com/food/opencook/RecipeImageRefTest.kt": {
+      "role": "index",
+      "sha256": "641f3d0950e8bd5be2fcd07b8680fa7790ef2e2c63e7c938fac524d9ff06eae2",
+      "size": 4912,
+      "normalized_sha256": "641f3d0950e8bd5be2fcd07b8680fa7790ef2e2c63e7c938fac524d9ff06eae2"
+    },
+    "app/src/test/java/com/food/opencook/RecipeImportParserTest.kt": {
+      "role": "index",
+      "sha256": "0503743d0ff02b188c9a55a7b339d58ae22e51b9133472ab923daf7a6838207a",
+      "size": 13692,
+      "normalized_sha256": "0503743d0ff02b188c9a55a7b339d58ae22e51b9133472ab923daf7a6838207a"
+    },
+    "app/src/test/java/com/food/opencook/RecipeMapperTest.kt": {
+      "role": "index",
+      "sha256": "8de7fc6b4931e1a545da88a5335b581bec14f25b8648db930cdc2630d259c070",
+      "size": 8435,
+      "normalized_sha256": "8de7fc6b4931e1a545da88a5335b581bec14f25b8648db930cdc2630d259c070"
+    },
+    "app/src/test/java/com/food/opencook/RecipeMessageEncoderTest.kt": {
+      "role": "index",
+      "sha256": "5636a223cc4688309907a3010d9a9807e2a4c244d732f63d20002229de3e0e75",
+      "size": 4520,
+      "normalized_sha256": "5636a223cc4688309907a3010d9a9807e2a4c244d732f63d20002229de3e0e75"
+    },
+    "app/src/test/java/com/food/opencook/RecipeRepositoryDrainTest.kt": {
+      "role": "index",
+      "sha256": "77b515ecad5b17aa98214222b6b7fad5de4617615b027e4a88d535c1be18ac72",
+      "size": 22607,
+      "normalized_sha256": "77b515ecad5b17aa98214222b6b7fad5de4617615b027e4a88d535c1be18ac72"
+    },
+    "app/src/test/java/com/food/opencook/RecipeSearchFilterTest.kt": {
+      "role": "index",
+      "sha256": "448ecebdd3e1284a3b68ddb5c0ca22711b32dfbbe4f88bc32c354ab90b6d382f",
+      "size": 8757,
+      "normalized_sha256": "448ecebdd3e1284a3b68ddb5c0ca22711b32dfbbe4f88bc32c354ab90b6d382f"
+    },
+    "app/src/test/java/com/food/opencook/RetrospectiveTest.kt": {
+      "role": "index",
+      "sha256": "643eea055275fa0ca9565ec8a2282ce8e8be7904d3854cc2219981b3991390ef",
+      "size": 7498,
+      "normalized_sha256": "643eea055275fa0ca9565ec8a2282ce8e8be7904d3854cc2219981b3991390ef"
+    },
+    "app/src/test/java/com/food/opencook/SharedVectorsTest.kt": {
+      "role": "index",
+      "sha256": "d4c50c4f7dd18ed2cab6c5d09006dab84b747f1f6ae18c92d9b996f248a5f0fa",
+      "size": 5179,
+      "normalized_sha256": "d4c50c4f7dd18ed2cab6c5d09006dab84b747f1f6ae18c92d9b996f248a5f0fa"
+    },
+    "app/src/test/java/com/food/opencook/ShoppingConsolidationTest.kt": {
+      "role": "index",
+      "sha256": "2048905f287605be0d201bfb1eeef0bf03df0fdb9ee0074abae28bd98945724b",
+      "size": 17300,
+      "normalized_sha256": "2048905f287605be0d201bfb1eeef0bf03df0fdb9ee0074abae28bd98945724b"
+    },
+    "app/src/test/java/com/food/opencook/SourceCookbookTest.kt": {
+      "role": "index",
+      "sha256": "3fd503a52ee553c4ac04b57137d78d4fb815a167df9a33657772e0f534a9cd36",
+      "size": 2644,
+      "normalized_sha256": "3fd503a52ee553c4ac04b57137d78d4fb815a167df9a33657772e0f534a9cd36"
+    },
+    "app/src/test/java/com/food/opencook/StatusStripStateTest.kt": {
+      "role": "index",
+      "sha256": "3cb4b6d78a8ef6e42fee2d2ea94685034410cf3ec935826ea1a5dd3cce0333e4",
+      "size": 3285,
+      "normalized_sha256": "3cb4b6d78a8ef6e42fee2d2ea94685034410cf3ec935826ea1a5dd3cce0333e4"
+    },
+    "app/src/test/java/com/food/opencook/SyncConvergenceTest.kt": {
+      "role": "index",
+      "sha256": "6267be75e24a0b32a52e916037261c73660bf37aadb57b37c41e03b91d5a688b",
+      "size": 5300,
+      "normalized_sha256": "6267be75e24a0b32a52e916037261c73660bf37aadb57b37c41e03b91d5a688b"
+    },
+    "build.gradle.kts": {
+      "role": "index",
+      "sha256": "7f53d8e683a856dfa4bc193f89f86945852cbcdcb36013f2f5c05af0d212ed7a",
+      "size": 358,
+      "normalized_sha256": "7f53d8e683a856dfa4bc193f89f86945852cbcdcb36013f2f5c05af0d212ed7a"
+    },
+    "docs/adr/0001-xhs-access-throttling.md": {
+      "role": "index",
+      "sha256": "5614d280c3a37aa647d62f2298e80bdf2052daa9647f0b945a87650252e1ac5c",
+      "size": 974,
+      "normalized_sha256": "5614d280c3a37aa647d62f2298e80bdf2052daa9647f0b945a87650252e1ac5c"
+    },
+    "docs/wiki/README.md": {
+      "role": "index",
+      "sha256": "fb2a84dadc63ef3ec45970a50470683d7c1892ca8e536819ba0d85ad81480bf8",
+      "size": 1879,
+      "normalized_sha256": "fb2a84dadc63ef3ec45970a50470683d7c1892ca8e536819ba0d85ad81480bf8"
+    },
+    "docs/wiki/developer/android-app.md": {
+      "role": "index",
+      "sha256": "d7c99c615f7aaa5d86cff5b3be1e0fbc7ef5a39d9cd1d626d59e6f8fc95274ad",
+      "size": 5504,
+      "normalized_sha256": "d7c99c615f7aaa5d86cff5b3be1e0fbc7ef5a39d9cd1d626d59e6f8fc95274ad"
+    },
+    "docs/wiki/developer/api-reference.md": {
+      "role": "index",
+      "sha256": "726c4090dc1f0ab2ef6e706eb0b1068c3612070ee7d11a5ddb8deac8dfd93141",
+      "size": 6572,
+      "normalized_sha256": "726c4090dc1f0ab2ef6e706eb0b1068c3612070ee7d11a5ddb8deac8dfd93141"
+    },
+    "docs/wiki/developer/architecture.md": {
+      "role": "index",
+      "sha256": "72166a20897afb1d9f55d65a5e5ac68e85d31fe44874eab32c84bcf0d53a61e8",
+      "size": 3753,
+      "normalized_sha256": "72166a20897afb1d9f55d65a5e5ac68e85d31fe44874eab32c84bcf0d53a61e8"
+    },
+    "docs/wiki/developer/building.md": {
+      "role": "index",
+      "sha256": "6f3432cd37b413326d872598e8b7120f826df7e807929eb22bfd1ba601fb6a9c",
+      "size": 3476,
+      "normalized_sha256": "6f3432cd37b413326d872598e8b7120f826df7e807929eb22bfd1ba601fb6a9c"
+    },
+    "docs/wiki/developer/self-hosting.md": {
+      "role": "index",
+      "sha256": "54b38f01d6bcdcde8d6ba1ec0f890e0ba609881d6a9b90fdb9650be10d149ba4",
+      "size": 6307,
+      "normalized_sha256": "54b38f01d6bcdcde8d6ba1ec0f890e0ba609881d6a9b90fdb9650be10d149ba4"
+    },
+    "docs/wiki/developer/server.md": {
+      "role": "index",
+      "sha256": "d7488498ca438ee0cc03dfdc4015387a9581e807e077b88b9e837f7caacb907e",
+      "size": 5306,
+      "normalized_sha256": "d7488498ca438ee0cc03dfdc4015387a9581e807e077b88b9e837f7caacb907e"
+    },
+    "docs/wiki/developer/sync.md": {
+      "role": "index",
+      "sha256": "efb471a2d3b2717c540effa7f63e924474cf622bb155da972b24fbac4556652d",
+      "size": 6467,
+      "normalized_sha256": "efb471a2d3b2717c540effa7f63e924474cf622bb155da972b24fbac4556652d"
+    },
+    "docs/wiki/developer/translating.md": {
+      "role": "index",
+      "sha256": "9847fa5e5edfb183d9ab23ef206b71b9cd503a92640b241a9e90b51fe0d947eb",
+      "size": 17819,
+      "normalized_sha256": "9847fa5e5edfb183d9ab23ef206b71b9cd503a92640b241a9e90b51fe0d947eb"
+    },
+    "docs/wiki/user/backup-and-restore.md": {
+      "role": "index",
+      "sha256": "8cfac590cabd4caabe93add30242d634b28bd7ec2375a8fbb11ced94e45e74a6",
+      "size": 3539,
+      "normalized_sha256": "8cfac590cabd4caabe93add30242d634b28bd7ec2375a8fbb11ced94e45e74a6"
+    },
+    "docs/wiki/user/family-and-sync.md": {
+      "role": "index",
+      "sha256": "2c2e27a7ce7a29ddc3a344f7c5a4d119f9f155cb2391e52e3a1a6875d31cac2c",
+      "size": 5436,
+      "normalized_sha256": "2c2e27a7ce7a29ddc3a344f7c5a4d119f9f155cb2391e52e3a1a6875d31cac2c"
+    },
+    "docs/wiki/user/faq.md": {
+      "role": "index",
+      "sha256": "fa9eef7cca57f620a265c910c32cb6db0f370baa4179bae0b7edd7127bd5eaaf",
+      "size": 3620,
+      "normalized_sha256": "fa9eef7cca57f620a265c910c32cb6db0f370baa4179bae0b7edd7127bd5eaaf"
+    },
+    "docs/wiki/user/getting-started.md": {
+      "role": "index",
+      "sha256": "41de22515ea8a3490374dea9ab65916432546f467ffa8b590e821a9e738f90b3",
+      "size": 3427,
+      "normalized_sha256": "41de22515ea8a3490374dea9ab65916432546f467ffa8b590e821a9e738f90b3"
+    },
+    "docs/wiki/user/meal-planner.md": {
+      "role": "index",
+      "sha256": "cf2498f6e1d31366260e07bbab58012352dda042d09b8068b508edbe83cde84d",
+      "size": 3296,
+      "normalized_sha256": "cf2498f6e1d31366260e07bbab58012352dda042d09b8068b508edbe83cde84d"
+    },
+    "docs/wiki/user/recipes-and-cookbooks.md": {
+      "role": "index",
+      "sha256": "5896934af3d2f31fbc338dc7ea41143c24e102dc22457f7fbfae0b21136ed250",
+      "size": 4820,
+      "normalized_sha256": "5896934af3d2f31fbc338dc7ea41143c24e102dc22457f7fbfae0b21136ed250"
+    },
+    "docs/wiki/user/scanning-recipes.md": {
+      "role": "index",
+      "sha256": "99753dc82b3cc59561b2df4d870e381814b549fd2f3bc6880ef5042bf66bac25",
+      "size": 2114,
+      "normalized_sha256": "99753dc82b3cc59561b2df4d870e381814b549fd2f3bc6880ef5042bf66bac25"
+    },
+    "docs/wiki/user/shopping-and-pantry.md": {
+      "role": "index",
+      "sha256": "6605a766540e3379d4ec4537f16111b214b666f628b9a0f490904c73d820d1de",
+      "size": 2411,
+      "normalized_sha256": "6605a766540e3379d4ec4537f16111b214b666f628b9a0f490904c73d820d1de"
+    },
+    "extension/README.md": {
+      "role": "index",
+      "sha256": "14ad935a0779819cca8b10190dbea2cc4764da2f22afb2913ba0c5692c372dae",
+      "size": 2039,
+      "normalized_sha256": "14ad935a0779819cca8b10190dbea2cc4764da2f22afb2913ba0c5692c372dae"
+    },
+    "extension/extract.js": {
+      "role": "index",
+      "sha256": "3506293e54f38e4f776d19e52f09a97370f1dccb491c4fc27597ce8474fd1f06",
+      "size": 2519,
+      "normalized_sha256": "3506293e54f38e4f776d19e52f09a97370f1dccb491c4fc27597ce8474fd1f06"
+    },
+    "extension/icons/icon128.png": {
+      "role": "index",
+      "sha256": "a28e2656391af2bc3181359cf72aa4b780813bb79d77e20e82e73cf39b8df864",
+      "size": 3714
+    },
+    "extension/icons/icon16.png": {
+      "role": "index",
+      "sha256": "b82efa2a651caa55556ccdc43a619c72c6ea04d3e2204469f5c0d99d2c3fb3ba",
+      "size": 523
+    },
+    "extension/icons/icon48.png": {
+      "role": "index",
+      "sha256": "0df7617f220e141d38cc6e3a434f3a4b21c015c02f09a6f287ef5ada5ef1b581",
+      "size": 1464
+    },
+    "extension/manifest.json": {
+      "role": "index",
+      "sha256": "8c9b88792229383f10482e28041aa23b772d2e8786a74f088287be0d4878dacf",
+      "size": 671,
+      "normalized_sha256": "8c9b88792229383f10482e28041aa23b772d2e8786a74f088287be0d4878dacf"
+    },
+    "extension/options.html": {
+      "role": "index",
+      "sha256": "4c96db97d930778febbb25b7186b3e21d204bb5812d15bf19d76d8e769003b0d",
+      "size": 2056,
+      "normalized_sha256": "4c96db97d930778febbb25b7186b3e21d204bb5812d15bf19d76d8e769003b0d"
+    },
+    "extension/options.js": {
+      "role": "index",
+      "sha256": "4ed7b3c56259b00811cfaa00baac5a3ab5d9da76db0add91f0fda3e239c35fb8",
+      "size": 2159,
+      "normalized_sha256": "4ed7b3c56259b00811cfaa00baac5a3ab5d9da76db0add91f0fda3e239c35fb8"
+    },
+    "extension/popup.html": {
+      "role": "index",
+      "sha256": "74a321e4922dccaa68b83431212bf8688bd9ad079ee3355c56c51c7f792044c1",
+      "size": 1981,
+      "normalized_sha256": "74a321e4922dccaa68b83431212bf8688bd9ad079ee3355c56c51c7f792044c1"
+    },
+    "extension/popup.js": {
+      "role": "index",
+      "sha256": "b1fed33479973cfc03f9710398791dfca9006fe448fceb38bffe9e2d0fe4364f",
+      "size": 6974,
+      "normalized_sha256": "b1fed33479973cfc03f9710398791dfca9006fe448fceb38bffe9e2d0fe4364f"
+    },
+    "fastlane/Fastfile": {
+      "role": "index",
+      "sha256": "49367029d977e04835d6c12f6fe3f0c23f1602066f0e2d961233bc42c9eb5f7d",
+      "size": 1187,
+      "normalized_sha256": "49367029d977e04835d6c12f6fe3f0c23f1602066f0e2d961233bc42c9eb5f7d"
+    },
+    "fastlane/Pluginfile": {
+      "role": "index",
+      "sha256": "6353ff717d83b18fc2f53fb312d84dc748299a68554475a9fd7a80c740714d10",
+      "size": 67,
+      "normalized_sha256": "6353ff717d83b18fc2f53fb312d84dc748299a68554475a9fd7a80c740714d10"
+    },
+    "fastlane/metadata/android/en-US/changelogs/1.txt": {
+      "role": "index",
+      "sha256": "907ef33dcf982240fa8ece6180362adcbcba93ea847b43cabd06c1684a49db21",
+      "size": 15,
+      "normalized_sha256": "907ef33dcf982240fa8ece6180362adcbcba93ea847b43cabd06c1684a49db21"
+    },
+    "fastlane/metadata/android/en-US/changelogs/2.txt": {
+      "role": "index",
+      "sha256": "a65dd065adf12a2be6fd2d817f2ad530577b9f0bd001cf6001ae7be7a2641fbe",
+      "size": 418,
+      "normalized_sha256": "a65dd065adf12a2be6fd2d817f2ad530577b9f0bd001cf6001ae7be7a2641fbe"
+    },
+    "fastlane/metadata/android/en-US/changelogs/3.txt": {
+      "role": "index",
+      "sha256": "2ad6b5ec258df05a79d94da7cee16ddc697eb9dadd7985e14b084ca259e71827",
+      "size": 453,
+      "normalized_sha256": "2ad6b5ec258df05a79d94da7cee16ddc697eb9dadd7985e14b084ca259e71827"
+    },
+    "fastlane/metadata/android/en-US/full_description.txt": {
+      "role": "index",
+      "sha256": "b3ee928616a001f733cf5aafd57a5f640f20af693ed0c983c3cfc050780fc659",
+      "size": 955,
+      "normalized_sha256": "b3ee928616a001f733cf5aafd57a5f640f20af693ed0c983c3cfc050780fc659"
+    },
+    "fastlane/metadata/android/en-US/images/icon.png": {
+      "role": "index",
+      "sha256": "da725c24be3c7eaefc023651e47c08c621e01fa8410fb57e897914063c47140b",
+      "size": 12355
+    },
+    "fastlane/metadata/android/en-US/images/phoneScreenshots/1_recipes.png": {
+      "role": "index",
+      "sha256": "f1c411c222a7f061a8b54424d6d86dd95efe613b8d558cdc3afda5ae3e635cfe",
+      "size": 3680828
+    },
+    "fastlane/metadata/android/en-US/images/phoneScreenshots/2_recipe_detail.png": {
+      "role": "index",
+      "sha256": "b76ba2b3836793fd460e0c6cde6b4015fb67a0d61c8d5fb6342d29393faf7653",
+      "size": 2031533
+    },
+    "fastlane/metadata/android/en-US/images/phoneScreenshots/3_meal_planner.png": {
+      "role": "index",
+      "sha256": "fc4a88a9300fa41d1e1dfaa4678dbd375c6eb4033d886a02591a495f10fe41fa",
+      "size": 829687
+    },
+    "fastlane/metadata/android/en-US/images/phoneScreenshots/4_shopping_list.png": {
+      "role": "index",
+      "sha256": "cf30e93ca628b428bb0c507298f37d5b30ea7d220a2921af82ab0b14e08ff8aa",
+      "size": 556013
+    },
+    "fastlane/metadata/android/en-US/short_description.txt": {
+      "role": "index",
+      "sha256": "d1c45fef7c31bf38ccfd83c6a84c6c1b08eb86eef5c7be528d50b85908cff4e7",
+      "size": 74,
+      "normalized_sha256": "d1c45fef7c31bf38ccfd83c6a84c6c1b08eb86eef5c7be528d50b85908cff4e7"
+    },
+    "fastlane/metadata/android/en-US/title.txt": {
+      "role": "index",
+      "sha256": "621427394c9aa477b2cd5043a189ebb95a601bf0bb13b8b27dc0506f3e7b9b54",
+      "size": 9,
+      "normalized_sha256": "621427394c9aa477b2cd5043a189ebb95a601bf0bb13b8b27dc0506f3e7b9b54"
+    },
+    "gradle.properties": {
+      "role": "index",
+      "sha256": "51be0d012db34ebf99828b062328f46ac2977de511ffc7096165294b7b22394f",
+      "size": 1049,
+      "normalized_sha256": "51be0d012db34ebf99828b062328f46ac2977de511ffc7096165294b7b22394f"
+    },
+    "gradle/gradle-daemon-jvm.properties": {
+      "role": "index",
+      "sha256": "231649d2f8e8dc24310f18c921e3ae33fd2715b7f48a7ddcaf27a85003e0729a",
+      "size": 1138,
+      "normalized_sha256": "231649d2f8e8dc24310f18c921e3ae33fd2715b7f48a7ddcaf27a85003e0729a"
+    },
+    "gradle/libs.versions.toml": {
+      "role": "index",
+      "sha256": "50d2241030ee62283c73922094fe13748e00a741af8bbe0e5c4fafb9c9932bcf",
+      "size": 7085,
+      "normalized_sha256": "50d2241030ee62283c73922094fe13748e00a741af8bbe0e5c4fafb9c9932bcf"
+    },
+    "gradle/wrapper/gradle-wrapper.jar": {
+      "role": "index",
+      "sha256": "76805e32c009c0cf0dd5d206bddc9fb22ea42e84db904b764f3047de095493f3",
+      "size": 45457
+    },
+    "gradle/wrapper/gradle-wrapper.properties": {
+      "role": "index",
+      "sha256": "4c7c75d470df79edd2eaa582c9d3a867463a5f111c697e01c41bc9ed52457489",
+      "size": 370,
+      "normalized_sha256": "4c7c75d470df79edd2eaa582c9d3a867463a5f111c697e01c41bc9ed52457489"
+    },
+    "gradlew": {
+      "role": "index",
+      "sha256": "3238afb2aed5cb16eb7d6718077e7138059108f007b54179e9cc157c5a6e0e89",
+      "size": 8728,
+      "normalized_sha256": "3238afb2aed5cb16eb7d6718077e7138059108f007b54179e9cc157c5a6e0e89"
+    },
+    "gradlew.bat": {
+      "role": "index",
+      "sha256": "1d297e00bd21de3ace22b4d7f2de1f9dfa858883d66bbf7c1ccbecccec8f4f3b",
+      "size": 2937,
+      "normalized_sha256": "94102713eb8fb22d032397924c0f38ab2da783ba60d07054339f1190a0c4e2cd"
+    },
+    "server/.dockerignore": {
+      "role": "index",
+      "sha256": "46b300864d1cddd39fd6fcd66c03589d7a46fad1a3f002be1b39a5c77ee20fbe",
+      "size": 225,
+      "normalized_sha256": "46b300864d1cddd39fd6fcd66c03589d7a46fad1a3f002be1b39a5c77ee20fbe"
+    },
+    "server/.gitignore": {
+      "role": "index",
+      "sha256": "e6ac5a27e2d716218ba56187127e53314a672cdd43dbeb695b290d87e57d9fd3",
+      "size": 97,
+      "normalized_sha256": "e6ac5a27e2d716218ba56187127e53314a672cdd43dbeb695b290d87e57d9fd3"
+    },
+    "server/Dockerfile": {
+      "role": "index",
+      "sha256": "48341181acb0044288b300c305efa1e8b52603eaca0a1ac2e9d8779c1ed8c45f",
+      "size": 652,
+      "normalized_sha256": "48341181acb0044288b300c305efa1e8b52603eaca0a1ac2e9d8779c1ed8c45f"
+    },
+    "server/app/__init__.py": {
+      "role": "index",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "normalized_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "server/app/api/__init__.py": {
+      "role": "index",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "normalized_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "server/app/api/_deps.py": {
+      "role": "index",
+      "sha256": "e3354e7f73f84a83892ecb5f43ca60f88a8159cb0def74fefb533037169010b8",
+      "size": 789,
+      "normalized_sha256": "e3354e7f73f84a83892ecb5f43ca60f88a8159cb0def74fefb533037169010b8"
+    },
+    "server/app/api/admin.py": {
+      "role": "index",
+      "sha256": "01f7f3a448fa35a47bc6cb6e927c4148451403f2c8882d740bd5f7b741c2080f",
+      "size": 21019,
+      "normalized_sha256": "01f7f3a448fa35a47bc6cb6e927c4148451403f2c8882d740bd5f7b741c2080f"
+    },
+    "server/app/api/households.py": {
+      "role": "index",
+      "sha256": "a0fb44faedceee6adddfa463fe7fea9aa0eb20c841a6dd8bb65a77bb82cdad30",
+      "size": 6442,
+      "normalized_sha256": "a0fb44faedceee6adddfa463fe7fea9aa0eb20c841a6dd8bb65a77bb82cdad30"
+    },
+    "server/app/api/images.py": {
+      "role": "index",
+      "sha256": "7225d380158c75ae5d98ce34e155e98ce76167cd603de3a8f4a99e078eafddf4",
+      "size": 2570,
+      "normalized_sha256": "7225d380158c75ae5d98ce34e155e98ce76167cd603de3a8f4a99e078eafddf4"
+    },
+    "server/app/api/imports.py": {
+      "role": "index",
+      "sha256": "5d43a7803da4a379d43d98055b79a5031605f2209a1d7eaa39069eb51fc0201e",
+      "size": 6173,
+      "normalized_sha256": "5d43a7803da4a379d43d98055b79a5031605f2209a1d7eaa39069eb51fc0201e"
+    },
+    "server/app/api/jobs.py": {
+      "role": "index",
+      "sha256": "dde419c41afbf3af1193e25646e6da079181a536cdbe4f836b4a91fd2001c2a1",
+      "size": 1847,
+      "normalized_sha256": "dde419c41afbf3af1193e25646e6da079181a536cdbe4f836b4a91fd2001c2a1"
+    },
+    "server/app/api/sync.py": {
+      "role": "index",
+      "sha256": "bff412d41b718b051681eda4bc35134574dfae22093a43ab963a781def03e3d2",
+      "size": 3700,
+      "normalized_sha256": "bff412d41b718b051681eda4bc35134574dfae22093a43ab963a781def03e3d2"
+    },
+    "server/app/backup.py": {
+      "role": "index",
+      "sha256": "cf2d53c5119da0e8b2d60dffe7b69db8dcede6780c5753250010d021831e2406",
+      "size": 4105,
+      "normalized_sha256": "cf2d53c5119da0e8b2d60dffe7b69db8dcede6780c5753250010d021831e2406"
+    },
+    "server/app/config.py": {
+      "role": "index",
+      "sha256": "efa92d881ddd6ccdb4f7f7307ca667aab30151d487ddb236c029334a4173b0c8",
+      "size": 2511,
+      "normalized_sha256": "efa92d881ddd6ccdb4f7f7307ca667aab30151d487ddb236c029334a4173b0c8"
+    },
+    "server/app/db.py": {
+      "role": "index",
+      "sha256": "a179285eecc14fdd8870f5c8651ceed47ee373e1c293ec61d0e6aae5f5b9f713",
+      "size": 1626,
+      "normalized_sha256": "a179285eecc14fdd8870f5c8651ceed47ee373e1c293ec61d0e6aae5f5b9f713"
+    },
+    "server/app/discovery.py": {
+      "role": "index",
+      "sha256": "9d4af565f07151109bf329cfc45d832e98969ddec973d1528d43a0ca15cd98cf",
+      "size": 2212,
+      "normalized_sha256": "9d4af565f07151109bf329cfc45d832e98969ddec973d1528d43a0ca15cd98cf"
+    },
+    "server/app/extraction.py": {
+      "role": "index",
+      "sha256": "2f0dc35d27ddec42eca91fb82a0c5b761c444c225d61f4f61aec1fcfcd56b9dd",
+      "size": 17827,
+      "normalized_sha256": "2f0dc35d27ddec42eca91fb82a0c5b761c444c225d61f4f61aec1fcfcd56b9dd"
+    },
+    "server/app/i18n/README.md": {
+      "role": "index",
+      "sha256": "ce74c04ee9458b5e272b65430cfb90ae33be3f73f99c3cc1a32af1faccd50b08",
+      "size": 1487,
+      "normalized_sha256": "ce74c04ee9458b5e272b65430cfb90ae33be3f73f99c3cc1a32af1faccd50b08"
+    },
+    "server/app/i18n/de.json": {
+      "role": "index",
+      "sha256": "1631f3f343342cc5fdb2547f5f99ecd81e44e1839d8a50ccb0069fed28d7c5b0",
+      "size": 6448,
+      "normalized_sha256": "1631f3f343342cc5fdb2547f5f99ecd81e44e1839d8a50ccb0069fed28d7c5b0"
+    },
+    "server/app/i18n/en.json": {
+      "role": "index",
+      "sha256": "0997ca707cddf2ae8fc682b7ec3e6b7589733b7dba3ef26fbd155cd9c36823c0",
+      "size": 5477,
+      "normalized_sha256": "0997ca707cddf2ae8fc682b7ec3e6b7589733b7dba3ef26fbd155cd9c36823c0"
+    },
+    "server/app/i18n/fr.json": {
+      "role": "index",
+      "sha256": "155c70e2ca79a515a90a669dc5f61cebb3a353e61ec112b0304c9e6c5491b481",
+      "size": 7126,
+      "normalized_sha256": "155c70e2ca79a515a90a669dc5f61cebb3a353e61ec112b0304c9e6c5491b481"
+    },
+    "server/app/i18n/zh.json": {
+      "role": "index",
+      "sha256": "91c29fe4378953472caaa716a854d618bc61e3b7a18129d7419d84daf77a7ca0",
+      "size": 5395,
+      "normalized_sha256": "91c29fe4378953472caaa716a854d618bc61e3b7a18129d7419d84daf77a7ca0"
+    },
+    "server/app/main.py": {
+      "role": "index",
+      "sha256": "eaa8084fd4c5e218a4f434797841d7311e62bc272e32cb850934f4fb41f7bbae",
+      "size": 2691,
+      "normalized_sha256": "eaa8084fd4c5e218a4f434797841d7311e62bc272e32cb850934f4fb41f7bbae"
+    },
+    "server/app/models.py": {
+      "role": "index",
+      "sha256": "582d5931dd2a60617f290752cb44f395f1261ac06fcf9df0d8b4fa700a1d9b4f",
+      "size": 6449,
+      "normalized_sha256": "582d5931dd2a60617f290752cb44f395f1261ac06fcf9df0d8b4fa700a1d9b4f"
+    },
+    "server/app/ollama_client.py": {
+      "role": "index",
+      "sha256": "dc61450b835d924c78bcdbc9d87dfbc2b32f9d62750b4cfc325ddf0802b38983",
+      "size": 1873,
+      "normalized_sha256": "dc61450b835d924c78bcdbc9d87dfbc2b32f9d62750b4cfc325ddf0802b38983"
+    },
+    "server/app/schemas.py": {
+      "role": "index",
+      "sha256": "06645fb041733455469f24e3428986d5d78dd49f2f4276d87ea9d278e70210f0",
+      "size": 7117,
+      "normalized_sha256": "06645fb041733455469f24e3428986d5d78dd49f2f4276d87ea9d278e70210f0"
+    },
+    "server/app/security.py": {
+      "role": "index",
+      "sha256": "01ab35b85a6a80eb2153222fa6a7a4e630fed70738843616ae311f385381922c",
+      "size": 2193,
+      "normalized_sha256": "01ab35b85a6a80eb2153222fa6a7a4e630fed70738843616ae311f385381922c"
+    },
+    "server/app/static/admin.html": {
+      "role": "index",
+      "sha256": "f1f18e3860122a489873fb3874e6ff9fb3cfda06bf6f19c1189973e1277b2b35",
+      "size": 31463,
+      "normalized_sha256": "f1f18e3860122a489873fb3874e6ff9fb3cfda06bf6f19c1189973e1277b2b35"
+    },
+    "server/app/sync.py": {
+      "role": "index",
+      "sha256": "1e0a2d8d2782ffdbfd1a7f0fe4bcc89fd84dc063951cf85593ea858d5d550da1",
+      "size": 5683,
+      "normalized_sha256": "1e0a2d8d2782ffdbfd1a7f0fe4bcc89fd84dc063951cf85593ea858d5d550da1"
+    },
+    "server/app/worker.py": {
+      "role": "index",
+      "sha256": "72d04885d31e931a1003e3ce51135405666a8f51e86635ae7b3152624541cc29",
+      "size": 2970,
+      "normalized_sha256": "72d04885d31e931a1003e3ce51135405666a8f51e86635ae7b3152624541cc29"
+    },
+    "server/docker-compose.yml": {
+      "role": "index",
+      "sha256": "75f55a1f6c634d7c47854cc19028df062f18832aebd5d0a9157379791a8a4145",
+      "size": 1508,
+      "normalized_sha256": "75f55a1f6c634d7c47854cc19028df062f18832aebd5d0a9157379791a8a4145"
+    },
+    "server/pyproject.toml": {
+      "role": "index",
+      "sha256": "8fc7510d5ee2edc00a1c33a0e085838d8f1ba261dd926348977d442378b735fa",
+      "size": 611,
+      "normalized_sha256": "8fc7510d5ee2edc00a1c33a0e085838d8f1ba261dd926348977d442378b735fa"
+    },
+    "server/scripts/backup.py": {
+      "role": "index",
+      "sha256": "8b1804d82fefcacdcce43a049881a6d681f6eae384b3e147910961ef0211c0cc",
+      "size": 717,
+      "normalized_sha256": "8b1804d82fefcacdcce43a049881a6d681f6eae384b3e147910961ef0211c0cc"
+    },
+    "server/scripts/crop_experiment.py": {
+      "role": "index",
+      "sha256": "e49fda4c56aa2e52292037edf8356bc3ea3f4d3641de5400f9bd05791038c873",
+      "size": 4721,
+      "normalized_sha256": "e49fda4c56aa2e52292037edf8356bc3ea3f4d3641de5400f9bd05791038c873"
+    },
+    "server/scripts/extract_experiment.py": {
+      "role": "index",
+      "sha256": "1ed82a10b71fc441478804e7409d5e8838a76dc28d8c1bfd655ea2810cd598b5",
+      "size": 3930,
+      "normalized_sha256": "1ed82a10b71fc441478804e7409d5e8838a76dc28d8c1bfd655ea2810cd598b5"
+    },
+    "server/scripts/restore.py": {
+      "role": "index",
+      "sha256": "46e186ab46cb6f761067e1df189cda8e383bb0ed84ba36bcc68f4d9b6d371fe4",
+      "size": 1050,
+      "normalized_sha256": "46e186ab46cb6f761067e1df189cda8e383bb0ed84ba36bcc68f4d9b6d371fe4"
+    },
+    "server/scripts/run_extraction.py": {
+      "role": "index",
+      "sha256": "969ce0f99894c5b8c83fb19226b9c88d5a4eaf0e0d7bef2f165ec8ecf6988509",
+      "size": 755,
+      "normalized_sha256": "969ce0f99894c5b8c83fb19226b9c88d5a4eaf0e0d7bef2f165ec8ecf6988509"
+    },
+    "server/tests/__init__.py": {
+      "role": "observe",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "normalized_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "server/tests/test_admin.py": {
+      "role": "observe",
+      "sha256": "cca2f6d6b075b45fa0abc6f3e6640b8990ad46f3a3a91c13577f4ab024c8d542",
+      "size": 7665,
+      "normalized_sha256": "cca2f6d6b075b45fa0abc6f3e6640b8990ad46f3a3a91c13577f4ab024c8d542"
+    },
+    "server/tests/test_admin_bootstrap.py": {
+      "role": "observe",
+      "sha256": "3f1ee9b5e8b88f8efbfe9c3dc51447e2e8c97bca24f162762992a75ddca74fdf",
+      "size": 3436,
+      "normalized_sha256": "3f1ee9b5e8b88f8efbfe9c3dc51447e2e8c97bca24f162762992a75ddca74fdf"
+    },
+    "server/tests/test_admin_db.py": {
+      "role": "observe",
+      "sha256": "8bdc398638fc161f9aa7dc5193a454a3d5753ef328065cd9347c38788cf80da6",
+      "size": 10399,
+      "normalized_sha256": "8bdc398638fc161f9aa7dc5193a454a3d5753ef328065cd9347c38788cf80da6"
+    },
+    "server/tests/test_backup.py": {
+      "role": "observe",
+      "sha256": "684d024c54213486cde7ee5faa08a24d07f9057464f1db5889fccc468bbe09aa",
+      "size": 1989,
+      "normalized_sha256": "684d024c54213486cde7ee5faa08a24d07f9057464f1db5889fccc468bbe09aa"
+    },
+    "server/tests/test_extraction.py": {
+      "role": "observe",
+      "sha256": "8748f76dbda5aefa1ffbdc290659f4097387b705ab67860fbc01d14d743b62a2",
+      "size": 15029,
+      "normalized_sha256": "8748f76dbda5aefa1ffbdc290659f4097387b705ab67860fbc01d14d743b62a2"
+    },
+    "server/tests/test_health.py": {
+      "role": "observe",
+      "sha256": "ea215971722b7dfaee5986dfe4681c03a8e8a923eba5e1048051697b50b6dcda",
+      "size": 451,
+      "normalized_sha256": "ea215971722b7dfaee5986dfe4681c03a8e8a923eba5e1048051697b50b6dcda"
+    },
+    "server/tests/test_households.py": {
+      "role": "observe",
+      "sha256": "9a927cdbf371c06db0d90a27f5cd7e06d87ced31d1a7a97f2b210213a8b93ede",
+      "size": 5653,
+      "normalized_sha256": "9a927cdbf371c06db0d90a27f5cd7e06d87ced31d1a7a97f2b210213a8b93ede"
+    },
+    "server/tests/test_images.py": {
+      "role": "observe",
+      "sha256": "188afa69dadc83fa2eedfec36fd3a437a42f75298d81fc5033776b331c7645b7",
+      "size": 1102,
+      "normalized_sha256": "188afa69dadc83fa2eedfec36fd3a437a42f75298d81fc5033776b331c7645b7"
+    },
+    "server/tests/test_imports.py": {
+      "role": "observe",
+      "sha256": "69436102a5dbafdd759169046b7d4eddc9834d1aa3f83d9511741c8ef1c920d1",
+      "size": 5605,
+      "normalized_sha256": "69436102a5dbafdd759169046b7d4eddc9834d1aa3f83d9511741c8ef1c920d1"
+    },
+    "server/tests/test_sync.py": {
+      "role": "observe",
+      "sha256": "4b7017d0c0fb393293473a017a06a021f7583ae41c42e4e103a7f5fc36bf3dc4",
+      "size": 2760,
+      "normalized_sha256": "4b7017d0c0fb393293473a017a06a021f7583ae41c42e4e103a7f5fc36bf3dc4"
+    },
+    "server/tests/test_sync_api.py": {
+      "role": "observe",
+      "sha256": "19fc275fa5c5c651f7900630d8f3f981594214fd4d34491984ce6b6234a8b4cd",
+      "size": 2435,
+      "normalized_sha256": "19fc275fa5c5c651f7900630d8f3f981594214fd4d34491984ce6b6234a8b4cd"
+    },
+    "settings.gradle.kts": {
+      "role": "index",
+      "sha256": "f5a8b2ee4200192c7035fc916789a8aa9b5be9827051b50801ccf38d964134b2",
+      "size": 532,
+      "normalized_sha256": "f5a8b2ee4200192c7035fc916789a8aa9b5be9827051b50801ccf38d964134b2"
+    },
+    "tools/xhs_to_opencook/.gitignore": {
+      "role": "index",
+      "sha256": "25667c0d5f1df57e7ae448ae2ae07790425013b4b8a25042dd4d8b79b0cdabc7",
+      "size": 113,
+      "normalized_sha256": "25667c0d5f1df57e7ae448ae2ae07790425013b4b8a25042dd4d8b79b0cdabc7"
+    },
+    "tools/xhs_to_opencook/JSON_AB_TEST.md": {
+      "role": "index",
+      "sha256": "b2fabd8191e14c9d477fe3cb3b1c0c85f972dfd441f8fbc46dff1c9f1d23d09c",
+      "size": 3237,
+      "normalized_sha256": "b2fabd8191e14c9d477fe3cb3b1c0c85f972dfd441f8fbc46dff1c9f1d23d09c"
+    },
+    "tools/xhs_to_opencook/README.md": {
+      "role": "index",
+      "sha256": "32a96b879dd1064474577c93db37d8a7cd6efd0d3f7169e6bfdd3539da1cb50d",
+      "size": 30700,
+      "normalized_sha256": "32a96b879dd1064474577c93db37d8a7cd6efd0d3f7169e6bfdd3539da1cb50d"
+    },
+    "tools/xhs_to_opencook/THREE_AB_TESTS.md": {
+      "role": "index",
+      "sha256": "9596fb90fe0b474ccacdd7fe3b060b03495392e712817e738e8ca7b8397b28eb",
+      "size": 4906,
+      "normalized_sha256": "9596fb90fe0b474ccacdd7fe3b060b03495392e712817e738e8ca7b8397b28eb"
+    },
+    "tools/xhs_to_opencook/VALIDATION.md": {
+      "role": "index",
+      "sha256": "05a2a245cf43758636109c144bbdca295a9e0e7ed7f405cffcd9de41ceb9827d",
+      "size": 33189,
+      "normalized_sha256": "05a2a245cf43758636109c144bbdca295a9e0e7ed7f405cffcd9de41ceb9827d"
+    },
+    "tools/xhs_to_opencook/pyproject.toml": {
+      "role": "index",
+      "sha256": "5acd0a442ac80ec4eeef544d64191f109fe72ae3b05c34a513d12b3030b2e4de",
+      "size": 669,
+      "normalized_sha256": "5acd0a442ac80ec4eeef544d64191f109fe72ae3b05c34a513d12b3030b2e4de"
+    },
+    "tools/xhs_to_opencook/src/xhs_to_opencook/__init__.py": {
+      "role": "index",
+      "sha256": "a76470b85dfed2596c7db819c7aba9970aa861bbb13538996adc8cf7d640ee11",
+      "size": 78,
+      "normalized_sha256": "a76470b85dfed2596c7db819c7aba9970aa861bbb13538996adc8cf7d640ee11"
+    },
+    "tools/xhs_to_opencook/src/xhs_to_opencook/accounts.py": {
+      "role": "index",
+      "sha256": "4983b2b2246c2655adea9473ba1a0573920ce92b62501213bcf7246dc55e6c9a",
+      "size": 3868,
+      "normalized_sha256": "4983b2b2246c2655adea9473ba1a0573920ce92b62501213bcf7246dc55e6c9a"
+    },
+    "tools/xhs_to_opencook/src/xhs_to_opencook/browser.py": {
+      "role": "index",
+      "sha256": "eff407e4ce9217df4a42455299e7f2bd0ede2bcdcdc9a6c16c38f2bf98b6e60a",
+      "size": 40488,
+      "normalized_sha256": "eff407e4ce9217df4a42455299e7f2bd0ede2bcdcdc9a6c16c38f2bf98b6e60a"
+    },
+    "tools/xhs_to_opencook/src/xhs_to_opencook/chat.py": {
+      "role": "index",
+      "sha256": "f0b041664fa333eeb269d27d9b5eadf8ac1807d5fc7211eb5673118072ab85af",
+      "size": 48509,
+      "normalized_sha256": "f0b041664fa333eeb269d27d9b5eadf8ac1807d5fc7211eb5673118072ab85af"
+    },
+    "tools/xhs_to_opencook/src/xhs_to_opencook/cli.py": {
+      "role": "index",
+      "sha256": "b586d4dde84236161c1b323c0eb69d48629d9f4cfd33261de5898d8bfdc86be1",
+      "size": 4968,
+      "normalized_sha256": "b586d4dde84236161c1b323c0eb69d48629d9f4cfd33261de5898d8bfdc86be1"
+    },
+    "tools/xhs_to_opencook/src/xhs_to_opencook/errors.py": {
+      "role": "index",
+      "sha256": "af49b56c611e87cd82d9ecc403357f07dcc40a7521210169fd33fca77ab7ab95",
+      "size": 506,
+      "normalized_sha256": "af49b56c611e87cd82d9ecc403357f07dcc40a7521210169fd33fca77ab7ab95"
+    },
+    "tools/xhs_to_opencook/src/xhs_to_opencook/export.py": {
+      "role": "index",
+      "sha256": "b411e91c1be738825440adfd6b2450dfab3588b6e5417112bf87a54980fb2ab2",
+      "size": 6048,
+      "normalized_sha256": "b411e91c1be738825440adfd6b2450dfab3588b6e5417112bf87a54980fb2ab2"
+    },
+    "tools/xhs_to_opencook/src/xhs_to_opencook/links.py": {
+      "role": "index",
+      "sha256": "345717467ae3f08cb9533e4e8bbb011b076f70057219f8b1191402c6f2c2d2c6",
+      "size": 1811,
+      "normalized_sha256": "345717467ae3f08cb9533e4e8bbb011b076f70057219f8b1191402c6f2c2d2c6"
+    },
+    "tools/xhs_to_opencook/src/xhs_to_opencook/models.py": {
+      "role": "index",
+      "sha256": "ed02a57b783b86da3328aa07fa9af88dc7f027fac32efe30d0901d971731b4af",
+      "size": 11781,
+      "normalized_sha256": "ed02a57b783b86da3328aa07fa9af88dc7f027fac32efe30d0901d971731b4af"
+    },
+    "tools/xhs_to_opencook/src/xhs_to_opencook/notifications.py": {
+      "role": "index",
+      "sha256": "93203661c4afae341a421433b53a27650ba0865ac3abc3abe95d73960c1ed192",
+      "size": 5435,
+      "normalized_sha256": "93203661c4afae341a421433b53a27650ba0865ac3abc3abe95d73960c1ed192"
+    },
+    "tools/xhs_to_opencook/src/xhs_to_opencook/parallel.py": {
+      "role": "index",
+      "sha256": "e45b49a6f447f1e56325362a94ae59a699a011b83c06551e466671ae54c0002e",
+      "size": 31777,
+      "normalized_sha256": "e45b49a6f447f1e56325362a94ae59a699a011b83c06551e466671ae54c0002e"
+    },
+    "tools/xhs_to_opencook/src/xhs_to_opencook/parallel_browser.py": {
+      "role": "index",
+      "sha256": "cfe28c4377513a3b57db99a2de0b0a8c3c11cffa8bf3edde93e12000a2f28739",
+      "size": 7916,
+      "normalized_sha256": "cfe28c4377513a3b57db99a2de0b0a8c3c11cffa8bf3edde93e12000a2f28739"
+    },
+    "tools/xhs_to_opencook/src/xhs_to_opencook/prompts.py": {
+      "role": "index",
+      "sha256": "99e134497fdf3e7e9086ed9eb94aeafc02a6b65da0b97b4648e389cfb84386d3",
+      "size": 5174,
+      "normalized_sha256": "99e134497fdf3e7e9086ed9eb94aeafc02a6b65da0b97b4648e389cfb84386d3"
+    },
+    "tools/xhs_to_opencook/src/xhs_to_opencook/runner.py": {
+      "role": "index",
+      "sha256": "6e0f65b2ec17f665c3d3baf27c78eee0fc9cbdbba84e3839f787d1dd9fcca4fc",
+      "size": 17841,
+      "normalized_sha256": "6e0f65b2ec17f665c3d3baf27c78eee0fc9cbdbba84e3839f787d1dd9fcca4fc"
+    },
+    "tools/xhs_to_opencook/src/xhs_to_opencook/runtime.py": {
+      "role": "index",
+      "sha256": "c7eef73dc56aa0a16a813f99048b80301c750c982f244743f55a696c4c1dc035",
+      "size": 10114,
+      "normalized_sha256": "c7eef73dc56aa0a16a813f99048b80301c750c982f244743f55a696c4c1dc035"
+    },
+    "tools/xhs_to_opencook/src/xhs_to_opencook/storage.py": {
+      "role": "index",
+      "sha256": "4ff931fce2da14d93f3ce8c0816a3af3da064cad35c974102839c5d2267e63e5",
+      "size": 11773,
+      "normalized_sha256": "4ff931fce2da14d93f3ce8c0816a3af3da064cad35c974102839c5d2267e63e5"
+    },
+    "tools/xhs_to_opencook/src/xhs_to_opencook/supervisor.py": {
+      "role": "index",
+      "sha256": "101083f013c4de47865caef11e1db8cc47a0e3ba99e4c2cafa698943010863e5",
+      "size": 21143,
+      "normalized_sha256": "101083f013c4de47865caef11e1db8cc47a0e3ba99e4c2cafa698943010863e5"
+    },
+    "tools/xhs_to_opencook/src/xhs_to_opencook/throttle.py": {
+      "role": "index",
+      "sha256": "3a7f48ea12adce827d74f52a6d02d6e809425f67a72269b985189a6d31ad968c",
+      "size": 9752,
+      "normalized_sha256": "3a7f48ea12adce827d74f52a6d02d6e809425f67a72269b985189a6d31ad968c"
+    },
+    "tools/xhs_to_opencook/src/xhs_to_opencook/workflow.py": {
+      "role": "index",
+      "sha256": "23ba83abdd3a8a66e1aa66d65709a14669f40d2e959af7c6ab9ca6678b874cec",
+      "size": 32062,
+      "normalized_sha256": "23ba83abdd3a8a66e1aa66d65709a14669f40d2e959af7c6ab9ca6678b874cec"
+    },
+    "tools/xhs_to_opencook/tests/chat_adapter.py": {
+      "role": "observe",
+      "sha256": "c9e898d181dffbaaa44a47af973dd353005694e1ae2e2f2c197c9c1f8b1332ab",
+      "size": 2024,
+      "normalized_sha256": "c9e898d181dffbaaa44a47af973dd353005694e1ae2e2f2c197c9c1f8b1332ab"
+    },
+    "tools/xhs_to_opencook/tests/conftest.py": {
+      "role": "observe",
+      "sha256": "ec3dc7d459432e99085a4dc6be3e7707ca958126915725fe63708335f91b206e",
+      "size": 1239,
+      "normalized_sha256": "ec3dc7d459432e99085a4dc6be3e7707ca958126915725fe63708335f91b206e"
+    },
+    "tools/xhs_to_opencook/tests/test_accounts.py": {
+      "role": "observe",
+      "sha256": "2d7628a1749191ac1629864b5617870b5bbeb2ec320bd8620fcdde4637a75659",
+      "size": 3647,
+      "normalized_sha256": "2d7628a1749191ac1629864b5617870b5bbeb2ec320bd8620fcdde4637a75659"
+    },
+    "tools/xhs_to_opencook/tests/test_browser.py": {
+      "role": "observe",
+      "sha256": "dc594e9b57353b1b3bcf8ff614ffd336d333aa444861fbf84dfe5886fa0ccd2c",
+      "size": 25300,
+      "normalized_sha256": "dc594e9b57353b1b3bcf8ff614ffd336d333aa444861fbf84dfe5886fa0ccd2c"
+    },
+    "tools/xhs_to_opencook/tests/test_chat.py": {
+      "role": "observe",
+      "sha256": "fd28891fd633d94dcca40ba9a42f3998d6dc27d426bda29cb3190db20db0ab82",
+      "size": 43354,
+      "normalized_sha256": "fd28891fd633d94dcca40ba9a42f3998d6dc27d426bda29cb3190db20db0ab82"
+    },
+    "tools/xhs_to_opencook/tests/test_conversion.py": {
+      "role": "observe",
+      "sha256": "bf020636e565258d5337ca335a164f70ed567c8095fc54b50c4286a3c4c4c9cc",
+      "size": 13038,
+      "normalized_sha256": "bf020636e565258d5337ca335a164f70ed567c8095fc54b50c4286a3c4c4c9cc"
+    },
+    "tools/xhs_to_opencook/tests/test_parallel.py": {
+      "role": "observe",
+      "sha256": "bd5c9e494a21d4ccc1e4fa9da58bce1ed742698a0fc6032da87a5d022ade1b4f",
+      "size": 14407,
+      "normalized_sha256": "bd5c9e494a21d4ccc1e4fa9da58bce1ed742698a0fc6032da87a5d022ade1b4f"
+    },
+    "tools/xhs_to_opencook/tests/test_parallel_browser.py": {
+      "role": "observe",
+      "sha256": "9e74474069e437fb6bdc7fb8b4a2412349309cdb3fab881100820536195aba01",
+      "size": 6327,
+      "normalized_sha256": "9e74474069e437fb6bdc7fb8b4a2412349309cdb3fab881100820536195aba01"
+    },
+    "tools/xhs_to_opencook/tests/test_runner.py": {
+      "role": "observe",
+      "sha256": "df531cca7ac8af45c5e15354235a8c04580d989a89cda39538098a5014f5338f",
+      "size": 7732,
+      "normalized_sha256": "df531cca7ac8af45c5e15354235a8c04580d989a89cda39538098a5014f5338f"
+    },
+    "tools/xhs_to_opencook/tests/test_runtime.py": {
+      "role": "observe",
+      "sha256": "a10fd2bf014f0613e01740c93df02a0294688bf2829793d24e66f135f5c6dee8",
+      "size": 14587,
+      "normalized_sha256": "a10fd2bf014f0613e01740c93df02a0294688bf2829793d24e66f135f5c6dee8"
+    },
+    "tools/xhs_to_opencook/tests/test_throttle.py": {
+      "role": "observe",
+      "sha256": "19bede4134c641d5b3354c8b104e6e62d45c452b9323e9a3596378f9513aed42",
+      "size": 6864,
+      "normalized_sha256": "19bede4134c641d5b3354c8b104e6e62d45c452b9323e9a3596378f9513aed42"
+    },
+    "tools/xhs_to_opencook/tests/test_workflow.py": {
+      "role": "observe",
+      "sha256": "38dd42a69976c2cecac885dc72fe5c2e71a17c1412c95056711e574831f08614",
+      "size": 26303,
+      "normalized_sha256": "38dd42a69976c2cecac885dc72fe5c2e71a17c1412c95056711e574831f08614"
+    }
+  },
+  "managed_scope": {
+    "version": "managed-scope-baseline/v1",
+    "policy_identity": "c81414aa1ad20edc6cdd8c9d904678ca476240ca1a991b5d31759dcae114efd1",
+    "observe_change_policy": "review_required",
+    "budget_policy_identity": "15e9b37a6c57e9bf03c9df3d0d049eb5b9a7f5540f9d34960408114e2538a32d",
+    "budget_policy": {
+      "version": "cognition-budget-policy/v1",
+      "mode": "enforce",
+      "whole_index": {
+        "target_tokens": 200000,
+        "warning_tokens": 300000,
+        "max_tokens": 400000
+      },
+      "r": [
+        {
+          "min_c": 1,
+          "max_c": 4,
+          "target_tokens": 25,
+          "max_tokens": 50
+        },
+        {
+          "min_c": 5,
+          "max_c": 7,
+          "target_tokens": 45,
+          "max_tokens": 90
+        },
+        {
+          "min_c": 8,
+          "max_c": 8,
+          "target_tokens": 70,
+          "max_tokens": 140
+        },
+        {
+          "min_c": 9,
+          "max_c": 9,
+          "target_tokens": 90,
+          "max_tokens": 180
+        }
+      ],
+      "s": [
+        {
+          "min_c": 1,
+          "max_c": 4,
+          "target_tokens": 20,
+          "max_tokens": 40
+        },
+        {
+          "min_c": 5,
+          "max_c": 7,
+          "target_tokens": 40,
+          "max_tokens": 80
+        },
+        {
+          "min_c": 8,
+          "max_c": 8,
+          "target_tokens": 70,
+          "max_tokens": 140
+        },
+        {
+          "min_c": 9,
+          "max_c": 9,
+          "target_tokens": 100,
+          "max_tokens": 200
+        }
+      ]
+    },
+    "apply_authorization_mode": "auto"
+  }
+}
