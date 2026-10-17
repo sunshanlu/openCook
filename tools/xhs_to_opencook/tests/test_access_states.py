@@ -135,3 +135,12 @@ def test_recovered_access_saves_a_fresh_snapshot_when_the_same_error_returns(acc
         page.set_content('<body>已恢复</body>')
         assert driver.ensure_access(page) is False
     assert len(list((driver.profile.parent / 'access-diagnostics').glob('*/evidence.json'))) == 2
+
+
+def test_corrupt_diagnostic_journal_does_not_block_access(access_browser):
+    driver, page = access_browser
+    directory = driver.profile.parent / 'access-diagnostics'
+    directory.mkdir()
+    (directory / 'last-chrome.json').write_text('broken JSON')
+    page.set_content('<body>可访问</body>')
+    assert driver.ensure_access(page) is False

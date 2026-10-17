@@ -149,7 +149,7 @@ class AccessDiagnostics:
                 path.unlink(missing_ok=True)
             if self.directory.is_dir():
                 self.prune()
-        except OSError as error:
+        except Exception as error:
             print(f"访问诊断状态保存失败：{redact(error)}", flush=True)
 
     def prune(self):
