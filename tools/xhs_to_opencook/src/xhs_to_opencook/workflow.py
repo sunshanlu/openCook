@@ -471,7 +471,12 @@ class Workflow:
                     active.begin_item(stage, identity)
                     if os.environ.get("XHS_RECOVERY_PROBE"):
                         try:
-                            self.driver().probe(source)
+                            if self.chats.pending():
+                                self.driver().ensure_access(self.driver().chat_page,
+                                                            require_account=True)
+                                self.driver().wait_editor_ready()
+                            else:
+                                self.driver().probe(source)
                         except (TaskError, PlaywrightError) as error:
                             runtime.block(getattr(error, "code", "probe_failed"), str(error),
                                           kind=runtime.wait_kind(error))

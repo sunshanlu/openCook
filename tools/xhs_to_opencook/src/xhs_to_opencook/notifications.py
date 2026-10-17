@@ -43,6 +43,8 @@ class Outbox:
         write_json(self.path, self.data)
 
     def enqueue(self, key, text, *, progress=False):
+        if self.data.get("enabled", True) is False:
+            return
         if not progress and key in self.data["events"]:
             return
         if progress:
@@ -56,6 +58,11 @@ class Outbox:
         self.save()
 
     def flush(self, *, still_actionable=True):
+        if self.data.get("enabled", True) is False:
+            if self.data["pending"]:
+                self.data["pending"] = []
+                self.save()
+            return
         for message in list(self.data["pending"]):
             if message["next_at"] > self.clock():
                 continue

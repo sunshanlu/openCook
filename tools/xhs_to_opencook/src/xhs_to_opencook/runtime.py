@@ -40,8 +40,12 @@ def network_error(error):
 
 def wait_kind(error):
     code = getattr(error, "code", None)
-    if code == "login_required":
+    if code in {"login_required", "verification_required"}:
         return "access"
+    if code in {"page_state_unconfirmed", "account_identity_unavailable"}:
+        return "unconfirmed"
+    if code == "account_mismatch":
+        return "manual"
     if code == "platform_restricted" or network_error(error):
         return "platform"
     return "circuit"
@@ -182,12 +186,15 @@ class WorkerRuntime:
         if same or (len(recent) == 10 and sum(bool(x["code"]) for x in recent) >= 5):
             self.block("circuit_open", "连续失败，等待恢复检查", kind="circuit")
 
-    def wait_access(self, checker, sleeper=time.sleep):
+    def wait_access(self, checker, sleeper=time.sleep, *, error=None):
+        code = error.code if error else "login_required"
+        message = str(error) if error else "请在专用Chrome完成登录"
+        kind = "unconfirmed" if code == "page_state_unconfirmed" else "access"
+        self.data["access_evidence"] = getattr(error, "evidence", {})
         if os.environ.get("XHS_PARALLEL_STAGE"):
-            self.block("login_required", "请在专用Chrome完成登录或验证码", kind="access")
+            self.block(code, message, kind=kind)
         item = self.data.pop("item", None)
-        self.data.update(status="waiting", reason="login_required", wait_kind="access",
-                         message="请在专用Chrome完成登录或验证码")
+        self.data.update(status="waiting", reason=code, wait_kind=kind, message=message)
         while True:
             self.operation("waiting_for_login", 420)
             self.data["next_check"] = self.clock() + 300
@@ -200,9 +207,10 @@ class WorkerRuntime:
                 checker()
                 break
             except TaskError as error:
-                if error.code != "login_required":
+                if error.code not in {"login_required", "verification_required",
+                                      "page_state_unconfirmed"}:
                     raise
-        self.data.update(status="running", message="登录恢复，继续核对原请求")
+        self.data.update(status="running", reason=None, message="访问状态恢复，继续核对原请求")
         if item:
             self.data["item"] = item
         self.operation("processing", 180)

@@ -7,8 +7,10 @@ from urllib.parse import parse_qs, urlsplit
 
 from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import Page, expect, sync_playwright
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 from . import runtime
+from .access import OBSERVE_ACCESS, AccessDiagnostics, safe_state, safe_url
 from .errors import BrowserUnsupported, TaskError
 from .links import note_id, profile_id, validate_url
 from .models import Source
@@ -47,7 +49,8 @@ def known_run(order, known):
 
 
 class SiteBrowser:
-    def __init__(self, profile: Path, *, timeout: float = 180, interactive: bool = True):
+    def __init__(self, profile: Path, *, timeout: float = 180, interactive: bool = True,
+                 access_clock=time.monotonic, access_wait=None, access_timeout=30):
         self.profile = profile
         self.timeout = timeout
         self.interactive = interactive
@@ -59,6 +62,9 @@ class SiteBrowser:
         self.verified_note_id = None
         self.history_messages = {}
         self.history_observer = None
+        self.access_clock, self.access_wait = access_clock, access_wait
+        self.access_timeout = access_timeout
+        self.access_diagnostics = AccessDiagnostics(profile.parent / "access-diagnostics")
 
     def __enter__(self):
         self.profile.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -109,52 +115,71 @@ class SiteBrowser:
         try:
             identities = {profile_id(url) for url in links}
         except TaskError as error:
-            raise TaskError("account_identity_unavailable", "无法确认登录用户ID",
-                            retryable=False) from error
+            raise self.access_failure(page, "page_state_unconfirmed", "无法确认登录用户ID",
+                                      {"condition": "account_identity_unavailable"}) from error
         if len(identities) != 1:
-            raise TaskError("account_identity_unavailable", "无法唯一确认登录用户ID",
-                            retryable=False)
+            raise self.access_failure(page, "page_state_unconfirmed", "无法唯一确认登录用户ID",
+                                      {"condition": "account_identity_ambiguous"})
         return identities.pop()
 
-    def ensure_access(self, page: Page, *, require_account: bool = False) -> bool:
+    def access_failure(self, page, code, message, details=None):
+        try:
+            state = page.evaluate(OBSERVE_ACCESS)
+        except PlaywrightError as error:
+            state = {"url": page.url, "matched": [], "observation_error": runtime.redact(error)}
+        state.update(details or {})
+        diagnostic = self.access_diagnostics.record(self.profile.name, code, state, page)
+        failure = TaskError(code, message, retryable=False)
+        failure.evidence = {**safe_state(state), "diagnostic_path": diagnostic}
+        return failure
+
+    def ensure_access(self, page: Page, *, require_account: bool = False,
+                      expected_url=None) -> bool:
         """Never solve challenges or dismiss login by pretending a page is accessible."""
         runtime.check()
         paused = False
+        deadline = self.access_clock() + self.access_timeout
         while True:
-            state = page.evaluate("""() => {
-                const visible = el => !!el && !!(el.offsetWidth || el.offsetHeight
-                    || el.getClientRects().length);
-                const challenge = [...document.querySelectorAll('iframe')].some(el =>
-                    visible(el) && /captcha|verify|challenge/i.test(el.src));
-                const dialog = [...document.querySelectorAll(
-                    '.login-container, .login-modal, .captcha-container, [role="dialog"]'
-                )].filter(visible).map(el => el.innerText || '').join(' ');
-                const text = (document.body?.innerText || '').slice(-12000);
-                // Restriction pages must stop the batch, not become bad-note failures.
-                // Match the dedicated error route, never words in ordinary note content.
-                const restricted = location.pathname === '/website-login/error'
-                    || location.pathname.startsWith('/website-login/error/');
-                const login = /扫码登录|手机号登录|登录后查看|登录后即可|登录后使用/.test(dialog)
-                    || /扫码登录|手机号登录|登录后查看|登录后即可/.test(text);
-                const verify = challenge || /请完成验证|安全验证|拖动滑块|点击完成验证/.test(dialog)
-                    || /请完成验证|拖动滑块|访问异常|异常访问|安全验证/.test(text)
-                    || /captcha|verify|challenge/i.test(location.pathname);
-                const account = [...document.querySelectorAll('a[href*="/user/profile/"]')]
-                    .some(el => visible(el) && el.innerText.trim() === '我');
-                return {login, verify, account, restricted};
-            }""")
-            if state["restricted"]:
-                raise TaskError(
-                    "platform_restricted",
-                    "平台安全限制页面（访问频繁可能显示300013）；已停止整批，请等待限制解除",
-                    retryable=False,
-                )
-            if state["verify"] or state["login"] or (require_account and not state["account"]):
-                self._pause("检测到验证码或需要登录，请手动完成")
+            try:
+                state = page.evaluate(OBSERVE_ACCESS)
+            except PlaywrightError as error:
+                state = {"url": page.url, "ready_state": "unavailable", "account": False,
+                         "login": False, "verify": False, "restricted": False,
+                         "matched": [], "observation_error": runtime.redact(error)}
+            code, message = None, None
+            if state['restricted']:
+                code, message = 'platform_restricted', '平台安全限制页面；等待限制解除'
+            elif state['verify']:
+                code, message = 'verification_required', '检测到可见验证码控件，请完成验证'
+            elif state['login']:
+                code, message = 'login_required', '检测到可见登录弹窗，请登录小红书'
+            elif state.get('ready_state') not in {'interactive', 'complete'} or (
+                require_account and not state['account']
+            ) or (
+                expected_url and safe_url(state['url']) != safe_url(expected_url)
+            ):
+                code, message = 'page_state_unconfirmed', '页面状态未确认，无法可靠确认访问状态'
+            if code is None:
+                return paused
+            diagnostic = self.access_diagnostics.record(self.profile.name, code, state, page)
+            if code == 'page_state_unconfirmed' and self.access_clock() < deadline:
+                seconds = min(5, deadline - self.access_clock())
+                runtime.operation('confirm_access', seconds + 60)
+                if self.access_wait:
+                    self.access_wait(seconds)
+                else:
+                    page.wait_for_timeout(seconds * 1000)
+                runtime.check()
+                continue
+            if self.interactive and code in {'login_required', 'verification_required'}:
+                self._pause(message)
                 paused = True
                 page.wait_for_timeout(500)
+                deadline = self.access_clock() + self.access_timeout
                 continue
-            return paused
+            failure = TaskError(code, message, retryable=False)
+            failure.evidence = {**safe_state(state), 'diagnostic_path': diagnostic}
+            raise failure
 
     visit_gate = None
 
@@ -162,7 +187,16 @@ class SiteBrowser:
         """Navigate, first waiting for and recording the account's access allowance."""
         if self.visit_gate:
             self.visit_gate.access()
-        return page.goto(url, **options)
+        try:
+            return page.goto(url, **options)
+        except PlaywrightTimeoutError as error:
+            self.access_failure(page, "page_state_unconfirmed", "页面导航超时",
+                                {"condition": "navigation_timeout",
+                                 "target_url": safe_url(url), "error": runtime.redact(error)})
+            # Inspect the same page before navigating again. A timed-out navigation may
+            # have committed successfully while the app is still rendering.
+            self.ensure_access(page, require_account=True, expected_url=url)
+            return None
 
     def open_source(self, url: str) -> Source:
         validate_url(url)
@@ -240,12 +274,17 @@ class SiteBrowser:
                         box.left + box.width / 2, box.top + box.height / 2);
                     return inView(box) && inView(send) && hit === el;
                 }"""):
+                    self.access_diagnostics.resolved(self.profile.name)
                     return editor
                 page.wait_for_timeout(250)
         except (PlaywrightError, AssertionError) as exc:
             self.ensure_access(page)
-            raise BrowserUnsupported("点点输入框未加载完成或不可编辑；未填写、未发送") from exc
-        raise BrowserUnsupported("点点输入框未在可见窗口内稳定就绪；未填写、未发送")
+            raise self.access_failure(page, "page_state_unconfirmed",
+                                      "点点输入框未加载完成或不可编辑；未填写、未发送",
+                                      {"condition": "editor_unavailable"}) from exc
+        raise self.access_failure(page, "page_state_unconfirmed",
+                                  "点点输入框未在可见窗口内稳定就绪；未填写、未发送",
+                                  {"condition": "editor_unavailable"})
 
     def prepare_chat_page(self):
         # Reuse the tab: opening a new target can raise headed Chrome on macOS.
@@ -265,7 +304,9 @@ class SiteBrowser:
             editor.wait_for(state="visible", timeout=20000)
         except PlaywrightError as exc:
             self.ensure_access(self.chat_page)
-            raise BrowserUnsupported("找不到点点输入框；请检查页面版本") from exc
+            raise self.access_failure(self.chat_page, "page_state_unconfirmed",
+                                      "找不到点点输入框；页面状态未确认",
+                                      {"condition": "editor_unavailable"}) from exc
         new_button = self.chat_page.locator(
             '[title="新建会话"]:visible, svg:has(title:text-is("新建会话")):visible'
         )

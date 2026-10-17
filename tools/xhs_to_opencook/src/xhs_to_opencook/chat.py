@@ -632,9 +632,13 @@ class ChatSession:
                 path.unlink(missing_ok=True)
                 return result
             except TaskError as exc:
-                if runtime.current() and exc.code == "login_required":
+                if runtime.current() and exc.code in {
+                    "login_required", "verification_required", "page_state_unconfirmed"
+                }:
                     runtime.current().wait_access(
-                        lambda: self.driver().ensure_access(self.driver().chat_page), self.sleeper
+                        lambda: self.driver().ensure_access(self.driver().chat_page,
+                                                          require_account=True),
+                        self.sleeper, error=exc,
                     )
                     self.loaded_batch = None
                     continue

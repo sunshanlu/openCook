@@ -120,6 +120,32 @@ def test_platform_restriction_recovers_without_an_extra_submission(tmp_path):
     store.close()
 
 
+def test_access_recovery_reconciles_submitted_request_without_resending(tmp_path, monkeypatch):
+    from xhs_to_opencook import runtime
+    from xhs_to_opencook.runtime import WorkerRuntime
+
+    store, driver, manager = setup(tmp_path)
+    monkeypatch.setenv('XHS_PARALLEL_STAGE', 'classify')
+    active = WorkerRuntime(tmp_path / 'runtime', 'job',
+                           clock=lambda: driver.clock, monotonic=lambda: driver.clock)
+    monkeypatch.setattr(runtime, '_worker', active)
+    driver.replies = [TaskError('page_state_unconfirmed', '页面状态未确认'), 'valid']
+    directory = store.attempt_directory(source(1).note_id, 1)
+    with pytest.raises(TaskError) as failure:
+        manager.process(source(1), 'classify', directory)
+    assert failure.value.code == 'runtime_wait'
+    original = manager.pending()
+    assert original['status'] == 'submitted'
+    assert original['attempt'] == 1
+    assert len(driver.sent) == 1
+    monkeypatch.setattr(runtime, '_worker', None)
+    assert process(store, manager, 1).verdict == 'tutorial'
+    assert manager.current['request_id'] == original['request_id']
+    assert manager.current['attempt'] == 1
+    assert len(driver.sent) == 1
+    store.close()
+
+
 
 def test_50_51_boundary_and_restart(tmp_path):
     store, driver, manager = setup(tmp_path, capacity=50)

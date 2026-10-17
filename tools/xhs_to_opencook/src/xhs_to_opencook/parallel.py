@@ -123,12 +123,18 @@ def worker(directory, stage):
                 "account_mismatch",
                 "account_identity_unavailable",
                 "login_required",
+                "verification_required",
+                "page_state_unconfirmed",
             }:
                 active.data.update(
                     status="waiting",
                     reason=exc.code,
                     message=str(exc),
-                    wait_kind="access" if exc.code == "login_required" else "manual",
+                    wait_kind=("manual" if exc.code == "account_mismatch" else
+                               "unconfirmed" if exc.code in {"page_state_unconfirmed",
+                                                            "account_identity_unavailable"}
+                               else "access"),
+                    access_evidence=getattr(exc, "evidence", {}),
                 )
             import sqlite3
 
@@ -364,9 +370,20 @@ class ParallelCoordinator:
         self.retire(stage)
         record = self.job["workers"][stage]
         kind = data.get("wait_kind", "platform")
+        reason = data.get("reason")
+        if reason == "account_mismatch":
+            kind = "manual"
+        elif reason in {"page_state_unconfirmed", "account_identity_unavailable"}:
+            kind = "unconfirmed"
+            reason = "page_state_unconfirmed"
+        elif reason in {"login_required", "verification_required"}:
+            kind = "access"
+        checks = record.get("unconfirmed_checks", 0) + 1 if kind == "unconfirmed" else 0
         attempt = record.get("wait_attempt", 0)
         delay = (
-            300
+            (300 if checks < 3 else 1800)
+            if kind == "unconfirmed"
+            else 300
             if kind == "access"
             else (1800 if not attempt else 3600)
             if kind == "circuit"
@@ -376,11 +393,13 @@ class ParallelCoordinator:
         )
         record.update(
             status="waiting",
-            reason=data.get("reason"),
+            reason=reason,
             message=data.get("message", "账号等待恢复"),
             wait_kind=kind,
             wait_attempt=attempt + 1,
             next_check=self.clock() + delay,
+            unconfirmed_checks=checks,
+            access_evidence=data.get("access_evidence", {}),
         )
         if kind == "manual" or (kind == "circuit" and record.get("probe_failures", 0) >= 3):
             record["next_check"] = None
@@ -390,7 +409,10 @@ class ParallelCoordinator:
         elif record.get("reason") == "pacing_frozen":
             record["next_check"] = self.throttle(stage).state()["frozen_until"]
         self.save()
-        self.notify(f"waiting:{stage}:{record['wait_attempt']}:{self.job.get('wait_episode', 0)}")
+        if kind != "unconfirmed" or checks == 3:
+            self.notify(
+                f"waiting:{stage}:{record['wait_attempt']}:{self.job.get('wait_episode', 0)}"
+            )
         self.publish(force=True)
 
     def ensure_chrome(self, stage):
@@ -446,13 +468,9 @@ class ParallelCoordinator:
             interactive=False,
         ) as browser:
             browser.verify_account()
-            pending = self.publisher.chats.pending(stage)
-            if pending:
-                from .models import Source
-
-                browser.verify_reference(
-                    Source.model_validate(pending["source"]), browser.wait_editor_ready()
-                )
+            browser.wait_editor_ready()
+            # The worker reconciles any pending request against its original history.
+            # A readiness probe must not clear its composer or create a new chat.
         self.launch(stage, probe=True)
 
     def step(self):
@@ -490,6 +508,7 @@ class ParallelCoordinator:
                             probe_failures=0,
                             probing=False,
                             next_check=None,
+                            unconfirmed_checks=0,
                         )
                 self.job.update(
                     status="running",
@@ -544,6 +563,7 @@ class ParallelCoordinator:
                             "reason": getattr(error, "code", "probe_failed"),
                             "message": str(error),
                             "wait_kind": record.get("wait_kind", "manual"),
+                            "access_evidence": getattr(error, "evidence", {}),
                         },
                     )
                 continue
@@ -600,7 +620,8 @@ class ParallelCoordinator:
                     self.crash(stage, "工作进程异常退出")
                 continue
             if record.get("probing") and data.get("probe_succeeded"):
-                record.update(probing=False, probe_failures=0, wait_attempt=0, reason=None)
+                record.update(probing=False, probe_failures=0, wait_attempt=0, reason=None,
+                              next_check=None, unconfirmed_checks=0, message="正常处理")
             if resumed:
                 record["grace_until"] = now + 60
             deadline = data.get("deadline", record["started_at"] + 60)

@@ -272,7 +272,9 @@ def test_reused_page_keeps_current_history_listener_until_navigation(driver, mon
 
 
 def test_noninteractive_login_requires_action(driver):
-    driver.chat_page.evaluate("document.body.innerHTML='<div>扫码登录</div>'")
+    driver.chat_page.evaluate(
+        "document.body.innerHTML='<div class=\"login-modal\">扫码登录</div>'"
+    )
     with pytest.raises(TaskError) as error:
         driver.ensure_access(driver.chat_page)
     assert error.value.code == "login_required"
@@ -316,8 +318,9 @@ def test_unsupported_editor_fails_closed(driver):
             raise PlaywrightError("missing editor")
 
     driver.context.new_page = new_page
-    with pytest.raises(BrowserUnsupported):
+    with pytest.raises(TaskError) as failure:
         driver.new_chat()
+    assert failure.value.code == 'page_state_unconfirmed'
 
 
 @pytest.mark.parametrize("cover_field", ["url_default", "info_list"])

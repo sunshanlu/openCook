@@ -156,7 +156,9 @@ class AttachedBrowser(SiteBrowser):
 
     def verify_account(self):
         if self.expected_account and self.account_identity() != self.expected_account:
-            raise TaskError("account_mismatch", "当前登录账号与本阶段绑定不符", retryable=False)
+            raise self.access_failure(self.chat_page, "account_mismatch",
+                                      "当前登录账号与本阶段绑定不符",
+                                      {"condition": "account_mismatch"})
 
     def restore_chat(self, conversation_id):
         self.verify_account()

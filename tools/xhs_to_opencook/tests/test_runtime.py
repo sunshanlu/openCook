@@ -20,6 +20,18 @@ def worker(tmp_path, clock):
     return WorkerRuntime(tmp_path, "job", clock=lambda: clock[0], monotonic=lambda: clock[0])
 
 
+@pytest.mark.parametrize('code', ['verification_required', 'page_state_unconfirmed'])
+def test_parallel_access_wait_preserves_the_observed_reason(tmp_path, monkeypatch, code):
+    monkeypatch.setenv('XHS_PARALLEL_STAGE', 'classify')
+    active = worker(tmp_path, [1000])
+    failure = TaskError(code, 'specific access failure')
+    failure.evidence = {'matched': ['visible control']}
+    with pytest.raises(TaskError, match='specific access failure'):
+        active.wait_access(lambda: None, error=failure)
+    assert active.data['reason'] == code
+    assert active.data['access_evidence'] == failure.evidence
+
+
 def test_budget_survives_restart_and_excludes_suspension(tmp_path):
     clock = [1000]
     first = worker(tmp_path, clock)

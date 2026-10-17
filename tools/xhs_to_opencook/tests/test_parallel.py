@@ -158,6 +158,30 @@ def test_publish_first_and_every_twenty(coordinator):
     assert bundles == [1, 21, 21]
 
 
+def test_unconfirmed_page_waits_only_its_stage_and_escalates_once(coordinator):
+    c = coordinator
+    c.retire = lambda stage: None
+    notices = []
+    c.notify = lambda key, **kwargs: notices.append(key)
+    c.publish = lambda **kwargs: None
+    c.job['workers']['extract']['status'] = 'running'
+    data = {'reason': 'page_state_unconfirmed', 'wait_kind': 'unconfirmed',
+            'message': '页面状态未确认'}
+    for expected_delay in [300, 300, 1800, 1800]:
+        c.account_wait('classify', data)
+        assert c.job['workers']['classify']['next_check'] == 1000 + expected_delay
+        assert c.job['workers']['extract']['status'] == 'running'
+    assert len(notices) == 1
+
+
+def test_account_mismatch_waits_for_manual_action(coordinator):
+    c = coordinator
+    c.retire = lambda stage: None
+    c.account_wait('classify', {'reason': 'account_mismatch', 'message': '账号不匹配'})
+    assert c.job['workers']['classify']['wait_kind'] == 'manual'
+    assert c.job['workers']['classify']['next_check'] is None
+
+
 def test_export_failure_does_not_advance_checkpoint(coordinator):
     c = coordinator
 

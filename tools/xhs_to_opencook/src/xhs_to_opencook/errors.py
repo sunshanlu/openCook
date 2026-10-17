@@ -1,4 +1,5 @@
-SESSION_BLOCK_CODES = frozenset({"login_required", "platform_restricted"})
+SESSION_BLOCK_CODES = frozenset({"login_required", "verification_required",
+                                 "page_state_unconfirmed", "platform_restricted"})
 
 
 class TaskError(Exception):
