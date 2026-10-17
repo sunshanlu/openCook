@@ -9,7 +9,7 @@ import time
 from contextlib import contextmanager
 from pathlib import Path
 
-from .errors import TaskError
+from .errors import ACCESS_WAIT_KINDS, TaskError
 from .storage import write_json
 
 
@@ -40,12 +40,8 @@ def network_error(error):
 
 def wait_kind(error):
     code = getattr(error, "code", None)
-    if code in {"login_required", "verification_required"}:
-        return "access"
-    if code in {"page_state_unconfirmed", "account_identity_unavailable"}:
-        return "unconfirmed"
-    if code == "account_mismatch":
-        return "manual"
+    if code in ACCESS_WAIT_KINDS:
+        return ACCESS_WAIT_KINDS[code]
     if code == "platform_restricted" or network_error(error):
         return "platform"
     return "circuit"
@@ -189,7 +185,7 @@ class WorkerRuntime:
     def wait_access(self, checker, sleeper=time.sleep, *, error=None):
         code = error.code if error else "login_required"
         message = str(error) if error else "请在专用Chrome完成登录"
-        kind = "unconfirmed" if code == "page_state_unconfirmed" else "access"
+        kind = ACCESS_WAIT_KINDS[code]
         self.data["access_evidence"] = getattr(error, "evidence", {})
         if os.environ.get("XHS_PARALLEL_STAGE"):
             self.block(code, message, kind=kind)

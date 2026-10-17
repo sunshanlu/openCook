@@ -124,3 +124,14 @@ def test_committed_navigation_timeout_checks_same_page_without_navigating_again(
     monkeypatch.setattr(page, 'goto', timeout)
     assert driver.visit(page, 'https://example.test/ai_chat') is None
     assert navigations == ['https://example.test/ai_chat']
+
+
+def test_recovered_access_saves_a_fresh_snapshot_when_the_same_error_returns(access_browser):
+    driver, page = access_browser
+    for _ in range(2):
+        page.set_content('<div class="login-modal">扫码登录</div>')
+        with pytest.raises(TaskError):
+            driver.ensure_access(page)
+        page.set_content('<body>已恢复</body>')
+        assert driver.ensure_access(page) is False
+    assert len(list((driver.profile.parent / 'access-diagnostics').glob('*/evidence.json'))) == 2

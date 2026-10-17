@@ -8,10 +8,10 @@ from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 from uuid import uuid4
 
+from playwright.sync_api import Error as PlaywrightError
+
 from .runtime import read_json, redact
 from .storage import write_json
-
-ACCESS_CODES = frozenset({"login_required", "verification_required", "page_state_unconfirmed"})
 
 OBSERVE_ACCESS = r"""() => {
     const visible = el => {
@@ -56,6 +56,15 @@ OBSERVE_ACCESS = r"""() => {
 }"""
 
 
+def observe_access(page):
+    try:
+        return page.evaluate(OBSERVE_ACCESS)
+    except PlaywrightError as error:
+        return {"url": page.url, "ready_state": "unavailable", "account": False,
+                "login": False, "verify": False, "restricted": False,
+                "matched": [], "observation_error": redact(error)}
+
+
 def safe_url(url):
     parts = urlsplit(url)
     # Query/fragment can contain credentials, session IDs and shared-note tokens.
@@ -87,7 +96,7 @@ def safe_state(state):
 
 
 class AccessDiagnostics:
-    def __init__(self, directory: Path, *, clock=time.time, max_bytes=200 * 1024 * 1024,
+    def __init__(self, directory: Path, *, clock=time.time, max_bytes=200_000_000,
                  retention_seconds=7 * 86400):
         self.directory, self.clock = Path(directory), clock
         self.max_bytes, self.retention_seconds = max_bytes, retention_seconds
@@ -122,16 +131,24 @@ class AccessDiagnostics:
                 except Exception as error:
                     evidence["capture_errors"].append({"artifact": name, "error": redact(error)})
             write_json(target / "evidence.json", evidence)
-            write_json(journal_path, {"fingerprint": fingerprint, "path": str(target)})
+            write_json(journal_path, {"fingerprint": fingerprint, "path": str(target),
+                                     "condition": state.get('condition')})
             self.prune()
             return str(target) if (target / 'evidence.json').is_file() else None
         except Exception as error:
             print(f"访问诊断保存失败：{redact(error)}", flush=True)
             return None
 
-    def resolved(self, scope):
+    def resolved(self, scope, *, access_only=False):
         try:
-            (self.directory / f"last-{scope}.json").unlink(missing_ok=True)
+            path = self.directory / f"last-{scope}.json"
+            previous = read_json(path)
+            protected = {'editor_unavailable', 'account_mismatch',
+                         'account_identity_unavailable', 'account_identity_ambiguous'}
+            if not access_only or previous.get('condition') not in protected:
+                path.unlink(missing_ok=True)
+            if self.directory.is_dir():
+                self.prune()
         except OSError as error:
             print(f"访问诊断状态保存失败：{redact(error)}", flush=True)
 

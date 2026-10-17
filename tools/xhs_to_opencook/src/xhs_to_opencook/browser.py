@@ -10,7 +10,7 @@ from playwright.sync_api import Page, expect, sync_playwright
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 from . import runtime
-from .access import OBSERVE_ACCESS, AccessDiagnostics, safe_state, safe_url
+from .access import AccessDiagnostics, observe_access, safe_state, safe_url
 from .errors import BrowserUnsupported, TaskError
 from .links import note_id, profile_id, validate_url
 from .models import Source
@@ -115,18 +115,15 @@ class SiteBrowser:
         try:
             identities = {profile_id(url) for url in links}
         except TaskError as error:
-            raise self.access_failure(page, "page_state_unconfirmed", "无法确认登录用户ID",
+            raise self.make_access_error(page, "page_state_unconfirmed", "无法确认登录用户ID",
                                       {"condition": "account_identity_unavailable"}) from error
         if len(identities) != 1:
-            raise self.access_failure(page, "page_state_unconfirmed", "无法唯一确认登录用户ID",
+            raise self.make_access_error(page, "page_state_unconfirmed", "无法唯一确认登录用户ID",
                                       {"condition": "account_identity_ambiguous"})
         return identities.pop()
 
-    def access_failure(self, page, code, message, details=None):
-        try:
-            state = page.evaluate(OBSERVE_ACCESS)
-        except PlaywrightError as error:
-            state = {"url": page.url, "matched": [], "observation_error": runtime.redact(error)}
+    def make_access_error(self, page, code, message, details=None, *, state=None):
+        state = observe_access(page) if state is None else dict(state)
         state.update(details or {})
         diagnostic = self.access_diagnostics.record(self.profile.name, code, state, page)
         failure = TaskError(code, message, retryable=False)
@@ -140,12 +137,7 @@ class SiteBrowser:
         paused = False
         deadline = self.access_clock() + self.access_timeout
         while True:
-            try:
-                state = page.evaluate(OBSERVE_ACCESS)
-            except PlaywrightError as error:
-                state = {"url": page.url, "ready_state": "unavailable", "account": False,
-                         "login": False, "verify": False, "restricted": False,
-                         "matched": [], "observation_error": runtime.redact(error)}
+            state = observe_access(page)
             code, message = None, None
             if state['restricted']:
                 code, message = 'platform_restricted', '平台安全限制页面；等待限制解除'
@@ -160,8 +152,9 @@ class SiteBrowser:
             ):
                 code, message = 'page_state_unconfirmed', '页面状态未确认，无法可靠确认访问状态'
             if code is None:
+                self.access_diagnostics.resolved(self.profile.name, access_only=True)
                 return paused
-            diagnostic = self.access_diagnostics.record(self.profile.name, code, state, page)
+            self.access_diagnostics.record(self.profile.name, code, state, page)
             if code == 'page_state_unconfirmed' and self.access_clock() < deadline:
                 seconds = min(5, deadline - self.access_clock())
                 runtime.operation('confirm_access', seconds + 60)
@@ -177,9 +170,7 @@ class SiteBrowser:
                 page.wait_for_timeout(500)
                 deadline = self.access_clock() + self.access_timeout
                 continue
-            failure = TaskError(code, message, retryable=False)
-            failure.evidence = {**safe_state(state), 'diagnostic_path': diagnostic}
-            raise failure
+            raise self.make_access_error(page, code, message, state=state)
 
     visit_gate = None
 
@@ -190,7 +181,7 @@ class SiteBrowser:
         try:
             return page.goto(url, **options)
         except PlaywrightTimeoutError as error:
-            self.access_failure(page, "page_state_unconfirmed", "页面导航超时",
+            self.make_access_error(page, "page_state_unconfirmed", "页面导航超时",
                                 {"condition": "navigation_timeout",
                                  "target_url": safe_url(url), "error": runtime.redact(error)})
             # Inspect the same page before navigating again. A timed-out navigation may
@@ -279,10 +270,10 @@ class SiteBrowser:
                 page.wait_for_timeout(250)
         except (PlaywrightError, AssertionError) as exc:
             self.ensure_access(page)
-            raise self.access_failure(page, "page_state_unconfirmed",
+            raise self.make_access_error(page, "page_state_unconfirmed",
                                       "点点输入框未加载完成或不可编辑；未填写、未发送",
                                       {"condition": "editor_unavailable"}) from exc
-        raise self.access_failure(page, "page_state_unconfirmed",
+        raise self.make_access_error(page, "page_state_unconfirmed",
                                   "点点输入框未在可见窗口内稳定就绪；未填写、未发送",
                                   {"condition": "editor_unavailable"})
 
@@ -304,7 +295,7 @@ class SiteBrowser:
             editor.wait_for(state="visible", timeout=20000)
         except PlaywrightError as exc:
             self.ensure_access(self.chat_page)
-            raise self.access_failure(self.chat_page, "page_state_unconfirmed",
+            raise self.make_access_error(self.chat_page, "page_state_unconfirmed",
                                       "找不到点点输入框；页面状态未确认",
                                       {"condition": "editor_unavailable"}) from exc
         new_button = self.chat_page.locator(

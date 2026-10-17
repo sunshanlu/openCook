@@ -15,7 +15,13 @@ class Outbox:
         self.path = directory / "outbox.json"
         self.clock, self.run = clock, run
         self.data = read_json(self.path, {"recipient": recipient, "pending": [], "events": []})
+        self.data.setdefault("pending", [])
+        self.data.setdefault("events", [])
         self.cli = shutil.which("lark-cli") or "/opt/homebrew/bin/lark-cli"
+
+    @property
+    def enabled(self):
+        return self.data.get("enabled", True) is not False
 
     def resolve_self(self):
         if self.data.get("recipient"):
@@ -43,7 +49,7 @@ class Outbox:
         write_json(self.path, self.data)
 
     def enqueue(self, key, text, *, progress=False):
-        if self.data.get("enabled", True) is False:
+        if not self.enabled:
             return
         if not progress and key in self.data["events"]:
             return
@@ -58,7 +64,7 @@ class Outbox:
         self.save()
 
     def flush(self, *, still_actionable=True):
-        if self.data.get("enabled", True) is False:
+        if not self.enabled:
             if self.data["pending"]:
                 self.data["pending"] = []
                 self.save()

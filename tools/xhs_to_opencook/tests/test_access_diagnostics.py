@@ -48,3 +48,12 @@ def test_capture_failure_is_saved_without_replacing_access_state(tmp_path):
     evidence = json.loads(next(tmp_path.glob('*/evidence.json')).read_text())
     assert evidence['code'] == 'login_required'
     assert evidence['capture_errors'][0]['artifact'] == 'page.png'
+
+
+def test_normal_recovery_removes_expired_evidence_without_another_failure(tmp_path):
+    clock = [1000]
+    diagnostics = AccessDiagnostics(tmp_path, clock=lambda: clock[0], retention_seconds=100)
+    diagnostics.record('chrome', 'login_required', {'url': 'about:blank'}, SnapshotPage())
+    clock[0] = 1101
+    diagnostics.resolved('chrome')
+    assert list(tmp_path.glob('*/evidence.json')) == []

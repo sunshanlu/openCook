@@ -1,3 +1,13 @@
+ACCESS_WAIT_KINDS = {
+    "login_required": "access",
+    "verification_required": "access",
+    "page_state_unconfirmed": "unconfirmed",
+    # Older persisted journals used this code before access checks were separated.
+    "account_identity_unavailable": "unconfirmed",
+    "account_mismatch": "manual",
+}
+
+
 SESSION_BLOCK_CODES = frozenset({"login_required", "verification_required",
                                  "page_state_unconfirmed", "platform_restricted"})
 

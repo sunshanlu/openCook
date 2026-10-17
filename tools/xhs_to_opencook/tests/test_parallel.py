@@ -182,6 +182,17 @@ def test_account_mismatch_waits_for_manual_action(coordinator):
     assert c.job['workers']['classify']['next_check'] is None
 
 
+def test_public_report_keeps_diagnostic_evidence_local(coordinator):
+    c = coordinator
+    record = c.job['workers']['classify']
+    record['access_evidence'] = {'matched': 'private dialog', 'diagnostic_path': '/local/path'}
+    record['progress'] = {'operation': 'prepare', 'access_evidence': record['access_evidence']}
+    c.publisher.snapshot = lambda **kwargs: []
+    c.publish(force=True)
+    assert 'access_evidence' not in c.publisher.report['workers']['classify']
+    assert c.publisher.report['workers']['classify']['progress'] == {'operation': 'prepare'}
+
+
 def test_export_failure_does_not_advance_checkpoint(coordinator):
     c = coordinator
 

@@ -17,3 +17,11 @@ def test_disabled_outbox_neither_queues_nor_sends_existing_messages(tmp_path):
     outbox.flush()
     assert outbox.data["pending"] == []
     assert Outbox(tmp_path).data["enabled"] is False
+
+
+def test_disabled_hand_edited_outbox_can_omit_queue_fields(tmp_path):
+    write_json(tmp_path / "outbox.json", {"enabled": False})
+    outbox = Outbox(tmp_path)
+    outbox.enqueue('progress', 'progress')
+    outbox.flush()
+    assert outbox.data['pending'] == []

@@ -12,7 +12,7 @@ from playwright.sync_api import sync_playwright
 
 from . import runtime
 from .accounts import profile_path, require_bindings
-from .errors import TaskError
+from .errors import ACCESS_WAIT_KINDS, TaskError
 from .links import read_profiles
 from .notifications import Outbox, summary
 from .parallel_browser import AttachedBrowser, ChromeOwner
@@ -119,21 +119,12 @@ def worker(directory, stage):
     except Exception as exc:
         error = f"{type(exc).__name__}: {exc}"
         if active:
-            if getattr(exc, "code", None) in {
-                "account_mismatch",
-                "account_identity_unavailable",
-                "login_required",
-                "verification_required",
-                "page_state_unconfirmed",
-            }:
+            if getattr(exc, "code", None) in ACCESS_WAIT_KINDS:
                 active.data.update(
                     status="waiting",
                     reason=exc.code,
                     message=str(exc),
-                    wait_kind=("manual" if exc.code == "account_mismatch" else
-                               "unconfirmed" if exc.code in {"page_state_unconfirmed",
-                                                            "account_identity_unavailable"}
-                               else "access"),
+                    wait_kind=ACCESS_WAIT_KINDS[exc.code],
                     access_evidence=getattr(exc, "evidence", {}),
                 )
             import sqlite3
@@ -225,7 +216,11 @@ class ParallelCoordinator:
         try:
             self.publisher.report.update(
                 status=self.job["status"],
-                workers=self.job["workers"],
+                workers={stage: {
+                    **{k: v for k, v in record.items() if k not in {"access_evidence", "progress"}},
+                    "progress": {k: v for k, v in record.get("progress", {}).items()
+                                 if k != "access_evidence"},
+                } for stage, record in self.job["workers"].items()},
                 queue=self.store.queue_counts(self.job["job_id"]),
             )
             records = self.publisher.snapshot()
@@ -371,13 +366,9 @@ class ParallelCoordinator:
         record = self.job["workers"][stage]
         kind = data.get("wait_kind", "platform")
         reason = data.get("reason")
-        if reason == "account_mismatch":
-            kind = "manual"
-        elif reason in {"page_state_unconfirmed", "account_identity_unavailable"}:
-            kind = "unconfirmed"
+        kind = ACCESS_WAIT_KINDS.get(reason, kind)
+        if reason == "account_identity_unavailable":
             reason = "page_state_unconfirmed"
-        elif reason in {"login_required", "verification_required"}:
-            kind = "access"
         checks = record.get("unconfirmed_checks", 0) + 1 if kind == "unconfirmed" else 0
         attempt = record.get("wait_attempt", 0)
         delay = (
@@ -399,7 +390,6 @@ class ParallelCoordinator:
             wait_attempt=attempt + 1,
             next_check=self.clock() + delay,
             unconfirmed_checks=checks,
-            access_evidence=data.get("access_evidence", {}),
         )
         if kind == "manual" or (kind == "circuit" and record.get("probe_failures", 0) >= 3):
             record["next_check"] = None
@@ -575,7 +565,7 @@ class ParallelCoordinator:
             if child:
                 self.drain(stage, child)
             data = runtime.read_json(self.directory / stage / "worker.json")
-            record["progress"] = data
+            record["progress"] = {k: v for k, v in data.items() if k != "access_evidence"}
             code = child.poll() if child else data.get("exit_code")
             if code == 1 and data.get("error_scope") == "shared":
                 self.wait(
