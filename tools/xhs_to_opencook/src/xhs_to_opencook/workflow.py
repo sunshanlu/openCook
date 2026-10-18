@@ -22,15 +22,6 @@ from .prompts import (
     EXTRACTION_VERSION,
 )
 from .storage import Store, atomic_write, now, state_lock, write_json
-from .task_adapters import (
-    ChatBrowserAdapter,
-    StoreJournal,
-    classification_commit,
-    classification_validator,
-    extraction_commit,
-    extraction_validator,
-)
-from .task_engine import TERMINAL_PHASES, TaskExecutor, new_record
 
 
 def classification_record(store, identity):
@@ -436,6 +427,14 @@ class Workflow:
 
     def run_classification(self, identity, note):
         """Drive one classification task through prepare/submit/wait/validate/save to completion."""
+        from .task_adapters import (
+            ChatBrowserAdapter,
+            StoreJournal,
+            classification_commit,
+            classification_validator,
+        )
+        from .task_engine import TERMINAL_PHASES, TaskExecutor, new_record
+
         source = collected_source(
             note, self.store.get(identity), classification_record(self.store, identity)[0]
         )
@@ -504,6 +503,14 @@ class Workflow:
                       kind="manual" if block.get("reason") == "identity_conflict" else None)
 
     def process_extraction(self, notes):
+        from .task_adapters import (
+            ChatBrowserAdapter,
+            StoreJournal,
+            extraction_commit,
+            extraction_validator,
+        )
+        from .task_engine import TERMINAL_PHASES, TaskExecutor, new_record
+
         for note in notes:
             identity = note["note_id"]
             task_id = "extract:" + identity
