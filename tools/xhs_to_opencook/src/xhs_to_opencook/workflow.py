@@ -469,7 +469,11 @@ class Workflow:
             finalize=classification_commit(self.store, identity, source, driver),
             stable_seconds=getattr(self.args, "task_stable_seconds", 1.0),
         )
-        if getattr(self.args, "task_resume", False):
+        stored_block = executor.record.get("wait_block", {}).get("reason")
+        if (getattr(self.args, "task_resume", False)
+                or (executor.phase == "blocked" and stored_block in {
+                    "login_required", "verification_required", "page_state_unconfirmed",
+                    "page_unavailable", "platform_restricted", "pacing_frozen"})):
             executor.resume(human_resolved=getattr(self.args, "task_human_resolved", False))
         while True:
             record = executor.tick()
@@ -494,6 +498,8 @@ class Workflow:
             return {"status": "awaiting_review", "error": error,
                     "attempts": record.get("attempt", 1)}
         block = record.get("wait_block", {})
+        if record.get("error", {}).get("code") == "save_failed":
+            raise OSError("共享存储保存失败")
         runtime.block(block.get("reason", "task_blocked"), "当前任务未安全收尾",
                       kind="manual" if block.get("reason") == "identity_conflict" else None)
 
@@ -530,7 +536,11 @@ class Workflow:
                 finalize=extraction_commit(self.store, identity, source, driver),
                 stable_seconds=getattr(self.args, "task_stable_seconds", 1.0),
             )
-            if getattr(self.args, "task_resume", False):
+            stored_block = executor.record.get("wait_block", {}).get("reason")
+            if (getattr(self.args, "task_resume", False)
+                    or (executor.phase == "blocked" and stored_block in {
+                        "login_required", "verification_required", "page_state_unconfirmed",
+                        "page_unavailable", "platform_restricted", "pacing_frozen"})):
                 executor.resume(human_resolved=getattr(self.args, "task_human_resolved", False))
             while True:
                 record = executor.tick()
@@ -540,6 +550,8 @@ class Workflow:
 
             if record["phase"] == "blocked":
                 block = record.get("wait_block", {})
+                if record.get("error", {}).get("code") == "save_failed":
+                    raise OSError("共享存储保存失败")
                 runtime.block(block.get("reason", "task_blocked"), "提取任务未安全收尾",
                               kind="manual" if block.get("reason") == "identity_conflict" else None)
             task.update(status="success" if record["phase"] == "completed" else "awaiting_review",
