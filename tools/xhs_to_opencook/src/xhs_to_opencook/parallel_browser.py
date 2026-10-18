@@ -164,6 +164,10 @@ class AttachedBrowser(SiteBrowser):
         self.verify_account()
         return super().restore_chat(conversation_id)
 
+    def delete_chat(self, conversation_id):
+        self.verify_account()
+        return super().delete_chat(conversation_id)
+
     def begin_request(self, prompt, source, request, persist):
         self.verify_account()
         if self.expected_account and request.get("account_id") != self.expected_account:

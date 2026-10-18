@@ -8,12 +8,14 @@ import csv
 import io
 import json
 import time
+from contextlib import nullcontext
 from uuid import uuid4
 
 from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 from . import runtime
+from .cleanup import ChatCleanup
 from .errors import SESSION_BLOCK_CODES, BrowserUnsupported, TaskError
 from .models import JSON_ERROR_CODES, parse_bound_answer
 from .prompts import CLASSIFICATION_VERSION, EXTRACTION_VERSION, bound_prompt
@@ -162,26 +164,44 @@ class ChatSession:
             write_json(self.store.directory / request["raw_directory"] / "request.json", request)
 
     def load(self, batch):
+        recovering = False
         if self.pacing:
             pending = self.pending()
-            if not pending or not (pending.get("sent_at") and pending["status"] != "prepared"):
+            recovering = bool(pending and pending.get("sent_at")
+                              and pending["status"] != "prepared")
+            if not recovering:
                 self.pacing.ready()
         if self.account_id and batch.get("account_id") != self.account_id:
             raise TaskError("account_mismatch", "禁止恢复其他账号的会话", retryable=False)
         if self.loaded_batch == batch["batch_id"]:
             return
-        driver = self.driver()
+        self.cleanup()
         cid = batch.get("conversation_id")
         if cid:
-            driver.restore_chat(cid)
+            with self.pacing.recover_submission() if recovering else nullcontext():
+                self.driver().restore_chat(cid)
         elif any(
             r["batch_id"] == batch["batch_id"] and r["status"] in PENDING - {"prepared"}
             for r in self.store.stage_rows("chat_requests")
         ):
             raise BrowserUnsupported("提交中断且会话 ID 未确认；禁止新建会话或直接重发")
         else:
-            driver.new_chat()
+            self.driver().new_chat()
         self.loaded_batch = batch["batch_id"]
+
+    def cleanup(self):
+        completed = ChatCleanup(self.store, self.driver, account_id=self.account_id,
+                                stage=self.stage_scope, clock=self.clock,
+                                pacing=self.pacing).run()
+        if completed:
+            self.loaded_batch = None
+        return completed
+
+    def recovery_context(self):
+        pending = self.pending()
+        if self.pacing and pending and pending.get("sent_at") and pending["status"] != "prepared":
+            return self.pacing.recover_submission()
+        return nullcontext()
 
     def batch(self, stage, note):
         if self.pacing:
@@ -236,6 +256,12 @@ class ChatSession:
             self.loaded_batch = None
             raise BrowserUnsupported("提交期间浏览器关闭；保存意图，续跑先核对历史") from exc
         except TaskError as exc:
+            if exc.code == "pacing_window_closed":
+                # The reservation failed before Enter and rolled back its transaction.
+                request.update(status="prepared")
+                request.pop("sent_at", None)
+                self.persist(request)
+                runtime.block(exc.code, str(exc), kind="schedule")
             if exc.code in {"account_mismatch", "account_identity_unavailable", "login_required"} \
                     and runtime.current():
                 runtime.block(exc.code, str(exc), kind="access" if exc.code == "login_required"
@@ -545,13 +571,15 @@ class ChatSession:
                 driver.chat_page.close()
                 driver.chat_page = None
                 driver.history_observer = None
-            driver.new_chat()
+            if not self.pacing or self.pacing.next_open() <= self.clock():
+                driver.new_chat()
         except (PlaywrightError, TaskError):
             if not self.reset_browser:
                 runtime.block("isolation_failed", "旧会话无法隔离", kind="manual")
             self.reset_browser()
             try:
-                self.driver().new_chat()
+                if not self.pacing or self.pacing.next_open() <= self.clock():
+                    self.driver().new_chat()
             except (PlaywrightError, TaskError):
                 runtime.block("isolation_failed", "专用浏览器重建失败", kind="manual")
         request["review_error"] = {"code": code, "message": message}
@@ -572,7 +600,8 @@ class ChatSession:
         while self.clock() < end:
             runtime.check()
             try:
-                driver = self.driver()
+                with self.recovery_context():
+                    driver = self.driver()
                 if request.get("conversation_id"):
                     snapshot = self.reconcile(request)
                 else:
@@ -623,7 +652,8 @@ class ChatSession:
                     write_json(path, recovery)
                 if recovery["failures"] >= 6:
                     self.recovery_review(source, stage, directory, recovery)
-                driver = self.driver()
+                with self.recovery_context():
+                    driver = self.driver()
                 driver.raw_directory = directory
                 result = self._process(source, stage, directory)
                 if stage == "classify" and result.verdict == "unknown":
@@ -661,6 +691,7 @@ class ChatSession:
                     raise
                 if exc.code == "manual_review_required":
                     path.unlink(missing_ok=True)
+                    self.cleanup()
                     raise
                 if not self.recoverable_page_error(exc):
                     raise
@@ -991,3 +1022,4 @@ class ChatSession:
         if len(batch["submitted_notes"]) >= batch["capacity"]:
             batch.update(status="sealed", sealed_reason="capacity", sealed_at=now())
             self.store.stage_save("chat_batches", batch["batch_id"], batch)
+            self.cleanup()

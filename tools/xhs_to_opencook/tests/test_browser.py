@@ -563,6 +563,87 @@ def test_account_identity_unique_and_missing(driver):
         driver.account_identity()
 
 
+def history_ui(driver, *, route_id="owned", cursor=0, listed=True):
+    html = """<meta charset="utf-8"><div class="xhs-ai-history-list">
+       <div class="xhs-ai-history-item" onclick="
+          history.replaceState({},'', '/ai_chat?conversationId=ROUTE');
+          this.classList.add('xhs-ai-history-item-active')">
+         <span>目标</span><button class="xhs-ai-history-item-close" onclick="
+           event.stopPropagation();fetch('/api/sns/web/v1/dqa/history/update', {
+             method:'POST',body:JSON.stringify({update_type:'DELETE_BATCH',
+              conversation_ids:['owned']})}).then(()=>this.parentElement.remove())">删除</button>
+       </div><div class="xhs-ai-history-item">其他会话</div></div>
+       <script>fetch('/api/sns/web/v1/dqa/history/list?pre_cursor=0');</script>"""
+    driver.context.route(CHAT + "*", lambda route: route.fulfill(
+        body=html.replace("ROUTE", route_id), content_type="text/html"))
+    item = {"id": "owned", "spark": {"template_name": "search_agent_conversation_item",
+            "dsl_data": {"conversation_id": "owned", "question": "目标"}}}
+    driver.context.route("**/api/sns/web/v1/dqa/history/list?*", lambda route: route.fulfill(
+        json={"success": True, "code": 0, "data": {"items": [item] if listed else [],
+                                                   "cursor": cursor}}))
+
+
+def test_delete_chat_requires_bound_server_ack_and_keeps_other_rows(driver):
+    history_ui(driver)
+    driver.context.route("**/api/sns/web/v1/dqa/history/update",
+                         lambda route: route.fulfill(json={"success": True, "code": 0}))
+    assert driver.delete_chat("owned")["status"] == "deleted"
+    assert driver.chat_page.locator('.xhs-ai-history-item').all_text_contents() == ["其他会话"]
+
+
+def test_delete_chat_rejects_changed_route_before_click(driver):
+    history_ui(driver, route_id="other")
+    deleted = []
+    driver.context.route("**/api/sns/web/v1/dqa/history/update",
+                         lambda route: deleted.append(route.request.post_data))
+    with pytest.raises(TaskError, match="唯一目标"):
+        driver.delete_chat("owned")
+    assert deleted == []
+
+
+def test_confirmed_empty_history_list_marks_manual_deletion_complete(driver):
+    history_ui(driver, listed=False)
+    assert driver.delete_chat("owned")["status"] == "missing"
+
+
+def test_cleanup_loads_later_history_page_before_deciding_target_is_missing(driver):
+    history_ui(driver)
+    routes = []
+    first = {"id": "other", "spark": {"template_name": "search_agent_conversation_item",
+             "dsl_data": {"conversation_id": "other", "question": "其他会话"}}}
+    owned = {"id": "owned", "spark": {"template_name": "search_agent_conversation_item",
+             "dsl_data": {"conversation_id": "owned", "question": "目标"}}}
+
+    def listing(route):
+        later = 'pre_cursor=123' in route.request.url
+        routes.append(later)
+        route.fulfill(json={"success": True, "code": 0, "data": {
+            "items": [owned] if later else [first], "cursor": 0 if later else 123}})
+
+    driver.context.route("**/api/sns/web/v1/dqa/history/list?*", listing)
+    driver.context.route("**/api/sns/web/v1/dqa/history/update",
+                         lambda route: route.fulfill(json={"success": True, "code": 0}))
+    original_visit = driver.visit
+
+    def visit(page, url, **options):
+        result = original_visit(page, url, **options)
+        page.evaluate("""() => {
+            const list=document.querySelector('.xhs-ai-history-list');
+            list.style.cssText='height:40px;overflow:auto';
+            const spacer=document.createElement('div');spacer.style.height='300px';
+            list.append(spacer);
+            list.addEventListener('scroll',()=>{
+                if(!window.moreLoaded){window.moreLoaded=true;
+                    fetch('/api/sns/web/v1/dqa/history/list?pre_cursor=123');}
+            });
+        }""")
+        return result
+
+    driver.visit = visit
+    assert driver.delete_chat("owned")["status"] == "deleted"
+    assert routes == [False, True]
+
+
 def test_incremental_collection_stops_after_known_run_without_has_more_false(driver):
     profile = "4" * 24
     url = f"https://www.xiaohongshu.com/user/profile/{profile}"
