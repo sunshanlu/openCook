@@ -3,7 +3,7 @@ name = "xhs-to-opencook"
 version = "0.1.0"
 description = "Export Xiaohongshu Diandian video recipes to openCook"
 requires-python = ">=3.12"
-dependencies = ["playwright>=1.58,<2", "pydantic>=2.10,<3", "pillow>=11,<13"]
+dependencies = ["playwright>=1.58,<2", "pydantic>=2.10,<3", "pillow>=11,<13", "transitions==0.9.3", "py_trees==2.6.0"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8,<10", "ruff>=0.11,<1"]
