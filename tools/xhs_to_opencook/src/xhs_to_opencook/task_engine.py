@@ -250,6 +250,9 @@ class TaskExecutor:
         if snapshot.get("submitted"):
             self.record["request"]["status"] = "submitted"
             self.submitted()
+        elif snapshot.get("unsent"):
+            self.record["request_closed"] = True
+            self.request_retry()
         else:
             self.needs_reconciliation = True
 

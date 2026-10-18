@@ -44,6 +44,7 @@ class ChatBrowserAdapter:
             return {"submitted": True, "request": request}
         return {
             "submitted": False,
+            "request": request,
             "unsent": request.get("status") in {"prepared", "retry_ready"},
         }
 
