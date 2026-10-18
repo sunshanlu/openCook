@@ -145,6 +145,13 @@ class TaskExecutor:
             runtime.current().task_progress(self.record)
 
     def tick(self):
+        try:
+            return self._tick()
+        except KeyboardInterrupt:
+            self.pause()
+            raise
+
+    def _tick(self):
         if get_ident() != self.owner:
             raise RuntimeError("Task ticks must run on the browser owner thread")
         with self.lock:
