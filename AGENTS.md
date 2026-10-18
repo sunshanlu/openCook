@@ -101,3 +101,17 @@ Entry 的语义必须来自模型对真实证据的理解。不得仅依据路�
 
 不预加载、不猜测，也不自行重建这些专项流程。平台调用方式、请求格式、批次上限、审批规则、索引格式细节和恢复步骤由对应Guide、工具说明、模型Prompt和CLI帮助按需提供。
 <!-- aoci:end -->
+
+## Agent skills
+
+### Issue tracker
+
+Issues and specs use sunshanlu/openCook GitHub Issues. Before issue, ticket or PR operations, read `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Use the five default triage roles. Before assigning triage labels, read `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Use the single-context root glossary and ADR layout. Before exploring domain terms or decisions, read `docs/agents/domain.md`.
