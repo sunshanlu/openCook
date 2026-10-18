@@ -151,3 +151,18 @@ def test_legacy_engine_is_unaffected_by_the_opt_in(tmp_path):
     assert workflow.task_engine == "legacy"
     assert driver.sent == 0
     store.close()
+
+
+def test_corrupt_task_journal_never_becomes_a_new_submission(tmp_path):
+    import pytest
+
+    from xhs_to_opencook.errors import TaskError
+
+    driver = Driver()
+    workflow, store = build(tmp_path, driver)
+    store.db.execute('INSERT INTO import_tasks VALUES (?, ?)', (N1, 'broken json'))
+    store.db.commit()
+    with pytest.raises(TaskError, match='日志损坏'):
+        workflow.process('classify', [note(store)])
+    assert driver.sent == 0
+    store.close()

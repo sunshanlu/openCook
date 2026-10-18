@@ -12,6 +12,7 @@ empty/exception -> normal/extended timeout -> final reconcile.
 from copy import deepcopy
 
 import py_trees
+from playwright.sync_api import Error as PlaywrightError
 
 from .errors import BrowserUnsupported, TaskError
 
@@ -42,7 +43,7 @@ class ObserveAction(py_trees.behaviour.Behaviour):
         try:
             snapshot = self.executor.browser.observe(deepcopy(record["request"]))
             observable = True
-        except (TaskError, OSError) as exc:  # preserve access evidence without guessing
+        except (TaskError, OSError, PlaywrightError) as exc:
             snapshot = {"error": {"type": type(exc).__name__, "message": str(exc),
                                   "code": getattr(exc, "code", None)},
                         "conflict": isinstance(exc, BrowserUnsupported)}
@@ -80,9 +81,10 @@ class WaitPolicy:
         if "started_at" not in wait:
             now = self.executor.clock()
             wait.update(
-                started_at=now,
-                normal_until=now + NORMAL_WAIT_SECONDS,
-                extended_until=now + NORMAL_WAIT_SECONDS + EXTENDED_WAIT_SECONDS,
+                started_at=record["request"].get("sent_at", now),
+                normal_until=record["request"].get("sent_at", now) + NORMAL_WAIT_SECONDS,
+                extended_until=(record["request"].get("sent_at", now)
+                                + NORMAL_WAIT_SECONDS + EXTENDED_WAIT_SECONDS),
                 recoveries=0,
                 reconciles=0,
                 final_done=False,
@@ -144,7 +146,7 @@ class WaitPolicy:
                                 ANSWER_READY, self.executor.clock())
         try:
             snapshot = self.executor.browser.reconcile(deepcopy(record["request"]))
-        except (TaskError, OSError) as exc:
+        except (TaskError, OSError, PlaywrightError) as exc:
             snapshot = {"error": {"type": type(exc).__name__, "message": str(exc)}}
         if snapshot.get("unsent"):
             record["request_closed"] = True
@@ -201,7 +203,7 @@ class WaitPolicy:
         if recover is not None:
             try:
                 recover(deepcopy(record["request"]))
-            except (TaskError, OSError) as exc:
+            except (TaskError, OSError, PlaywrightError) as exc:
                 record["wait_recovery"]["error"] = str(exc)
         return RUNNING
 
@@ -209,7 +211,7 @@ class WaitPolicy:
         wait["reconciles"] = wait.get("reconciles", 0) + 1
         try:
             snapshot = self.executor.browser.reconcile(deepcopy(record["request"]))
-        except (TaskError, OSError) as exc:
+        except (TaskError, OSError, PlaywrightError) as exc:
             snapshot = {"error": {"type": type(exc).__name__, "message": str(exc)}}
         if snapshot.get("unsent"):
             record["request_closed"] = True

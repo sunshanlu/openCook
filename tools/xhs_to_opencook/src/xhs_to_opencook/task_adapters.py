@@ -5,6 +5,8 @@ already-audited ChatSession submission, history reconciliation and Store persist
 new path reuses one request-identity and throttle contract instead of a second writer.
 """
 
+from playwright.sync_api import Error as PlaywrightError
+
 from .models import parse_bound_answer
 from .prompts import CLASSIFICATION_VERSION
 
@@ -147,7 +149,7 @@ def extraction_commit(store, identity, source, driver):
                     path = store.directory / "covers" / (identity + ".jpg")
                     atomic_write(path, cover_jpeg(driver.download_cover(source.cover_url)))
                     record.update(cover_path=str(path), image_error=None)
-                except (TaskError, OSError) as exc:
+                except (TaskError, OSError, PlaywrightError) as exc:
                     record["image_error"] = {"code": "image_failed", "message": str(exc)}
         store.commit_extraction(identity, {
             "status": "success", "source": source.model_dump(), "extraction": extraction,
