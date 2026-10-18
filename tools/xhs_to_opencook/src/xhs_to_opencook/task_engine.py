@@ -233,6 +233,11 @@ class TaskExecutor:
             snapshot = self.browser.submit(deepcopy(self.record["request"]))
         except TaskError as exc:
             self.record["error"] = {"code": exc.code, "message": str(exc)}
+            if exc.code == "manual_review_required":
+                self.record["request_closed"] = True
+                self.flagged_review()
+                self._save()
+                return
             if (exc.code in {"reference_mismatch", "generation_busy"}
                     and self.record["request"].get("status") == "prepared"
                     and not self.record["request"].get("sent_at")):
