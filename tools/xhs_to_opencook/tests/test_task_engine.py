@@ -251,3 +251,22 @@ def test_save_failure_retries_without_another_submission():
     assert result['phase'] == 'completed'
     assert len(browser.sent) == 1
     assert len(saves) == 3
+
+
+def test_reference_conflict_requires_human_resolution_and_keeps_phase():
+    def conflict(answer, record):
+        raise TaskError('reference_mismatch', 'wrong request')
+
+    executor, journal, browser, clock = make(validate=conflict)
+    drive_to_waiting(executor, clock, browser, 'answer')
+    executor.tick()
+    clock.value += 1
+    executor.tick()
+    assert executor.tick()['phase'] == 'blocked'
+    assert executor.snapshot()['resume_phase'] == 'validating'
+    import pytest
+
+    with pytest.raises(TaskError, match='人工裁决'):
+        executor.resume()
+    executor.resume(human_resolved=True)
+    assert executor.phase == 'validating'

@@ -66,6 +66,10 @@ def main(argv=None) -> int:
                 command.add_argument("--max-attempts", type=positive_integer, default=2)
                 command.add_argument("--task-engine", choices=("legacy", "v2"), default="legacy",
                                      help="显式选择新任务执行器；旧未决请求不自动迁移")
+                command.add_argument("--task-resume", action="store_true",
+                                     help="恢复v2阻塞或暂停任务，保留原阶段与预算")
+                command.add_argument("--task-human-resolved", action="store_true",
+                                     help="声明已人工裁决v2身份冲突，需与task-resume一起使用")
                 command.add_argument("--retry-review", action="store_true",
                                      help="人工审核后，重新尝试输入范围内的待审核任务")
             command.add_argument("--timeout", type=positive, default=180)

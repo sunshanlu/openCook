@@ -116,7 +116,7 @@ class TaskExecutor:
         )
         self.wait = WaitPolicy(self)
         self.record.setdefault("budget", {"auto_seconds": 0.0})
-        self.budget_sample = self.record["budget"].get("sampled_at", self.clock())
+        self.budget_sample = self.clock()
 
     def snapshot(self):
         with self.lock:
@@ -170,7 +170,7 @@ class TaskExecutor:
                     return self.snapshot()
             if self.needs_reconciliation:
                 self._reconcile()
-                if self.needs_reconciliation:
+                if self.needs_reconciliation or self.state == "blocked":
                     self._save()
                     return self.snapshot()
             if self.state == "preparing":
@@ -187,7 +187,15 @@ class TaskExecutor:
             return self.snapshot()
 
     def _reconcile(self):
-        snapshot = self.browser.reconcile(deepcopy(self.record["request"]))
+        try:
+            snapshot = self.browser.reconcile(deepcopy(self.record["request"]))
+        except TaskError as exc:
+            self.record["error"] = {"code": exc.code, "message": str(exc)}
+            self.record["resume_phase"] = self.state
+            self.record["wait_block"] = {"reason": "request_unconfirmed", "scope": "task"}
+            self.needs_reconciliation = False
+            self.flagged_blocked()
+            return
         if snapshot.get("request"):
             self.record["request"].update(snapshot["request"])
         if snapshot.get("submitted"):
@@ -229,6 +237,8 @@ class TaskExecutor:
         except TaskError as exc:
             self.record["error"] = {"code": exc.code, "message": str(exc)}
             if exc.code == "reference_mismatch":
+                self.record["resume_phase"] = "validating"
+                self.record["wait_block"] = {"reason": "identity_conflict", "scope": "task"}
                 self.flagged_blocked()
             else:
                 self.request_retry()
@@ -306,11 +316,11 @@ class TaskExecutor:
         self.record["paused"] = True
         self.record["pause_requested"] = False
 
-    def resume(self):
+    def resume(self, *, human_resolved=False):
         with self.lock:
             if self.state == "blocked":
                 reason = self.record.get("wait_block", {}).get("reason")
-                if reason == "identity_conflict":
+                if reason == "identity_conflict" and not human_resolved:
                     raise TaskError("manual_resolution_required", "身份冲突需要人工裁决")
                 phase = self.record.get("resume_phase", "waiting")
                 if phase not in PHASES or phase in TERMINAL_PHASES:

@@ -469,6 +469,8 @@ class Workflow:
             finalize=classification_commit(self.store, identity, source, driver),
             stable_seconds=getattr(self.args, "task_stable_seconds", 1.0),
         )
+        if getattr(self.args, "task_resume", False):
+            executor.resume(human_resolved=getattr(self.args, "task_human_resolved", False))
         while True:
             record = executor.tick()
             if record["phase"] in TERMINAL_PHASES:
@@ -528,6 +530,8 @@ class Workflow:
                 finalize=extraction_commit(self.store, identity, source, driver),
                 stable_seconds=getattr(self.args, "task_stable_seconds", 1.0),
             )
+            if getattr(self.args, "task_resume", False):
+                executor.resume(human_resolved=getattr(self.args, "task_human_resolved", False))
             while True:
                 record = executor.tick()
                 if record["phase"] in TERMINAL_PHASES:

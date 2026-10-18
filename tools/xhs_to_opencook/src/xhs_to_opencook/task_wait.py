@@ -104,6 +104,7 @@ class WaitPolicy:
         wait = self.window()
         observation = record.get("observation", {})
         now = self.executor.clock()
+        wait["mode"] = "extended" if now >= wait["normal_until"] else "normal"
         if branch == "conflict":
             record["wait_block"] = {"reason": "identity_conflict", "evidence": observation}
             return BLOCKED

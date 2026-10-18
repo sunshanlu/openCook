@@ -239,4 +239,4 @@ def test_budget_excludes_manual_pause_and_survives_restart():
     clock.value = 5100
     restored = TaskExecutor("classify:video", Browser(), journal, clock=clock)
     restored.tick()
-    assert restored.snapshot()["budget"]["auto_seconds"] >= 100
+    assert restored.snapshot()["budget"]["auto_seconds"] < 60
