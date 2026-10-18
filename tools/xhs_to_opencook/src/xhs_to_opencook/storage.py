@@ -69,6 +69,7 @@ class Store:
             "extraction_runs",
             "chat_batches",
             "chat_requests",
+            "import_tasks",
         ):
             self.db.execute(
                 f"CREATE TABLE IF NOT EXISTS {table} (id TEXT PRIMARY KEY, value TEXT NOT NULL)"
@@ -268,6 +269,48 @@ class Store:
             json.loads(row[0])
             for row in self.db.execute(f"SELECT value FROM {table} ORDER BY rowid")
         ]
+
+    def task_get(self, identity: str):
+        row = self.db.execute("SELECT value FROM import_tasks WHERE id=?", (identity,)).fetchone()
+        if not row:
+            return None
+        try:
+            value = json.loads(row[0])
+            return value if isinstance(value, dict) else None
+        except ValueError:
+            return None
+
+    def task_save(self, identity: str, record: dict):
+        value = {**record, "updated_at": now()}
+        with self.db:
+            self.db.execute(
+                "INSERT OR REPLACE INTO import_tasks VALUES (?, ?)",
+                (identity, json.dumps(value, ensure_ascii=False, allow_nan=False)),
+            )
+
+    def commit_classification(self, identity: str, classification: dict, task_record: dict,
+                              *, enqueue_job=None):
+        """Commit the classification row, task completion and tutorial enqueue as one transaction.
+
+        Re-running is idempotent: the classification row and import task row are keyed by note id,
+        and the queue insert ignores duplicates. The task record is persisted as completed so a
+        crash after this commit but before returning rebuilds as a terminal task, never resending.
+        """
+        stamp = now()
+        classification = {**classification, "updated_at": stamp}
+        task = {**task_record, "phase": "completed", "updated_at": stamp}
+        verdict = (classification.get("classification") or {}).get("verdict")
+        with self.db:
+            self.db.execute(
+                "INSERT OR REPLACE INTO classifications VALUES (?, ?)",
+                (identity, json.dumps(classification, ensure_ascii=False, allow_nan=False)),
+            )
+            self.db.execute(
+                "INSERT OR REPLACE INTO import_tasks VALUES (?, ?)",
+                (identity, json.dumps(task, ensure_ascii=False, allow_nan=False)),
+            )
+            if enqueue_job and classification.get("status") == "success" and verdict == "tutorial":
+                self.enqueue(enqueue_job, identity)
 
     def replace_chat_request(self, previous: dict, following: dict):
         """Atomically retire an invalid answer and reserve its immediate correction."""
