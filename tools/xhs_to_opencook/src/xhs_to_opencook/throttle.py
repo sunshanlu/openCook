@@ -34,11 +34,11 @@ class DailyWindow:
         return (current.replace(hour=7, minute=0, second=0, microsecond=0).timestamp()
                 if current.hour < 7 else now)
 
-    def window_until(self, kind, now):
+    def window_ready_at(self, kind, now):
         return now if kind == "access" and self.recovering_submission else self.next_open(now)
 
     def ready(self, kind="send"):
-        while (until := self.window_until(kind, self.clock())) > self.clock():
+        while (until := self.window_ready_at(kind, self.clock())) > self.clock():
             self.rest(until, reason="night_rest")
 
     def access(self):
@@ -205,7 +205,7 @@ class AccessThrottle(DailyWindow):
 
     def wait_for(self, kind, value, now):
         """Earliest time the next `kind` action is allowed, given committed state."""
-        until = self.window_until(kind, now)
+        until = self.window_ready_at(kind, now)
         events = self.used(kind, now)
         limit = self.limit(kind, value, now)
         if len(events) >= limit:
@@ -235,7 +235,7 @@ class AccessThrottle(DailyWindow):
                     self.touch(value, now)
                     self.save(value)
                     return
-            self.rest(until, reason="night_rest" if self.window_until(kind, now) > now
+            self.rest(until, reason="night_rest" if self.window_ready_at(kind, now) > now
                       else "account_rest")
 
     def access(self):

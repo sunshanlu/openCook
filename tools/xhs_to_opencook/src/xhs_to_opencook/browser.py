@@ -28,6 +28,7 @@ class HistoryListing:
     loaded: bool = False
     complete: bool = False
     valid: bool = True
+    failure_code: str = "cleanup_unconfirmed"
 
 
 def history_list_response(response):
@@ -313,9 +314,11 @@ class SiteBrowser:
             query = parse_qs(urlsplit(response.request.url).query)
             if query.get("keyword", [""])[0]:
                 self.history_listing.valid = self.history_listing.complete = False
+                self.history_listing.failure_code = "cleanup_filtered_history"
                 return  # A filtered list cannot prove an owned conversation is absent.
             if query.get("page_from", ["0"])[0] != "0" and "pre_cursor" not in query:
                 self.history_listing.valid = self.history_listing.complete = False
+                self.history_listing.failure_code = "cleanup_history_cursor_drift"
                 return
             payload = response.json()
             data = payload.get("data", {})
@@ -325,6 +328,7 @@ class SiteBrowser:
             items = data.get("items")
             if not isinstance(items, list) or "cursor" not in data:
                 self.history_listing.valid = self.history_listing.complete = False
+                self.history_listing.failure_code = "cleanup_history_schema_drift"
                 return
             cursor = query.get("pre_cursor", ["0"])[0]
             if cursor == "0":
@@ -335,9 +339,11 @@ class SiteBrowser:
                     label = spark.get("dsl_data", {}).get("title")
                     if not isinstance(label, str) or item.get("id") != label:
                         self.history_listing.valid = False
+                        self.history_listing.failure_code = "cleanup_history_schema_drift"
                     continue
                 if spark.get("template_name") != "search_agent_conversation_item":
                     self.history_listing.valid = False
+                    self.history_listing.failure_code = "cleanup_history_schema_drift"
                     continue
                 value = spark.get("dsl_data", {})
                 cid, question = value.get("conversation_id"), value.get("question")
@@ -345,6 +351,7 @@ class SiteBrowser:
                     self.history_listing.items[cid] = question
                 else:
                     self.history_listing.valid = False
+                    self.history_listing.failure_code = "cleanup_history_schema_drift"
             self.history_listing.complete = self.history_listing.valid and (
                 not items or data["cursor"] in (0, "0", ""))
             self.history_listing.loaded = True
@@ -636,7 +643,7 @@ class SiteBrowser:
                 self.visit(page, CHAT, wait_until="domcontentloaded")
             self.ensure_access(page)
         if not self.history_listing.valid:
-            raise TaskError("cleanup_unconfirmed", "历史列表格式无法确认，延后清理",
+            raise TaskError(self.history_listing.failure_code, "历史列表格式无法确认，延后清理",
                             retryable=False)
         expand = page.get_by_role("button", name="展开侧边栏")
         if expand.count():
@@ -657,7 +664,7 @@ class SiteBrowser:
                     "el.scrollTop = el.scrollHeight; }")
         self.verify_account()
         if not self.history_listing.valid:
-            raise TaskError("cleanup_unconfirmed", "历史列表格式无法确认，延后清理",
+            raise TaskError(self.history_listing.failure_code, "历史列表格式无法确认，延后清理",
                             retryable=False)
         if conversation_id not in self.history_listing.items:
             if self.history_listing.complete:
