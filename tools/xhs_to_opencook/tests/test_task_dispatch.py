@@ -190,8 +190,8 @@ def test_runtime_pause_persists_task_and_projects_single_budget(tmp_path, monkey
 
     from xhs_to_opencook import runtime
     from xhs_to_opencook.storage import write_json
-    from xhs_to_opencook.task_engine import TaskExecutor, new_record
     from xhs_to_opencook.task_adapters import StoreJournal
+    from xhs_to_opencook.task_engine import TaskExecutor, new_record
 
     driver = Driver()
     workflow, store = build(tmp_path, driver)
