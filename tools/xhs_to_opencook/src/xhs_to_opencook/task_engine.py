@@ -101,7 +101,7 @@ class TaskExecutor:
                 ["saved", "saving", "completed"],
                 *[["restore_" + phase, "blocked", phase] for phase in PHASES
                   if phase not in TERMINAL_PHASES],
-                ["retry", ["waiting", "validating"], "submitting"],
+                ["retry", ["submitting", "waiting", "validating"], "submitting"],
                 [
                     "flagged_review",
                     ["preparing", "submitting", "waiting", "validating", "saving"],
@@ -227,12 +227,19 @@ class TaskExecutor:
         # Otherwise the submission remains unknown; stay put and reconcile again next tick.
 
     def _submit(self):
-        self.record["request"]["status"] = "sending"
+        self.record["submission_intent"] = True
         self._save()
         try:
             snapshot = self.browser.submit(deepcopy(self.record["request"]))
         except TaskError as exc:
             self.record["error"] = {"code": exc.code, "message": str(exc)}
+            if (exc.code in {"reference_mismatch", "generation_busy"}
+                    and self.record["request"].get("status") == "prepared"
+                    and not self.record["request"].get("sent_at")):
+                self.record["request_closed"] = True
+                self.request_retry()
+                self._save()
+                return
             self.needs_reconciliation = True
             self._save()
             if exc.code == "submission_unknown":
