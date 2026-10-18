@@ -56,7 +56,7 @@ def worker(directory, stage):
     args.non_interactive = True
     profiles = read_profiles(args.profiles)
     store = Store(args.state_dir)
-    store.queue_job = job["job_id"] if stage == "classify" else None
+    store.queue_job = job["job_id"]
     notes = [n for n in store.collected(list(profiles)) if n.get("type") == "video"]
     by_id = {n["note_id"]: n for n in notes}
     store.queue_notes = set(by_id)

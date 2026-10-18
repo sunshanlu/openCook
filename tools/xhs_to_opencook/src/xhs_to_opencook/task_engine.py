@@ -164,7 +164,8 @@ class TaskExecutor:
                 self._save()
                 return self.snapshot()
             elapsed = max(0, self.clock() - self.budget_sample)
-            self.record["budget"]["auto_seconds"] += elapsed
+            if elapsed <= 30 or self.record.get("phase") == "submitting":
+                self.record["budget"]["auto_seconds"] += elapsed
             self.budget_sample = self.clock()
             if self.record["budget"]["auto_seconds"] >= AUTO_BUDGET_SECONDS:
                 if self.state == "waiting":
