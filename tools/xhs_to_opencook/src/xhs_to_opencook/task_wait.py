@@ -118,9 +118,13 @@ class WaitPolicy:
             return self._association_branch(record, wait, observation)
 
         answer = (observation.get("answer") or "").strip()
-        if observation.get("finished") and answer:
+        if observation.get("finished") and answer and not observation.get("error"):
             return self._stable(record, "answer", answer, self.executor.stable_seconds,
                                 ANSWER_READY, now)
+        if observation.get("finished") and observation.get("error"):
+            record["wait_partial"] = {"reason": "interrupted", "evidence": observation}
+            record["request_closed"] = True
+            return NEED_RETRY
         if observation.get("finished") and not answer:
             return self._stable(record, "empty", "", self.executor.empty_stable_seconds,
                                 NEED_RETRY, now)
@@ -154,6 +158,7 @@ class WaitPolicy:
         except (TaskError, OSError) as exc:
             snapshot = {"error": {"type": type(exc).__name__, "message": str(exc)}}
         if snapshot.get("unsent"):
+            record["request_closed"] = True
             return NEED_RETRY
         if observation.get("observable", True) and observation.get("finished"):
             record["wait_review"] = {"reason": "ended_without_valid_answer",
@@ -173,6 +178,7 @@ class WaitPolicy:
             record[since_key] = now
             return RUNNING
         if now - record.get(since_key, now) >= seconds:
+            record["request_closed"] = True
             if kind == "answer":
                 record["answer"] = value
             record.pop(candidate_key, None)
@@ -217,6 +223,7 @@ class WaitPolicy:
         except (TaskError, OSError) as exc:
             snapshot = {"error": {"type": type(exc).__name__, "message": str(exc)}}
         if snapshot.get("unsent"):
+            record["request_closed"] = True
             return NEED_RETRY
         if snapshot.get("submitted"):
             return RUNNING  # reassociated; a fresh snapshot is taken on the next tick

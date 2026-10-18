@@ -253,6 +253,10 @@ class TaskExecutor:
     def request_retry(self):
         """Only the task owner creates a new attempt after a completed answer."""
         request = self.record["request"]
+        if self.state == "waiting" and not self.record.get("request_closed"):
+            self.record["resume_phase"] = "waiting"
+            self.flagged_blocked()
+            return
         attempt = self.record.get("attempt", 1)
         if (attempt >= request.get("attempt_limit", 2)
                 or self.record.get("budget", {}).get("auto_seconds", 0) >= AUTO_BUDGET_SECONDS):
@@ -268,7 +272,8 @@ class TaskExecutor:
         }}
         following.update(request_id=uuid4().hex, status="prepared", attempt=attempt + 1)
         self.record.update(request=following, attempt=attempt + 1)
-        for key in ("answer", "result", "wait", "answer_candidate", "answer_since", "empty_since"):
+        for key in ("answer", "result", "wait", "answer_candidate", "answer_since",
+                    "empty_since", "request_closed"):
             self.record.pop(key, None)
         self.needs_reconciliation = False
         self.retry()

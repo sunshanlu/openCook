@@ -241,7 +241,8 @@ def test_save_failure_retries_without_another_submission():
         if len(saves) < 3:
             raise OSError('temporary database failure')
 
-    executor, journal, browser, clock = make(finalize=finalize, validate=lambda answer, record: {"ok": True})
+    executor, journal, browser, clock = make(
+        finalize=finalize, validate=lambda answer, record: {"ok": True})
     drive_to_waiting(executor, clock, browser, 'answer')
     executor.tick()
     clock.value += 1
