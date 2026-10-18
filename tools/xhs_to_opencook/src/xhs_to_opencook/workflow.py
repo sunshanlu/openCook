@@ -112,11 +112,16 @@ class Workflow:
 
     def driver(self):
         if self.browser is None:
-            self.browser = self.browser_factory(
-                self.store.directory / "chrome",
-                timeout=self.args.timeout,
-                interactive=not self.args.non_interactive,
-            ).__enter__()
+            with self.chats.recovery_context():
+                self.chats.gate.ready("access")
+                browser = self.browser_factory(
+                    self.store.directory / "chrome",
+                    timeout=self.args.timeout,
+                    interactive=not self.args.non_interactive,
+                )
+                browser.visit_gate = self.chats.gate
+                browser.expected_account = self.chats.account_id
+                self.browser = browser.__enter__()
         return self.browser
 
     def close(self):

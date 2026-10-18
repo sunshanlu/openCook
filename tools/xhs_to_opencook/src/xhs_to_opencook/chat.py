@@ -20,6 +20,7 @@ from .errors import SESSION_BLOCK_CODES, BrowserUnsupported, TaskError
 from .models import JSON_ERROR_CODES, parse_bound_answer
 from .prompts import CLASSIFICATION_VERSION, EXTRACTION_VERSION, bound_prompt
 from .storage import atomic_write, now, write_json
+from .throttle import DailyWindow
 
 PENDING = {
     "prepared",
@@ -62,8 +63,14 @@ class ChatSession:
         self.loaded_batch = None
         self.reset_browser = reset_browser
         self.stage_scope = stage_scope
+        self.current_stage = stage_scope
         self.account_id = account_id
         self.pacing = pacing
+        self.window = DailyWindow(clock=clock, sleeper=sleeper)
+
+    @property
+    def gate(self):
+        return self.pacing or self.window
 
     def pause(self, seconds):
         runtime.sleep(seconds, self.sleeper)
@@ -81,6 +88,8 @@ class ChatSession:
         if rows and self.account_id and rows[0].get("account_id") != self.account_id:
             raise TaskError("account_mismatch", "未决请求属于其他账号，须用原账号收尾",
                             retryable=False)
+        if rows and not self.account_id and rows[0].get("account_id"):
+            self.account_id = rows[0]["account_id"]
         return rows[0] if rows else None
 
     def batches(self):
@@ -164,13 +173,8 @@ class ChatSession:
             write_json(self.store.directory / request["raw_directory"] / "request.json", request)
 
     def load(self, batch):
-        recovering = False
-        if self.pacing:
-            pending = self.pending()
-            recovering = bool(pending and pending.get("sent_at")
-                              and pending["status"] != "prepared")
-            if not recovering:
-                self.pacing.ready()
+        if not self.has_pending_submission():
+            self.gate.ready()
         if self.account_id and batch.get("account_id") != self.account_id:
             raise TaskError("account_mismatch", "禁止恢复其他账号的会话", retryable=False)
         if self.loaded_batch == batch["batch_id"]:
@@ -178,7 +182,7 @@ class ChatSession:
         self.cleanup()
         cid = batch.get("conversation_id")
         if cid:
-            with self.pacing.recover_submission() if recovering else nullcontext():
+            with self.recovery_context():
                 self.driver().restore_chat(cid)
         elif any(
             r["batch_id"] == batch["batch_id"] and r["status"] in PENDING - {"prepared"}
@@ -191,21 +195,22 @@ class ChatSession:
 
     def cleanup(self):
         completed = ChatCleanup(self.store, self.driver, account_id=self.account_id,
-                                stage=self.stage_scope, clock=self.clock,
-                                pacing=self.pacing).run()
+                                stage=self.stage_scope or self.current_stage, clock=self.clock,
+                                pacing=self.gate).run()
         if completed:
             self.loaded_batch = None
         return completed
 
-    def recovery_context(self):
+    def has_pending_submission(self):
         pending = self.pending()
-        if self.pacing and pending and pending.get("sent_at") and pending["status"] != "prepared":
-            return self.pacing.recover_submission()
-        return nullcontext()
+        return bool(pending and pending.get("sent_at") and pending["status"] != "prepared")
+
+    def recovery_context(self):
+        return self.gate.recover_submission() if self.has_pending_submission() else nullcontext()
 
     def batch(self, stage, note):
-        if self.pacing:
-            self.pacing.ready()
+        self.current_stage = stage
+        self.gate.ready()
         self.throttle()
         rows = [b for b in self.batches() if b["stage"] == stage
                 and (not self.account_id or b.get("account_id") == self.account_id)]
@@ -244,8 +249,7 @@ class ChatSession:
 
     def begin(self, prompt, source, request):
         runtime.check()
-        if self.pacing:
-            self.pacing.ready()
+        self.gate.ready()
         if self.account_id:
             request["account_id"] = self.account_id
         try:
@@ -571,14 +575,14 @@ class ChatSession:
                 driver.chat_page.close()
                 driver.chat_page = None
                 driver.history_observer = None
-            if not self.pacing or self.pacing.next_open() <= self.clock():
+            if self.gate.next_open() <= self.clock():
                 driver.new_chat()
         except (PlaywrightError, TaskError):
             if not self.reset_browser:
                 runtime.block("isolation_failed", "旧会话无法隔离", kind="manual")
             self.reset_browser()
             try:
-                if not self.pacing or self.pacing.next_open() <= self.clock():
+                if self.gate.next_open() <= self.clock():
                     self.driver().new_chat()
             except (PlaywrightError, TaskError):
                 runtime.block("isolation_failed", "专用浏览器重建失败", kind="manual")
@@ -629,10 +633,9 @@ class ChatSession:
         self.isolate_review(source, stage, directory, "submission_unknown", str(error))
 
     def process(self, source, stage, directory):
-        if self.pacing:
-            pending = self.pending()
-            if not pending or not pending.get("sent_at"):
-                self.pacing.ready()
+        self.current_stage = stage
+        if not self.has_pending_submission():
+            self.gate.ready()
         """Own all recovery for one video; callers never repeat this operation."""
         path = self.store.directory / "recovery" / f"{stage}-{source.note_id}.json"
         if self.review_for(stage, source.note_id):
@@ -654,6 +657,10 @@ class ChatSession:
                     self.recovery_review(source, stage, directory, recovery)
                 with self.recovery_context():
                     driver = self.driver()
+                if not self.account_id and not self.pending() \
+                        and hasattr(driver, "account_identity"):
+                    self.account_id = driver.account_identity()
+                    driver.expected_account = self.account_id
                 driver.raw_directory = directory
                 result = self._process(source, stage, directory)
                 if stage == "classify" and result.verdict == "unknown":
@@ -662,6 +669,8 @@ class ChatSession:
                 path.unlink(missing_ok=True)
                 return result
             except TaskError as exc:
+                if exc.code == "account_mismatch":
+                    runtime.block(exc.code, str(exc), kind="manual")
                 if runtime.current() and exc.code in {
                     "login_required", "verification_required", "page_state_unconfirmed"
                 }:

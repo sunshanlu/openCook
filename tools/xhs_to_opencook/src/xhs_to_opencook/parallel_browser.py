@@ -154,12 +154,6 @@ class AttachedBrowser(SiteBrowser):
             self.__exit__(None, None, None)
             raise
 
-    def verify_account(self):
-        if self.expected_account and self.account_identity() != self.expected_account:
-            raise self.make_access_error(self.chat_page, "account_mismatch",
-                                      "账号不匹配：当前登录账号与本阶段绑定不符",
-                                      {"condition": "account_mismatch"})
-
     def restore_chat(self, conversation_id):
         self.verify_account()
         return super().restore_chat(conversation_id)
@@ -169,7 +163,6 @@ class AttachedBrowser(SiteBrowser):
         return super().delete_chat(conversation_id)
 
     def begin_request(self, prompt, source, request, persist):
-        self.verify_account()
         if self.expected_account and request.get("account_id") != self.expected_account:
             raise TaskError("account_mismatch", "请求不属于当前账号", retryable=False)
         return super().begin_request(prompt, source, request, persist)

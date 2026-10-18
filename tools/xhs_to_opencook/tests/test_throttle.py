@@ -242,3 +242,36 @@ def test_midnight_during_preparation_keeps_request_unsent_and_attempt_intact(tmp
     assert saved["status"] == "prepared" and saved["attempt"] == 1
     assert "sent_at" not in saved and gate.used("send", clock[0]) == []
     store.close()
+
+
+def test_serial_chat_waits_for_window_before_creating_browser(tmp_path):
+    start = datetime(2026, 10, 18, 2, tzinfo=ZoneInfo("Asia/Shanghai")).timestamp()
+    clock, calls = [start], []
+    store = Store(tmp_path)
+    chat = ChatSession(store, lambda: SimpleNamespace(new_chat=lambda: calls.append(clock[0])),
+                       clock=lambda: clock[0],
+                       sleeper=lambda seconds: clock.__setitem__(0, clock[0] + seconds))
+    chat.batch("extract", "note")
+    assert calls == [start + 5 * HOUR]
+    store.close()
+
+
+def test_serial_chat_can_restore_submitted_request_at_night(tmp_path):
+    start = datetime(2026, 10, 18, tzinfo=ZoneInfo("Asia/Shanghai")).timestamp()
+    clock, restored = [start], []
+    store = Store(tmp_path)
+    batch = {"batch_id": "old", "conversation_id": "original", "stage": "extract",
+             "status": "open"}
+    store.stage_save("chat_batches", "old", batch)
+    store.stage_save("chat_requests", "pending", {"request_id": "pending", "batch_id": "old",
+                     "stage": "extract", "status": "submitted", "sent_at": start - 60})
+
+    def restore(cid):
+        chat.gate.access()
+        restored.append(cid)
+
+    chat = ChatSession(store, lambda: SimpleNamespace(restore_chat=restore), clock=lambda: clock[0],
+                       sleeper=lambda seconds: clock.__setitem__(0, clock[0] + seconds))
+    chat.load(batch)
+    assert restored == ["original"] and clock[0] == start
+    store.close()
