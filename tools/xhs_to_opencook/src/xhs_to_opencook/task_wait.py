@@ -50,7 +50,7 @@ class ObserveAction(py_trees.behaviour.Behaviour):
         record["observation"] = {
             "observable": observable, "observed_at": self.executor.clock(), **snapshot,
         }
-        return py_trees.common.Status.RUNNING
+        return py_trees.common.Status.SUCCESS
 
     def terminate(self, new_status):
         # Local cancellation is not evidence that remote generation stopped.
@@ -63,7 +63,15 @@ class WaitPolicy:
 
     def __init__(self, executor):
         self.executor = executor
-        self.tree = py_trees.trees.BehaviourTree(ObserveAction(executor))
+        self.outcome = RUNNING
+        observation = ObserveAction(executor)
+        branches = [DecisionBranch(self, name) for name in (
+            "conflict", "page", "association", "answer", "abnormal", "timeout", "observe",
+        )]
+        selector = py_trees.composites.Selector("wait priorities", memory=False,
+                                               children=branches)
+        self.tree = py_trees.trees.BehaviourTree(py_trees.composites.Sequence(
+            "observe then decide", memory=False, children=[observation, selector]))
 
     def window(self):
         """Durable normal/extended deadlines and counters, set once and preserved on restart."""
@@ -86,9 +94,14 @@ class WaitPolicy:
         self.tree.root.stop(py_trees.common.Status.INVALID)
 
     def tick(self):
+        self.window()
+        self.outcome = RUNNING
+        self.tree.tick()
+        return self.outcome
+
+    def _decide(self):
         record = self.executor.record
         wait = self.window()
-        self.tree.tick()  # one bounded observation; a page change needs a fresh snapshot
         observation = record.get("observation") or {}
         now = self.executor.clock()
 
@@ -129,7 +142,7 @@ class WaitPolicy:
         record = self.executor.record
         wait = wait or self.window()
         wait["final_done"] = True
-        self.tree.tick()  # a complete late answer still wins
+        ObserveAction(self.executor).update()  # final bounded snapshot, no recursive tree tick
         observation = record.get("observation") or {}
         answer = (observation.get("answer") or "").strip()
         if (observation.get("observable", True) and observation.get("matched")
@@ -213,3 +226,29 @@ class WaitPolicy:
                                                  "reconcile": snapshot}}
             return BLOCKED
         return RUNNING
+
+
+class DecisionBranch(py_trees.behaviour.Behaviour):
+    """A selected branch delivers a business outcome, including block, as node success."""
+
+    def __init__(self, policy, name):
+        super().__init__(name)
+        self.policy = policy
+
+    def update(self):
+        observation = self.policy.executor.record.get("observation", {})
+        matches = observation.get("matches", 1 if observation.get("matched") else 0)
+        now = self.policy.executor.clock()
+        predicates = {
+            "conflict": observation.get("conflict") or matches > 1,
+            "page": not observation.get("observable", False),
+            "association": not observation.get("matched") or matches < 1,
+            "answer": observation.get("finished") and bool(observation.get("answer")),
+            "abnormal": observation.get("finished") or observation.get("error"),
+            "timeout": now >= self.policy.window()["extended_until"],
+            "observe": True,
+        }
+        if not predicates[self.name]:
+            return py_trees.common.Status.FAILURE
+        self.policy.outcome = self.policy._decide()
+        return py_trees.common.Status.SUCCESS

@@ -333,8 +333,8 @@ class Store:
             request = task_record.get("request", {})
             if request.get("batch_id"):
                 self.db.execute("INSERT OR REPLACE INTO chat_requests VALUES (?, ?)",
-                                (request["request_id"], json.dumps({**request, "status": "complete"},
-                                                                  ensure_ascii=False)))
+                                (request["request_id"], json.dumps(
+                                    {**request, "status": "complete"}, ensure_ascii=False)))
             if self.queue_job:
                 self.db.execute("UPDATE extraction_queue SET status='done',updated_at=? "
                                 "WHERE job_id=? AND note_id=?", (now(), self.queue_job, identity))
