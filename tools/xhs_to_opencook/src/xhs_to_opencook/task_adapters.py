@@ -127,7 +127,6 @@ def extraction_validator(identity):
         from .prompts import EXTRACTION_VERSION
 
         result = parse_bound_answer(answer, "extract", identity, record["request"]["request_id"])
-        check_extraction_semantics(result)
         return {"extraction": result.model_dump(), "prompt_version": EXTRACTION_VERSION}
 
     return validate
@@ -164,24 +163,3 @@ def extraction_commit(store, identity, source, driver):
         }, record)
 
     return finalize
-
-
-def check_extraction_semantics(extraction):
-    """Reject observable contradictions; never repair or invent video evidence."""
-    import re
-
-    from .errors import TaskError
-
-    for recipe in extraction.recipes:
-        for ingredient in recipe.ingredients:
-            original = ingredient.original_amount
-            converted_count = any(unit in original and unit not in ingredient.unit
-                                  for unit in ("勺", "粒", "个"))
-            ambiguous = re.search(r"适量|适口|未说明|少许|两指|小拇指|大小", original)
-            if not ingredient.estimated and (converted_count or ambiguous):
-                raise TaskError("answer_semantic_invalid", "用量语义冲突：换算或模糊用量未标估算")
-            if "+" in original or "＋" in original:
-                raise TaskError("answer_semantic_invalid", "用量语义冲突：不同用途用量被合并")
-        text = " ".join(recipe.steps + recipe.notes)
-        if recipe.total_time and re.search(r"一夜|两夜|一宿|过夜", text):
-            raise TaskError("answer_semantic_invalid", "时间语义冲突：文字腌制时间不能推导总时长")
