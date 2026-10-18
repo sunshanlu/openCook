@@ -231,3 +231,22 @@ def test_invalid_answer_retries_with_new_request_and_preserves_task():
     assert len(set(browser.sent)) == 2
     assert record['task_id'] == 'task'
     assert len(record['attempts']) == 1
+
+
+def test_save_failure_retries_without_another_submission():
+    saves = []
+
+    def finalize(record):
+        saves.append(1)
+        if len(saves) < 3:
+            raise OSError('temporary database failure')
+
+    executor, journal, browser, clock = make(finalize=finalize, validate=lambda answer, record: {"ok": True})
+    drive_to_waiting(executor, clock, browser, 'answer')
+    executor.tick()
+    clock.value += 1
+    for _ in range(6):
+        result = executor.tick()
+    assert result['phase'] == 'completed'
+    assert len(browser.sent) == 1
+    assert len(saves) == 3
