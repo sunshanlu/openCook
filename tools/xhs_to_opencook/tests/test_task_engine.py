@@ -270,3 +270,15 @@ def test_reference_conflict_requires_human_resolution_and_keeps_phase():
         executor.resume()
     executor.resume(human_resolved=True)
     assert executor.phase == 'validating'
+
+
+def test_proven_unsent_failures_exhaust_to_review_without_resending_old_identity():
+    executor, journal, browser, clock = make()
+    def unsent(request):
+        raise TaskError('reference_mismatch', 'reference failed before sending')
+    browser.submit = unsent
+    executor.tick()
+    executor.tick()
+    assert executor.snapshot()['attempt'] == 2
+    assert executor.tick()['phase'] == 'manual_review'
+    assert browser.sent == []
