@@ -189,6 +189,12 @@ class WaitPolicy:
             else SHORT_BACKOFF_SECONDS
         )
         record["wait_recovery"] = {"attempts": wait["recoveries"], "at": now}
+        recover = getattr(self.executor.browser, "recover", None)
+        if recover is not None:
+            try:
+                recover(deepcopy(record["request"]))
+            except (TaskError, OSError) as exc:
+                record["wait_recovery"]["error"] = str(exc)
         return RUNNING
 
     def _association_branch(self, record, wait, observation):

@@ -429,6 +429,7 @@ class Workflow:
                 if exc.code == "runtime_wait":
                     raise
                 self.record_error(task, exc)
+                raise
             finally:
                 self.snapshot()
         return self.report["tasks"]
@@ -468,12 +469,12 @@ class Workflow:
             finalize=classification_commit(self.store, identity, source, driver),
             stable_seconds=getattr(self.args, "task_stable_seconds", 1.0),
         )
-        for _ in range(200):
+        while True:
             record = executor.tick()
             if record["phase"] in TERMINAL_PHASES:
                 break
-        else:
-            raise TaskError("task_incomplete", "分类任务在步数上限内未结束")
+            self.sleeper(0.25)
+
         phase, verdict = record["phase"], None
         if phase == "completed":
             result = record["result"]["classification"]
@@ -490,7 +491,7 @@ class Workflow:
         if phase == "manual_review":
             return {"status": "awaiting_review", "error": error,
                     "attempts": record.get("attempt", 1)}
-        return {"status": "failed", "error": error, "attempts": record.get("attempt", 1)}
+        raise TaskError("task_blocked", "当前任务未安全收尾", retryable=False)
 
     def process_extraction(self, notes):
         for note in notes:
@@ -525,12 +526,14 @@ class Workflow:
                 finalize=extraction_commit(self.store, identity, source, driver),
                 stable_seconds=getattr(self.args, "task_stable_seconds", 1.0),
             )
-            for _ in range(200):
+            while True:
                 record = executor.tick()
                 if record["phase"] in TERMINAL_PHASES:
                     break
-            else:
-                raise TaskError("task_incomplete", "提取任务未结束")
+                self.sleeper(0.25)
+
+            if record["phase"] == "blocked":
+                raise TaskError("task_blocked", "提取任务未安全收尾", retryable=False)
             task.update(status="success" if record["phase"] == "completed" else "awaiting_review",
                         attempts=record.get("attempt", 1), error=record.get("error"))
             self.snapshot()

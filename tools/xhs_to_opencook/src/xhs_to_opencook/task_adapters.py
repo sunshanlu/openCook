@@ -60,6 +60,13 @@ class ChatBrowserAdapter:
                 "answer": text, "error": snapshot.get("error"),
                 "empty_placeholder": snapshot.get("empty_placeholder")}
 
+    def recover(self, request):
+        if request.get("conversation_id"):
+            self.driver.restore_chat(request["conversation_id"])
+        else:
+            self.driver.new_chat()
+        return self.reconcile(request)
+
     def cancel_observation(self):
         # Stopping local polling never claims the remote generation ended.
         return None

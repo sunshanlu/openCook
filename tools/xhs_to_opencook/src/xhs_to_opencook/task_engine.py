@@ -98,6 +98,8 @@ class TaskExecutor:
                 ["answered", "waiting", "validating"],
                 ["validated", "validating", "saving"],
                 ["saved", "saving", "completed"],
+                *[["restore_" + phase, "blocked", phase] for phase in PHASES
+                  if phase not in TERMINAL_PHASES],
                 ["retry", ["waiting", "validating"], "submitting"],
                 [
                     "flagged_review",
@@ -274,6 +276,14 @@ class TaskExecutor:
 
     def resume(self):
         with self.lock:
+            if self.state == "blocked":
+                reason = self.record.get("wait_block", {}).get("reason")
+                if reason == "identity_conflict":
+                    raise TaskError("manual_resolution_required", "身份冲突需要人工裁决")
+                phase = self.record.get("resume_phase", "waiting")
+                self.trigger("restore_" + phase)
+                self.record.pop("wait_block", None)
+
             self.record["paused"] = False
             self.budget_sample = self.clock()
             self.record["pause_requested"] = False
