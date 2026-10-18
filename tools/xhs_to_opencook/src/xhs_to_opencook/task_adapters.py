@@ -39,7 +39,7 @@ class ChatBrowserAdapter:
         )
         self.chats.begin(prompt, self.source, request)
         if request.get("status") == "submitted":
-            return {"submitted": True}
+            return {"submitted": True, "request": request}
         return {
             "submitted": False,
             "unsent": request.get("status") in {"prepared", "retry_ready"},
@@ -47,7 +47,7 @@ class ChatBrowserAdapter:
 
     def reconcile(self, request):
         self.chats.reconcile(request)
-        return {"submitted": True}
+        return {"submitted": True, "request": request}
 
     def observe(self, request):
         snapshot = self.driver.request_snapshot(request)
@@ -56,7 +56,9 @@ class ChatBrowserAdapter:
         text = (snapshot.get("text") or "").strip()
         if text.strip("（）() ") == "暂无内容":
             text = ""
-        return {"matched": True, "finished": bool(snapshot.get("finished")), "answer": text}
+        return {"matched": True, "matches": 1, "finished": bool(snapshot.get("finished")),
+                "answer": text, "error": snapshot.get("error"),
+                "empty_placeholder": snapshot.get("empty_placeholder")}
 
     def cancel_observation(self):
         # Stopping local polling never claims the remote generation ended.

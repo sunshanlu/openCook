@@ -9,12 +9,11 @@ from copy import deepcopy
 from threading import RLock, get_ident
 from uuid import uuid4
 
-import py_trees
 from transitions import Machine
 
 from . import runtime
 from .errors import TaskError
-from .task_wait import ObserveAnswer
+from .task_wait import ANSWER_READY, BLOCKED, NEED_RETRY, NEED_REVIEW, WaitPolicy
 
 # Documented normal phases plus the terminal manual-review and blocked exits.
 PHASES = (
@@ -27,6 +26,7 @@ PHASES = (
     "manual_review",
     "blocked",
 )
+AUTO_BUDGET_SECONDS = 35 * 60.0
 TERMINAL_PHASES = frozenset({"completed", "manual_review", "blocked"})
 # A reconstructed task in these phases must reconcile the original request before acting.
 RECONCILE_PHASES = frozenset({"submitting", "waiting"})
@@ -65,10 +65,12 @@ class TaskExecutor:
         finalize=None,
         bootstrap=None,
         stable_seconds=1.0,
+        empty_stable_seconds=5.0,
     ):
         self.identity, self.browser, self.journal, self.clock = identity, browser, journal, clock
         self.validate, self.finalize, self.bootstrap = validate, finalize, bootstrap
         self.stable_seconds = stable_seconds
+        self.empty_stable_seconds = empty_stable_seconds
         self.owner = get_ident()
         self.lock = RLock()
         self.record = journal.load(identity)
@@ -109,7 +111,9 @@ class TaskExecutor:
                 ],
             ],
         )
-        self.tree = py_trees.trees.BehaviourTree(ObserveAnswer(self))
+        self.wait = WaitPolicy(self)
+        self.record.setdefault("budget", {"auto_seconds": 0.0})
+        self.budget_sample = self.record["budget"].get("sampled_at", self.clock())
 
     def snapshot(self):
         with self.lock:
@@ -118,6 +122,7 @@ class TaskExecutor:
     def _save(self):
         self.record["phase"] = self.state
         self.record["updated_at"] = self.clock()
+        self.record["budget"]["sampled_at"] = self.budget_sample
         self.journal.save(self.identity, self.record)
 
     def tick(self):
@@ -129,10 +134,23 @@ class TaskExecutor:
             if self.record.get("pause_requested") and not self.record["paused"]:
                 self._enact_pause()
             if self.record["paused"]:
+                self.budget_sample = self.clock()
                 return self.snapshot()
             if self.state in TERMINAL_PHASES:
                 self._save()
                 return self.snapshot()
+            elapsed = max(0, self.clock() - self.budget_sample)
+            self.record["budget"]["auto_seconds"] += elapsed
+            self.budget_sample = self.clock()
+            if self.record["budget"]["auto_seconds"] >= AUTO_BUDGET_SECONDS:
+                if self.state == "waiting":
+                    self._apply_wait_result(self.wait.finalize())
+                elif self.state not in {"validating", "saving"}:
+                    self.record["resume_phase"] = self.state
+                    self.flagged_blocked()
+                if self.state not in {"validating", "saving"}:
+                    self._save()
+                    return self.snapshot()
             if self.needs_reconciliation:
                 self._reconcile()
                 if self.needs_reconciliation:
@@ -143,9 +161,7 @@ class TaskExecutor:
             elif self.state == "submitting":
                 self._submit()
             elif self.state == "waiting":
-                self.tree.tick()
-                if self.tree.root.status == py_trees.common.Status.SUCCESS:
-                    self.answered()
+                self._apply_wait_result(self.wait.tick())
             elif self.state == "validating":
                 self._validate()
             elif self.state == "saving":
@@ -155,6 +171,8 @@ class TaskExecutor:
 
     def _reconcile(self):
         snapshot = self.browser.reconcile(deepcopy(self.record["request"]))
+        if snapshot.get("request"):
+            self.record["request"].update(snapshot["request"])
         if snapshot.get("submitted"):
             self.record["request"]["status"] = "submitted"
             if self.state == "submitting":
@@ -172,6 +190,8 @@ class TaskExecutor:
         self.record["request"]["status"] = "sending"
         self._save()
         snapshot = self.browser.submit(deepcopy(self.record["request"]))
+        if snapshot.get("request"):
+            self.record["request"].update(snapshot["request"])
         if snapshot.get("submitted"):
             self.record["request"]["status"] = "submitted"
             self.submitted()
@@ -209,7 +229,8 @@ class TaskExecutor:
         """Only the task owner creates a new attempt after a completed answer."""
         request = self.record["request"]
         attempt = self.record.get("attempt", 1)
-        if attempt >= request.get("attempt_limit", 2):
+        if (attempt >= request.get("attempt_limit", 2)
+                or self.record.get("budget", {}).get("auto_seconds", 0) >= AUTO_BUDGET_SECONDS):
             self.flagged_review()
             return
         self.record.setdefault("attempts", []).append(deepcopy(request))
@@ -222,6 +243,17 @@ class TaskExecutor:
             self.record.pop(key, None)
         self.needs_reconciliation = False
         self.retry()
+
+    def _apply_wait_result(self, result):
+        if result == ANSWER_READY:
+            self.answered()
+        elif result == NEED_RETRY:
+            self.request_retry()
+        elif result == NEED_REVIEW:
+            self.flagged_review()
+        elif result == BLOCKED:
+            self.record["resume_phase"] = self.state
+            self.flagged_blocked()
 
     def pause(self):
         """Signal a pause; the tree and browser are only touched by the owner thread."""
@@ -236,14 +268,14 @@ class TaskExecutor:
 
     def _enact_pause(self):
         if self.state == "waiting":
-            self.tree.interrupt()
-            self.tree.root.stop(py_trees.common.Status.INVALID)
+            self.wait.interrupt()
         self.record["paused"] = True
         self.record["pause_requested"] = False
 
     def resume(self):
         with self.lock:
             self.record["paused"] = False
+            self.budget_sample = self.clock()
             self.record["pause_requested"] = False
             self.needs_reconciliation = self.state in RECONCILE_PHASES
             self._save()
