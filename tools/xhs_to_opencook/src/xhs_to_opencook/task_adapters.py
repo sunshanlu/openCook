@@ -132,12 +132,23 @@ def extraction_validator(identity):
 
 def extraction_commit(store, identity, source, driver):
     def finalize(record):
-        from .export import convert
+        from .errors import TaskError
+        from .export import convert, cover_jpeg
         from .models import Extraction
         from .prompts import EXTRACTION_VERSION
-        from .storage import now
+        from .storage import atomic_write, now
 
         extraction = record["result"]["extraction"]
+        if "cover_path" not in record:
+            record["cover_path"] = None
+            record["image_error"] = {"code": "image_missing", "message": "未提供封面"}
+            if source.cover_url:
+                try:
+                    path = store.directory / "covers" / (identity + ".jpg")
+                    atomic_write(path, cover_jpeg(driver.download_cover(source.cover_url)))
+                    record.update(cover_path=str(path), image_error=None)
+                except (TaskError, OSError) as exc:
+                    record["image_error"] = {"code": "image_failed", "message": str(exc)}
         store.commit_extraction(identity, {
             "status": "success", "source": source.model_dump(), "extraction": extraction,
             "export_names": [
@@ -146,7 +157,7 @@ def extraction_commit(store, identity, source, driver):
             "conversation_id": getattr(driver, "conversation_id", None),
             "raw_directory": record["request"].get("raw_directory"),
             "classified_at": now(), "prompt_version": EXTRACTION_VERSION,
-            "cover_path": None, "image_error": {"code": "image_missing", "message": "未提供封面"},
+            "cover_path": record["cover_path"], "image_error": record["image_error"],
         }, record)
 
     return finalize
