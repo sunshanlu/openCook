@@ -57,7 +57,7 @@ class ChatSession:
         if isinstance(max_attempts, bool) or not isinstance(max_attempts, int) or max_attempts <= 0:
             raise ValueError("max attempts must be a positive integer")
         self.max_attempts = max_attempts
-        self.store, self.driver = store, driver
+        self.store, self.driver_factory = store, driver
         self.capacity, self.interval, self.timeout = capacity, interval, timeout
         self.sleeper, self.clock, self.cooldown = sleeper, clock, cooldown
         self.loaded_batch = None
@@ -71,6 +71,12 @@ class ChatSession:
     @property
     def gate(self):
         return self.pacing or self.window
+
+    def driver(self):
+        driver = self.driver_factory()
+        if self.account_id and hasattr(driver, "expected_account"):
+            driver.expected_account = self.account_id
+        return driver
 
     def pause(self, seconds):
         runtime.sleep(seconds, self.sleeper)
@@ -633,10 +639,10 @@ class ChatSession:
         self.isolate_review(source, stage, directory, "submission_unknown", str(error))
 
     def process(self, source, stage, directory):
+        """Own all recovery for one video; callers never repeat this operation."""
         self.current_stage = stage
         if not self.has_pending_submission():
             self.gate.ready()
-        """Own all recovery for one video; callers never repeat this operation."""
         path = self.store.directory / "recovery" / f"{stage}-{source.note_id}.json"
         if self.review_for(stage, source.note_id):
             path.unlink(missing_ok=True)

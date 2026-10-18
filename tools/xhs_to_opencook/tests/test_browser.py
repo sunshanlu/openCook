@@ -613,8 +613,9 @@ def test_unknown_history_template_never_marks_owned_chat_missing(driver, templat
         json={"success": True, "code": 0, "data": {"cursor": 0, "items": [
             {"id": "owned", "spark": {"template_name": template,
              "dsl_data": {"conversation_id": "owned"}}}]}}))
-    with pytest.raises(TaskError, match="列表格式"):
+    with pytest.raises(TaskError, match="列表格式") as failure:
         driver.delete_chat("owned")
+    assert failure.value.code == "cleanup_history_schema_drift"
 
 
 def test_new_chat_reuses_loaded_sidebar_but_requires_empty_conversation(driver, monkeypatch):

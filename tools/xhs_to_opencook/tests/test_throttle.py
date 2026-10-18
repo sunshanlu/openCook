@@ -275,3 +275,19 @@ def test_serial_chat_can_restore_submitted_request_at_night(tmp_path):
     chat.load(batch)
     assert restored == ["original"] and clock[0] == start
     store.close()
+
+
+def test_pending_account_updates_already_created_browser_binding(tmp_path):
+    store, seen = Store(tmp_path), []
+    driver = SimpleNamespace(expected_account=None)
+    driver.restore_chat = lambda cid: seen.append(driver.expected_account)
+    chat = ChatSession(store, lambda: driver, clock=lambda: 1000)
+    batch = {"batch_id": "old", "conversation_id": "original", "stage": "extract",
+             "status": "open", "account_id": "original-account"}
+    store.stage_save("chat_batches", "old", batch)
+    store.stage_save("chat_requests", "pending", {"request_id": "pending", "batch_id": "old",
+                     "stage": "extract", "status": "submitted", "sent_at": 999,
+                     "account_id": "original-account"})
+    chat.load(batch)
+    assert seen == ["original-account"]
+    store.close()
