@@ -313,6 +313,8 @@ class TaskExecutor:
                 if reason == "identity_conflict":
                     raise TaskError("manual_resolution_required", "身份冲突需要人工裁决")
                 phase = self.record.get("resume_phase", "waiting")
+                if phase not in PHASES or phase in TERMINAL_PHASES:
+                    raise TaskError("task_phase_unknown", "阻塞恢复阶段无效", retryable=False)
                 self.trigger("restore_" + phase)
                 self.record.pop("wait_block", None)
 

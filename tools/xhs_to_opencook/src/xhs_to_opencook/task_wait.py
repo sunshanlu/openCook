@@ -99,47 +99,35 @@ class WaitPolicy:
         self.tree.tick()
         return self.outcome
 
-    def _decide(self):
+    def decide(self, branch):
         record = self.executor.record
         wait = self.window()
-        observation = record.get("observation") or {}
+        observation = record.get("observation", {})
         now = self.executor.clock()
-
-        if observation.get("conflict"):
+        if branch == "conflict":
             record["wait_block"] = {"reason": "identity_conflict", "evidence": observation}
             return BLOCKED
-        if not observation.get("observable", False):
+        if branch == "page":
             return self._page_branch(record, wait, observation, now)
-        matches = int(observation.get("matches", 1 if observation.get("matched") else 0))
-        if matches > 1 or observation.get("conflict"):
-            record["wait_block"] = {"reason": "identity_conflict", "evidence": observation}
-            return BLOCKED
-        if matches < 1 or not observation.get("matched", False):
+        if branch == "association":
             return self._association_branch(record, wait, observation)
-
-        answer = (observation.get("answer") or "").strip()
-        if observation.get("finished") and answer and not observation.get("error"):
-            return self._stable(record, "answer", answer, self.executor.stable_seconds,
-                                ANSWER_READY, now)
-        if observation.get("finished") and observation.get("error"):
-            record["wait_partial"] = {"reason": "interrupted", "evidence": observation}
-            record["request_closed"] = True
-            return NEED_RETRY
-        if observation.get("finished") and not answer:
-            return self._stable(record, "empty", "", self.executor.empty_stable_seconds,
-                                NEED_RETRY, now)
-        self._forget(record)
-        if observation.get("error"):
+        if branch == "answer":
+            return self._stable(record, "answer", observation["answer"].strip(),
+                                self.executor.stable_seconds, ANSWER_READY, now)
+        if branch == "abnormal":
+            if observation.get("finished") and observation.get("error"):
+                record["wait_partial"] = {"reason": "interrupted", "evidence": observation}
+                record["request_closed"] = True
+                return NEED_RETRY
+            if observation.get("finished"):
+                return self._stable(record, "empty", "", self.executor.empty_stable_seconds,
+                                    NEED_RETRY, now)
+            self._forget(record)
             record["wait_partial"] = {"reason": "interrupted_or_error",
                                       "evidence": observation, "at": now}
-            if observation.get("finished"):
-                return NEED_RETRY
-            if now >= wait["extended_until"]:
-                return self.finalize(wait)
-            return RUNNING
-        if now >= wait["extended_until"]:
-            return self.finalize(wait)
-        return RUNNING
+            return self.finalize(wait) if now >= wait["extended_until"] else RUNNING
+        self._forget(record)
+        return self.finalize(wait) if branch == "timeout" else RUNNING
 
     def finalize(self, wait=None):
         """Final reconcile at the extended boundary or the automatic-budget edge."""
@@ -250,12 +238,13 @@ class DecisionBranch(py_trees.behaviour.Behaviour):
             "conflict": observation.get("conflict") or matches > 1,
             "page": not observation.get("observable", False),
             "association": not observation.get("matched") or matches < 1,
-            "answer": observation.get("finished") and bool(observation.get("answer")),
+            "answer": (observation.get("finished") and bool(observation.get("answer"))
+                       and not observation.get("error")),
             "abnormal": observation.get("finished") or observation.get("error"),
             "timeout": now >= self.policy.window()["extended_until"],
             "observe": True,
         }
         if not predicates[self.name]:
             return py_trees.common.Status.FAILURE
-        self.policy.outcome = self.policy._decide()
+        self.policy.outcome = self.policy.decide(self.name)
         return py_trees.common.Status.SUCCESS

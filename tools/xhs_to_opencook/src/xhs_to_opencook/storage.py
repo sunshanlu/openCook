@@ -276,9 +276,14 @@ class Store:
             return None
         try:
             value = json.loads(row[0])
-            return value if isinstance(value, dict) else None
-        except ValueError:
-            return None
+            if not isinstance(value, dict):
+                raise ValueError("task journal is not an object")
+            return value
+        except ValueError as exc:
+            from .errors import TaskError
+
+            raise TaskError("task_journal_corrupt", "任务日志损坏，禁止当作新任务重发",
+                            retryable=False) from exc
 
     def task_save(self, identity: str, record: dict):
         value = {**record, "updated_at": now()}
