@@ -139,11 +139,23 @@ class WaitPolicy:
         wait["final_done"] = True
         ObserveAction(self.executor).update()  # final bounded snapshot, no recursive tree tick
         observation = record.get("observation") or {}
+        matches = observation.get("matches", 1 if observation.get("matched") else 0)
+        valid = (observation.get("observable", False) and observation.get("matched")
+                 and matches == 1 and not observation.get("conflict"))
+        if not valid or observation.get("error"):
+            record["wait_block"] = {"reason": "final_snapshot_unconfirmed",
+                                    "evidence": observation}
+            return BLOCKED
         answer = (observation.get("answer") or "").strip()
-        if (observation.get("observable", True) and observation.get("matched")
-                and not observation.get("conflict") and observation.get("finished") and answer):
-            return self._stable(record, "answer", answer, self.executor.stable_seconds,
-                                ANSWER_READY, self.executor.clock())
+        if observation.get("finished") and answer:
+            now = self.executor.clock()
+            deadline = wait.setdefault("final_stable_until", now + 5)
+            result = self._stable(record, "answer", answer, self.executor.stable_seconds,
+                                  ANSWER_READY, now)
+            if result == RUNNING and now >= deadline:
+                record["wait_block"] = {"reason": "final_stability_exhausted"}
+                return BLOCKED
+            return result
         try:
             snapshot = self.executor.browser.reconcile(deepcopy(record["request"]))
         except (TaskError, OSError, PlaywrightError) as exc:
@@ -192,8 +204,7 @@ class WaitPolicy:
             return RUNNING
         wait["recoveries"] = wait.get("recoveries", 0) + 1
         if wait["recoveries"] > RECOVERY_LIMIT:
-            record["wait_block"] = {"reason": "page_unavailable", "evidence": observation}
-            return BLOCKED
+            return self.exhausted(observation)
         wait["backoff_until"] = now + (
             RECOVERY_BACKOFF_SECONDS if wait["recoveries"] == RECOVERY_BACKOFF_AFTER
             else SHORT_BACKOFF_SECONDS
@@ -205,7 +216,20 @@ class WaitPolicy:
                 recover(deepcopy(record["request"]))
             except (TaskError, OSError, PlaywrightError) as exc:
                 record["wait_recovery"]["error"] = str(exc)
+                if wait["recoveries"] >= RECOVERY_LIMIT:
+                    return self.exhausted(observation)
+        elif wait["recoveries"] >= RECOVERY_LIMIT:
+            return self.exhausted(observation)
         return RUNNING
+
+    def exhausted(self, observation):
+        record = self.executor.record
+        if record.get("request_closed"):
+            if record.get("answer"):
+                return ANSWER_READY
+            return NEED_REVIEW
+        record["wait_block"] = {"reason": "page_recovery_exhausted", "evidence": observation}
+        return BLOCKED
 
     def _association_branch(self, record, wait, observation):
         wait["reconciles"] = wait.get("reconciles", 0) + 1
@@ -250,4 +274,14 @@ class DecisionBranch(py_trees.behaviour.Behaviour):
         if not predicates[self.name]:
             return py_trees.common.Status.FAILURE
         self.policy.outcome = self.policy.decide(self.name)
+        record = self.policy.executor.record
+        signature = (record["request"]["request_id"], self.name, self.policy.outcome)
+        if list(signature) != record.get("last_decision"):
+            record["last_decision"] = list(signature)
+            record.setdefault("decisions", []).append({
+                "request_id": signature[0], "branch": self.name, "outcome": signature[2],
+                "at": now, "attempt": record.get("attempt", 1),
+                "auto_seconds": record.get("budget", {}).get("auto_seconds", 0),
+                "reason": record.get("wait_block", {}).get("reason"),
+            })
         return py_trees.common.Status.SUCCESS

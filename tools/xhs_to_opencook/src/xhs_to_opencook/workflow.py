@@ -396,7 +396,10 @@ class Workflow:
                     "attempts": 0, "engine": "v2"}
             self.report["tasks"].append(task)
             existing = self.store.task_get(identity)
-            legacy = [r for r in self.chats.pending_rows() if r.get("note_id") == identity]
+            stage_pending = [r for r in self.chats.pending_rows() if r.get("stage") == "classify"]
+            if any(r.get("note_id") != identity for r in stage_pending):
+                raise TaskError("task_pending_conflict", "先恢复本阶段原视频请求", retryable=False)
+            legacy = [r for r in stage_pending if r.get("note_id") == identity]
             if existing is None and legacy:
                 task.update(status="skipped", reason="legacy_pending_not_migrated")
                 self.snapshot()
@@ -474,6 +477,8 @@ class Workflow:
                     "login_required", "verification_required", "page_state_unconfirmed",
                     "page_unavailable", "platform_restricted", "pacing_frozen"})):
             executor.resume(human_resolved=getattr(self.args, "task_human_resolved", False))
+        if executor.record.get("paused"):
+            executor.resume()
         while True:
             record = executor.tick()
             if record["phase"] in TERMINAL_PHASES:
@@ -524,6 +529,9 @@ class Workflow:
                    for r in self.chats.pending_rows()) and not self.store.task_get(task_id):
                 task.update(status="skipped", reason="legacy_pending_not_migrated")
                 continue
+            pending = [r for r in self.chats.pending_rows() if r.get("stage") == "extract"]
+            if any(r.get("note_id") != identity for r in pending):
+                raise TaskError("task_pending_conflict", "先恢复本阶段原视频请求", retryable=False)
             source = collected_source(note, self.store.get(identity), classified)
             directory = self.raw(identity, "extract", 1)
             driver = self.driver()
@@ -549,6 +557,8 @@ class Workflow:
                         "login_required", "verification_required", "page_state_unconfirmed",
                         "page_unavailable", "platform_restricted", "pacing_frozen"})):
                 executor.resume(human_resolved=getattr(self.args, "task_human_resolved", False))
+            if executor.record.get("paused"):
+                executor.resume()
             while True:
                 record = executor.tick()
                 if record["phase"] in TERMINAL_PHASES:

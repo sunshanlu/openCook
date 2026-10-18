@@ -141,13 +141,20 @@ class TaskExecutor:
         self.record["updated_at"] = self.clock()
         self.record["budget"]["sampled_at"] = self.budget_sample
         self.journal.save(self.identity, self.record)
+        if runtime.current():
+            runtime.current().task_progress(self.record)
 
     def tick(self):
         if get_ident() != self.owner:
             raise RuntimeError("Task ticks must run on the browser owner thread")
         with self.lock:
             if runtime.current():
-                runtime.check()
+                runtime.current().task_progress(self.record)
+                try:
+                    runtime.check()
+                except KeyboardInterrupt:
+                    self.pause()
+                    raise
             if self.record.get("pause_requested") and not self.record["paused"]:
                 self._enact_pause()
             if self.record["paused"]:

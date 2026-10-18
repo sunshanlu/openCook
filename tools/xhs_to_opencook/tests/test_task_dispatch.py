@@ -166,3 +166,45 @@ def test_corrupt_task_journal_never_becomes_a_new_submission(tmp_path):
         workflow.process('classify', [note(store)])
     assert driver.sent == 0
     store.close()
+
+
+def test_other_video_pending_stops_new_task(tmp_path):
+    import pytest
+
+    from xhs_to_opencook.errors import TaskError
+
+    driver = Driver()
+    workflow, store = build(tmp_path, driver)
+    store.stage_save('chat_requests', 'other', {
+        'request_id': 'other', 'stage': 'classify', 'note_id': 'b'*24,
+        'status': 'submitted', 'attempt': 1,
+    })
+    with pytest.raises(TaskError, match='原视频'):
+        workflow.process('classify', [note(store)])
+    assert driver.sent == 0
+    store.close()
+
+
+def test_runtime_pause_persists_task_and_projects_single_budget(tmp_path, monkeypatch):
+    import pytest
+
+    from xhs_to_opencook import runtime
+    from xhs_to_opencook.storage import write_json
+    from xhs_to_opencook.task_engine import TaskExecutor, new_record
+    from xhs_to_opencook.task_adapters import StoreJournal
+
+    driver = Driver()
+    workflow, store = build(tmp_path, driver)
+    active = runtime.WorkerRuntime(tmp_path/'runtime', 'job', clock=lambda: 1000)
+    monkeypatch.setattr(runtime, '_worker', active)
+    record = new_record(N1, request={'note_id': N1, 'stage': 'classify'})
+    executor = TaskExecutor(N1, driver, StoreJournal(store), clock=lambda: 1000,
+                            bootstrap=lambda key: record)
+    write_json(active.directory/'control.json', {'job_id': 'job', 'action': 'pause'})
+    with pytest.raises(KeyboardInterrupt):
+        executor.tick()
+    assert store.task_get(N1)['paused'] is True
+    assert active.data['task_budget_owned'] is True
+    assert active.data['deadline'] == 1120
+    assert active.items['budgets']['classify:'+N1] == 0
+    store.close()

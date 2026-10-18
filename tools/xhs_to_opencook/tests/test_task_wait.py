@@ -240,3 +240,39 @@ def test_budget_excludes_manual_pause_and_survives_restart():
     restored = TaskExecutor("classify:video", Browser(), journal, clock=clock)
     restored.tick()
     assert restored.snapshot()["budget"]["auto_seconds"] < 60
+
+
+def test_final_snapshot_rejects_duplicate_and_interrupted_answers():
+    for snapshot in [
+        {'matched': True, 'matches': 2, 'finished': True, 'answer': 'wrong'},
+        {'matched': True, 'finished': True, 'answer': 'partial', 'error': True},
+        {'matched': False, 'finished': True, 'answer': ''},
+    ]:
+        executor, _, _, _ = waiting_executor(browser=Browser(snapshot), stable=0)
+        assert executor.wait.finalize() == task_wait.BLOCKED
+        assert 'answer' not in executor.snapshot()
+
+
+def test_final_stability_observation_has_fixed_deadline():
+    clock = Clock()
+    browser = Browser({'matched': True, 'finished': True, 'answer': 'one'})
+    executor, _, _, _ = waiting_executor(clock, browser)
+    assert executor.wait.finalize() == task_wait.RUNNING
+    clock.value = 10
+    browser.snapshot['answer'] = 'changed'
+    assert executor.wait.finalize() == task_wait.BLOCKED
+
+
+def test_recovery_exhaustion_uses_cached_closure_evidence():
+    executor, _, _, _ = waiting_executor(browser=Browser(OSError('gone')))
+    executor.record['request_closed'] = True
+    assert executor.wait.exhausted({}) == task_wait.NEED_REVIEW
+    executor.record['answer'] = 'saved complete answer'
+    assert executor.wait.exhausted({}) == task_wait.ANSWER_READY
+
+
+def test_repeated_observation_does_not_duplicate_decision_events():
+    executor, _, _, _ = waiting_executor()
+    executor.tick()
+    executor.tick()
+    assert len(executor.snapshot()['decisions']) == 1

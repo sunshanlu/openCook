@@ -71,10 +71,16 @@ class ChatBrowserAdapter:
         self.chats.persist(request)
 
     def recover(self, request):
+        saved = self.chats.store.stage_get("chat_requests", request["request_id"])
+        if saved:
+            request.update(saved)
         if request.get("conversation_id"):
             self.driver.restore_chat(request["conversation_id"])
-        else:
+        elif request.get("status") == "prepared" and not request.get("sent_at"):
             self.driver.new_chat()
+            return {"unsent": True, "request": request}
+        else:
+            return self.reconcile(request)
         return self.reconcile(request)
 
     def cancel_observation(self):
