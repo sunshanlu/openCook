@@ -6,6 +6,7 @@ import sys
 import time
 from contextlib import ExitStack
 from datetime import UTC, datetime, timedelta
+from uuid import uuid4
 
 from playwright.sync_api import Error as PlaywrightError
 
@@ -84,10 +85,13 @@ def collected_source(note, *records):
 class Workflow:
     def __init__(self, args, store, profiles, browser_factory, sleeper, clock=time.time):
         self.args, self.store, self.profiles = args, store, profiles
+        self.clock = clock
         self.output = args.output.resolve()
         self.browser_factory, self.sleeper = browser_factory, sleeper
         self.browser = None
         self.last_submit = None
+        # Explicit per-task engine selection; every pre-existing task stays on the legacy path.
+        self.task_engine = getattr(args, "task_engine", "legacy")
         self.chats = ChatSession(
             store,
             self.driver,
@@ -381,6 +385,187 @@ class Workflow:
             finally:
                 self.snapshot()
 
+    def process_classification(self, notes):
+        """Opt-in classification path: only explicitly routed new tasks are taken.
+
+        A legacy pending request keeps its single owner and is never migrated silently.
+        """
+        for index, note in enumerate(notes, 1):
+            identity = note["note_id"]
+            task = {"stage": "classify", "note_id": identity, "status": "running",
+                    "attempts": 0, "engine": "v2"}
+            self.report["tasks"].append(task)
+            existing = self.store.task_get(identity)
+            legacy = [r for r in self.chats.pending_rows() if r.get("note_id") == identity]
+            if existing is None and legacy:
+                task.update(status="skipped", reason="legacy_pending_not_migrated")
+                self.snapshot()
+                continue
+            classified, decision = classification_record(self.store, identity)
+            if (existing is None and decision and decision.verdict != "unknown"
+                    and not getattr(self.args, "reclassify", False)):
+                task.update(status="cached", verdict=decision.verdict)
+                self.snapshot()
+                continue
+            print(f"[{index}/{len(notes)}] classify {identity} (v2)", flush=True)
+            try:
+                outcome = self.run_classification(identity, note)
+                task.update(outcome)
+                if outcome["status"] != "success":
+                    self.code = max(self.code, 2)
+            except (KeyboardInterrupt, EOFError):
+                task["status"] = "interrupted"
+                raise
+            except TaskError as exc:
+                if exc.code == "runtime_wait":
+                    raise
+                self.record_error(task, exc)
+                raise
+            finally:
+                self.snapshot()
+        return self.report["tasks"]
+
+    def run_classification(self, identity, note):
+        """Drive one classification task through prepare/submit/wait/validate/save to completion."""
+        from .task_adapters import (
+            ChatBrowserAdapter,
+            StoreJournal,
+            classification_commit,
+            classification_validator,
+        )
+        from .task_engine import TERMINAL_PHASES, TaskExecutor, new_record
+
+        source = collected_source(
+            note, self.store.get(identity), classification_record(self.store, identity)[0]
+        )
+        if source.note_id != identity:
+            raise TaskError("reference_mismatch", "笔记 ID 发生变化")
+        directory = self.raw(identity, "classify", 1)
+        write_json(directory / "source.json", source.model_dump())
+        self.store.alias(source.url, identity)
+        for profile in note["profile_ids"]:
+            self.store.collect_note(
+                profile, {**note, "url": source.url, "source": source.model_dump()}
+            )
+        driver = self.driver()
+        chats = self.chats
+
+        def bootstrap(task_id):
+            return new_record(task_id, request={
+                "request_id": uuid4().hex, "note_id": identity, "stage": "classify",
+                "status": "prepared", "attempt": 1, "attempt_limit": chats.max_attempts,
+                "prompt_version": CLASSIFICATION_VERSION, "source": source.model_dump(),
+                "raw_directory": str(directory.relative_to(self.store.directory)),
+            })
+
+        executor = TaskExecutor(
+            identity,
+            ChatBrowserAdapter(chats, driver, source),
+            StoreJournal(self.store),
+            clock=self.clock,
+            bootstrap=bootstrap,
+            validate=classification_validator(identity),
+            finalize=classification_commit(self.store, identity, source, driver),
+            stable_seconds=getattr(self.args, "task_stable_seconds", 1.0),
+        )
+        stored_block = executor.record.get("wait_block", {}).get("reason")
+        if (getattr(self.args, "task_resume", False)
+                or (executor.phase == "blocked" and stored_block in {
+                    "login_required", "verification_required", "page_state_unconfirmed",
+                    "page_unavailable", "platform_restricted", "pacing_frozen"})):
+            executor.resume(human_resolved=getattr(self.args, "task_human_resolved", False))
+        while True:
+            record = executor.tick()
+            if record["phase"] in TERMINAL_PHASES:
+                break
+            self.sleeper(0.25)
+
+        phase, verdict = record["phase"], None
+        if phase == "completed":
+            result = record["result"]["classification"]
+            verdict = result["verdict"]
+            write_json(directory / "result.json", {
+                "status": "success", "source": source.model_dump(),
+                "classification": result, "finished_at": now(),
+            })
+            if runtime.current():
+                runtime.current().outcome("classify", identity)
+            return {"status": "success", "verdict": verdict, "reason": result["reason"],
+                    "attempts": record.get("attempt", 1)}
+        error = record.get("error", {"code": "task_blocked"})
+        if phase == "manual_review":
+            return {"status": "awaiting_review", "error": error,
+                    "attempts": record.get("attempt", 1)}
+        block = record.get("wait_block", {})
+        if record.get("error", {}).get("code") == "save_failed":
+            raise OSError("共享存储保存失败")
+        runtime.block(block.get("reason", "task_blocked"), "当前任务未安全收尾",
+                      kind="manual" if block.get("reason") == "identity_conflict" else None)
+
+    def process_extraction(self, notes):
+        from .task_adapters import (
+            ChatBrowserAdapter,
+            StoreJournal,
+            extraction_commit,
+            extraction_validator,
+        )
+        from .task_engine import TERMINAL_PHASES, TaskExecutor, new_record
+
+        for note in notes:
+            identity = note["note_id"]
+            task_id = "extract:" + identity
+            task = {"stage": "extract", "note_id": identity, "engine": "v2", "status": "running"}
+            self.report["tasks"].append(task)
+            classified, decision = classification_record(self.store, identity)
+            if not decision or decision.verdict != "tutorial":
+                task.update(status="skipped", reason="not_confirmed_tutorial")
+                continue
+            if any(r.get("note_id") == identity and r.get("stage") == "extract"
+                   for r in self.chats.pending_rows()) and not self.store.task_get(task_id):
+                task.update(status="skipped", reason="legacy_pending_not_migrated")
+                continue
+            source = collected_source(note, self.store.get(identity), classified)
+            directory = self.raw(identity, "extract", 1)
+            driver = self.driver()
+
+            def bootstrap(key, identity=identity, source=source, directory=directory):
+                return new_record(key, request={
+                    "request_id": uuid4().hex, "note_id": identity, "stage": "extract",
+                    "status": "prepared", "attempt": 1, "attempt_limit": self.chats.max_attempts,
+                    "source": source.model_dump(), "prompt_version": EXTRACTION_VERSION,
+                    "raw_directory": str(directory.relative_to(self.store.directory)),
+                })
+
+            executor = TaskExecutor(
+                task_id, ChatBrowserAdapter(self.chats, driver, source, stage="extract"),
+                StoreJournal(self.store), clock=self.clock, bootstrap=bootstrap,
+                validate=extraction_validator(identity),
+                finalize=extraction_commit(self.store, identity, source, driver),
+                stable_seconds=getattr(self.args, "task_stable_seconds", 1.0),
+            )
+            stored_block = executor.record.get("wait_block", {}).get("reason")
+            if (getattr(self.args, "task_resume", False)
+                    or (executor.phase == "blocked" and stored_block in {
+                        "login_required", "verification_required", "page_state_unconfirmed",
+                        "page_unavailable", "platform_restricted", "pacing_frozen"})):
+                executor.resume(human_resolved=getattr(self.args, "task_human_resolved", False))
+            while True:
+                record = executor.tick()
+                if record["phase"] in TERMINAL_PHASES:
+                    break
+                self.sleeper(0.25)
+
+            if record["phase"] == "blocked":
+                block = record.get("wait_block", {})
+                if record.get("error", {}).get("code") == "save_failed":
+                    raise OSError("共享存储保存失败")
+                runtime.block(block.get("reason", "task_blocked"), "提取任务未安全收尾",
+                              kind="manual" if block.get("reason") == "identity_conflict" else None)
+            task.update(status="success" if record["phase"] == "completed" else "awaiting_review",
+                        attempts=record.get("attempt", 1), error=record.get("error"))
+            self.snapshot()
+        return self.report["tasks"]
+
     def process(self, stage, notes=None):
         runtime.operation(f"stage_{stage}", 300)
         if runtime.current():
@@ -389,6 +574,10 @@ class Workflow:
             notes = [
                 n for n in self.store.collected(list(self.profiles)) if n.get("type") == "video"
             ]
+        if stage == "extract" and self.task_engine == "v2":
+            return self.process_extraction(notes)
+        if stage == "classify" and self.task_engine == "v2":
+            return self.process_classification(notes)
         pending = self.chats.pending()
         if pending:
             if pending["stage"] != stage or pending["note_id"] not in {n["note_id"] for n in notes}:
