@@ -13,8 +13,8 @@ HTML = """<!doctype html><body>
 <div class="wendian-wrapper input-container">
 <textarea name="aiSearchTextarea" aria-hidden="true"></textarea>
 <textarea name="aiSearchTextarea" id="editor"></textarea>
-<button title="新建会话" onclick="document.querySelectorAll('.ai-message,
- .user-message__text-wrapper, [data-round-id]').forEach(e=>e.remove());
+<button title="新建会话" onclick="document.querySelectorAll(
+ '.ai-message, .user-message__text-wrapper, [data-round-id]').forEach(e=>e.remove());
  history.replaceState({},'', '/ai_chat');">
  新建会话</button>
 <div id="cards"></div>
@@ -604,6 +604,40 @@ def test_delete_chat_rejects_changed_route_before_click(driver):
 def test_confirmed_empty_history_list_marks_manual_deletion_complete(driver):
     history_ui(driver, listed=False)
     assert driver.delete_chat("owned")["status"] == "missing"
+
+
+@pytest.mark.parametrize("template", ["new_template", "search_agent_conversation_item"])
+def test_unknown_history_template_never_marks_owned_chat_missing(driver, template):
+    history_ui(driver)
+    driver.context.route("**/api/sns/web/v1/dqa/history/list?*", lambda route: route.fulfill(
+        json={"success": True, "code": 0, "data": {"cursor": 0, "items": [
+            {"id": "owned", "spark": {"template_name": template,
+             "dsl_data": {"conversation_id": "owned"}}}]}}))
+    with pytest.raises(TaskError, match="列表格式"):
+        driver.delete_chat("owned")
+
+
+def test_new_chat_reuses_loaded_sidebar_but_requires_empty_conversation(driver, monkeypatch):
+    listing = {"success": True, "code": 0, "data": {"items": [], "cursor": 0}}
+    body = '<meta charset="utf-8">' + HTML.replace(
+        "window.mode='finish';", "fetch('/api/sns/web/v1/dqa/history/list?pre_cursor=0');"
+        "window.mode='finish';")
+    driver.context.route(CHAT + "*", lambda route: route.fulfill(
+        body=body, content_type="text/html"))
+    driver.context.route("**/api/sns/web/v1/dqa/history/list?*",
+                         lambda route: route.fulfill(json=listing))
+    driver.new_chat()
+    driver.chat_page.wait_for_timeout(100)
+    driver.chat_page.evaluate("""() => {
+        history.replaceState({},'', '/ai_chat?conversationId=old');
+        messages.innerHTML='<div data-round-id="old"><div class="ai-message">old answer</div>'
+          +'<div class="user-message__text-wrapper">old prompt</div></div>';
+    }""")
+    monkeypatch.setattr(driver, "visit",
+                        lambda *a, **kw: pytest.fail("reload lost sidebar progress"))
+    driver.new_chat()
+    assert driver.chat_page.url == CHAT
+    assert driver.chat_page.locator('[data-round-id]').count() == 0
 
 
 def test_cleanup_loads_later_history_page_before_deciding_target_is_missing(driver):

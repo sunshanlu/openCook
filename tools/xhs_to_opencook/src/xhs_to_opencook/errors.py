@@ -9,7 +9,8 @@ ACCESS_WAIT_KINDS = {
 
 
 SESSION_BLOCK_CODES = frozenset({"login_required", "verification_required",
-                                 "page_state_unconfirmed", "platform_restricted"})
+                                 "page_state_unconfirmed", "platform_restricted",
+                                 "account_mismatch"})
 
 
 class TaskError(Exception):

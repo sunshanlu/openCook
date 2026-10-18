@@ -39,13 +39,16 @@ def run(args, *, browser_factory=SiteBrowser, sleeper=time.sleep, clock=time.tim
         def get_browser():
             nonlocal browser
             if browser is None:
-                browser = stack.enter_context(
-                    browser_factory(
+                with chats.recovery_context():
+                    chats.gate.ready("access")
+                    candidate = browser_factory(
                         state / "chrome",
                         timeout=args.timeout,
                         interactive=not args.non_interactive,
                     )
-                )
+                    candidate.visit_gate = chats.gate
+                    candidate.expected_account = chats.account_id
+                    browser = stack.enter_context(candidate)
             return browser
 
         def reset_browser():

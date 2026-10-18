@@ -452,3 +452,20 @@ def test_night_defers_new_workers_and_recovery_probes(coordinator):
     for record in c.job["workers"].values():
         assert record["status"] == "waiting"
         assert record["next_check"] == midnight + 7 * 3600
+
+
+def test_night_keeps_manual_wait_without_automatic_retry(coordinator):
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    c = coordinator
+    midnight = datetime(2026, 10, 18, tzinfo=ZoneInfo("Asia/Shanghai")).timestamp()
+    c.clock = lambda: midnight
+    c.job["workers"]["classify"].update(status="waiting", reason="account_mismatch",
+                                         wait_kind="manual", next_check=None)
+    c.job["workers"]["extract"]["status"] = "blocked"
+    c.ensure_chrome = lambda stage: pytest.fail("manual intervention is still required")
+    c.probe = lambda stage: pytest.fail("must not turn manual wait into an automatic probe")
+    c.publish = lambda **kw: None
+    c.step()
+    assert c.job["workers"]["classify"]["next_check"] is None

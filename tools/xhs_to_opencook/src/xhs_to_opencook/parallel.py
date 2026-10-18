@@ -35,7 +35,7 @@ TERMINAL = {"completed", "partial"}
 
 def gated(browser, flow):
     """Count every page visit the browser makes against the account's access allowance."""
-    browser.visit_gate = flow.chats.pacing
+    browser.visit_gate = flow.chats.gate
     return browser
 
 
@@ -543,16 +543,20 @@ class ParallelCoordinator:
             if record["status"] in TERMINAL | {"blocked", "paused"}:
                 continue
             gate = self.throttle(stage)
-            opens = gate.next_open(now)
-            night = opens > now
-            submitted = any(r.get("stage") == stage
-                            and r.get("account_id") == self.job["accounts"][stage]["account_id"]
-                            and r.get("status") in PENDING - {"prepared"} and r.get("sent_at")
-                            for r in self.store.stage_rows("chat_requests"))
-            if night and (record["status"] == "waiting"
-                          or record["status"] == "ready" and not submitted):
+            next_window_open_at = gate.next_open(now)
+            window_closed = next_window_open_at > now
+            has_pending_recovery = any(
+                r.get("stage") == stage
+                and r.get("account_id") == self.job["accounts"][stage]["account_id"]
+                and r.get("status") in PENDING - {"prepared"} and r.get("sent_at")
+                for r in self.store.stage_rows("chat_requests"))
+            if window_closed and record["status"] == "waiting" and not record.get("next_check"):
+                continue  # Manual/circuit waits remain explicit user decisions.
+            if window_closed and (record["status"] == "waiting"
+                                  or record["status"] == "ready" and not has_pending_recovery):
                 record.update(status="waiting", next_check=max(
-                    record.get("next_check") or 0, opens, gate.state()["frozen_until"]))
+                    record.get("next_check") or 0, next_window_open_at,
+                    gate.state()["frozen_until"]))
                 if not record.get("reason"):
                     record.update(reason="pacing_window_closed", wait_kind="schedule",
                                   message="夜间休息；北京时间07:00继续")
@@ -579,12 +583,12 @@ class ParallelCoordinator:
                 continue
             # A resting worker may keep its existing local window, but never reopen
             # platform pages at night unless an already-submitted request needs recovery.
-            if night and record["status"] == "running" and not submitted:
+            if window_closed and record["status"] == "running" and not has_pending_recovery:
                 owner = self.chromes.get(stage)
                 if not owner or not owner.alive():
                     self.retire(stage)
                     record.update(status="waiting", reason="pacing_window_closed",
-                                  wait_kind="schedule", next_check=opens)
+                                  wait_kind="schedule", next_check=next_window_open_at)
                     continue
             elif not self.ensure_chrome(stage):
                 continue

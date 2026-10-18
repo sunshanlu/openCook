@@ -8,7 +8,7 @@ import json
 import random
 import time
 from contextlib import contextmanager
-from datetime import datetime, timedelta
+from datetime import datetime
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
@@ -21,7 +21,64 @@ RESET_AFTER = 20  # Sends since the last freeze that reset the backoff ladder.
 BEIJING = ZoneInfo("Asia/Shanghai")
 
 
-class AccessThrottle:
+class DailyWindow:
+    """The daily policy shared by serial chats and account-scoped parallel throttles."""
+
+    def __init__(self, *, clock=time.time, sleeper=time.sleep):
+        self.clock, self.sleeper = clock, sleeper
+        self.recovering_submission = False
+
+    def next_open(self, now=None):
+        now = self.clock() if now is None else now
+        current = datetime.fromtimestamp(now, BEIJING)
+        return (current.replace(hour=7, minute=0, second=0, microsecond=0).timestamp()
+                if current.hour < 7 else now)
+
+    def window_until(self, kind, now):
+        return now if kind == "access" and self.recovering_submission else self.next_open(now)
+
+    def ready(self, kind="send"):
+        while (until := self.window_until(kind, self.clock())) > self.clock():
+            self.rest(until, reason="night_rest")
+
+    def access(self):
+        self.ready("access")
+
+    def check_send_time(self, sent):
+        if self.next_open(sent) > sent:
+            raise TaskError("pacing_window_closed", "每日运行窗口已结束，当前请求尚未发送",
+                            retryable=False)
+
+    @contextmanager
+    def recover_submission(self):
+        """Allow only recovery visits outside the daily window; sends remain gated."""
+        previous = self.recovering_submission
+        self.recovering_submission = True
+        try:
+            yield
+        finally:
+            self.recovering_submission = previous
+
+    def rest(self, until, *, reason="account_rest"):
+        active = runtime.current()
+        item = active.data.pop("item", None) if active else None
+        try:
+            if active:
+                active.data.update(rest_until=until, rest_reason=reason)
+                active.operation(reason, until - self.clock() + 60)
+            while self.clock() < until:
+                runtime.check()
+                self.sleeper(min(1, until - self.clock()))
+        finally:
+            if active:
+                active.data.pop("rest_until", None)
+                active.data.pop("rest_reason", None)
+            if active and item:
+                active.data["item"] = item
+                active.tick()
+
+
+class AccessThrottle(DailyWindow):
     def __init__(
         self,
         store,
@@ -42,13 +99,13 @@ class AccessThrottle:
     ):
         self.store, self.account = store, account
         self.access_per_hour, self.send_per_hour = access_per_hour, send_per_hour
-        self.active_seconds = active_hours * HOUR
+        # active_hours is accepted only to load existing persisted task options.
         self.access_gap, self.send_interval = access_gap, send_interval
         self.send_jitter = send_jitter
         self.ramp_seconds = ramp_days * 86400
         self.backoff_base, self.backoff_cap = backoff_base, backoff_cap
-        self.clock, self.sleeper, self.rng = clock, sleeper, rng
-        self.recovering_submission = False
+        super().__init__(clock=clock, sleeper=sleeper)
+        self.rng = rng
         with store.db:
             store.db.execute("""CREATE TABLE IF NOT EXISTS throttle_state (
                 account TEXT PRIMARY KEY, value TEXT NOT NULL)""")
@@ -106,7 +163,7 @@ class AccessThrottle:
         return [r[0] for r in rows]
 
     def roll(self, value, now):
-        """Start a fresh day's active-time budget once the calendar date changes."""
+        """Start a fresh day's active-time statistics once the Beijing date changes."""
         day = datetime.fromtimestamp(now, BEIJING).strftime("%Y-%m-%d")
         if value["day"] != day:
             value.update(day=day, day_active=0, last_touch=0)
@@ -117,27 +174,6 @@ class AccessThrottle:
         if value["last_touch"] and now - value["last_touch"] <= IDLE_GAP:
             value["day_active"] += now - value["last_touch"]
         value["last_touch"] = now
-
-    def midnight(self, now):
-        today = datetime.fromtimestamp(now, BEIJING)
-        return (today.replace(hour=0, minute=0, second=0, microsecond=0)
-                + timedelta(days=1)).timestamp()
-
-    def next_open(self, now=None):
-        now = self.clock() if now is None else now
-        current = datetime.fromtimestamp(now, BEIJING)
-        return (current.replace(hour=7, minute=0, second=0, microsecond=0).timestamp()
-                if current.hour < 7 else now)
-
-    @contextmanager
-    def recover_submission(self):
-        """Allow only recovery visits outside the daily window; sends remain gated."""
-        previous = self.recovering_submission
-        self.recovering_submission = True
-        try:
-            yield
-        finally:
-            self.recovering_submission = previous
 
     # -- freeze -----------------------------------------------------------------------
 
@@ -169,8 +205,7 @@ class AccessThrottle:
 
     def wait_for(self, kind, value, now):
         """Earliest time the next `kind` action is allowed, given committed state."""
-        until = (now if kind == "access" and self.recovering_submission
-                 else self.next_open(now))
+        until = self.window_until(kind, now)
         events = self.used(kind, now)
         limit = self.limit(kind, value, now)
         if len(events) >= limit:
@@ -200,26 +235,8 @@ class AccessThrottle:
                     self.touch(value, now)
                     self.save(value)
                     return
-            self.rest(until, reason="night_rest" if self.next_open(now) > now
-                      and not (kind == "access" and self.recovering_submission) else "account_rest")
-
-    def rest(self, until, *, reason="account_rest"):
-        active = runtime.current()
-        item = active.data.pop("item", None) if active else None
-        try:
-            if active:
-                active.data.update(rest_until=until, rest_reason=reason)
-                active.operation(reason, until - self.clock() + 60)
-            while self.clock() < until:
-                runtime.check()
-                self.sleeper(min(1, until - self.clock()))
-        finally:
-            if active:
-                active.data.pop("rest_until", None)
-                active.data.pop("rest_reason", None)
-            if active and item:
-                active.data["item"] = item
-                active.tick()
+            self.rest(until, reason="night_rest" if self.window_until(kind, now) > now
+                      else "account_rest")
 
     def access(self):
         """Wait for and record one page visit (call right before navigating)."""
@@ -245,9 +262,7 @@ class AccessThrottle:
             return
         if value["frozen_until"] > sent:
             raise TaskError("pacing_frozen", "账号处于限流冻结，禁止发送", retryable=False)
-        if self.next_open(sent) > sent:
-            raise TaskError("pacing_window_closed", "每日运行窗口已结束，当前请求尚未发送",
-                            retryable=False)
+        self.check_send_time(sent)
         if value["last_sent"] is not None and sent < value["last_sent"] + self.send_interval:
             raise TaskError("pacing_conflict", "提交间隔不足，禁止发送", retryable=False)
         value["last_sent"] = sent

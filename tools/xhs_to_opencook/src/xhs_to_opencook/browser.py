@@ -2,6 +2,7 @@
 
 import time
 from contextlib import suppress
+from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
@@ -19,6 +20,18 @@ from .storage import atomic_write, write_json
 HOME = "https://www.xiaohongshu.com/explore"
 CHAT = "https://www.xiaohongshu.com/ai_chat"
 EDITOR = 'textarea[name="aiSearchTextarea"]:not([aria-hidden="true"]):visible'
+
+
+@dataclass
+class HistoryListing:
+    items: dict[str, str] = field(default_factory=dict)
+    loaded: bool = False
+    complete: bool = False
+    valid: bool = True
+
+
+def history_list_response(response):
+    return urlsplit(response.url).path == "/api/sns/web/v1/dqa/history/list"
 
 
 def profile_note_metadata(card: dict) -> dict:
@@ -57,15 +70,13 @@ class SiteBrowser:
         self.context = None
         self.chat_page = None
         self.conversation_id = None
+        self.expected_account = None
         self.playwright = None
         self.raw_directory = None
         self.verified_note_id = None
         self.history_messages = {}
         self.history_observer = None
-        self.history_items = {}
-        self.history_cursor = None
-        self.history_complete = False
-        self.history_list_loaded = False
+        self.history_listing = HistoryListing()
         self.history_list_page = None
         self.access_clock, self.access_wait = access_clock, access_wait
         self.access_timeout = access_timeout
@@ -292,45 +303,59 @@ class SiteBrowser:
         self.history_messages = {}
         if self.history_list_page is not self.chat_page:
             self.history_list_page = self.chat_page
-            self.history_items = {}
-            self.history_list_loaded = self.history_complete = False
+            self.history_listing = HistoryListing()
             self.chat_page.on("response", self.observe_history_list)
 
     def observe_history_list(self, response):
-        if urlsplit(response.url).path != "/api/sns/web/v1/dqa/history/list":
+        if not history_list_response(response):
             return
         try:
             query = parse_qs(urlsplit(response.request.url).query)
             if query.get("keyword", [""])[0]:
+                self.history_listing.valid = self.history_listing.complete = False
                 return  # A filtered list cannot prove an owned conversation is absent.
+            if query.get("page_from", ["0"])[0] != "0" and "pre_cursor" not in query:
+                self.history_listing.valid = self.history_listing.complete = False
+                return
             payload = response.json()
             data = payload.get("data", {})
             if not response.ok or payload.get("success") is not True or payload.get("code") != 0:
+                self.history_listing.valid = self.history_listing.complete = False
                 return
             items = data.get("items")
             if not isinstance(items, list) or "cursor" not in data:
+                self.history_listing.valid = self.history_listing.complete = False
                 return
             cursor = query.get("pre_cursor", ["0"])[0]
             if cursor == "0":
-                self.history_items = {}
+                self.history_listing = HistoryListing()
             for item in items:
                 spark = item.get("spark", {})
+                if spark.get("template_name") == "search_agent_conversation_time":
+                    label = spark.get("dsl_data", {}).get("title")
+                    if not isinstance(label, str) or item.get("id") != label:
+                        self.history_listing.valid = False
+                    continue
                 if spark.get("template_name") != "search_agent_conversation_item":
+                    self.history_listing.valid = False
                     continue
                 value = spark.get("dsl_data", {})
                 cid, question = value.get("conversation_id"), value.get("question")
                 if cid and item.get("id") == cid and isinstance(question, str):
-                    self.history_items[cid] = question
-            self.history_cursor = data["cursor"]
-            self.history_complete = not items or data["cursor"] in (0, "0", "")
-            self.history_list_loaded = True
+                    self.history_listing.items[cid] = question
+                else:
+                    self.history_listing.valid = False
+            self.history_listing.complete = self.history_listing.valid and (
+                not items or data["cursor"] in (0, "0", ""))
+            self.history_listing.loaded = True
         except (ValueError, TypeError, AttributeError, PlaywrightError):
+            self.history_listing.valid = self.history_listing.complete = False
             return
 
     def new_chat(self):
         self.prepare_chat_page()
         current = urlsplit(self.chat_page.url)
-        if not self.history_list_loaded or current.scheme != "https" \
+        if not self.history_listing.loaded or current.scheme != "https" \
                 or current.netloc != "www.xiaohongshu.com" \
                 or current.path != "/ai_chat":
             self.visit(self.chat_page, CHAT, wait_until="domcontentloaded")
@@ -574,7 +599,7 @@ class SiteBrowser:
                 CHAT + "?conversationId=" + conversation_id,
                 wait_until="domcontentloaded",
             )
-            self.ensure_access(self.chat_page)
+            self.verify_account()
             self.wait_editor_ready()
             if empty_history and self.chat_page.locator("[data-round-id]").count() == 0:
                 error = TaskError(
@@ -593,17 +618,26 @@ class SiteBrowser:
             self.history_observer = None
             raise
 
+    def verify_account(self):
+        self.ensure_access(self.chat_page)
+        if self.expected_account and self.account_identity() != self.expected_account:
+            raise self.make_access_error(
+                self.chat_page, "account_mismatch", "访问账号与本阶段绑定不符",
+                {"condition": "account_mismatch"})
+
     def delete_chat(self, conversation_id: str) -> dict:
         """Delete the restored exact conversation through UI and verify its server ack."""
         self.prepare_chat_page()
         page = self.chat_page
-        if not self.history_list_loaded:
+        if not self.history_listing.loaded or not self.history_listing.valid:
             if self.visit_gate:
                 self.visit_gate.ready("access")
-            with page.expect_response(lambda r: urlsplit(r.url).path ==
-                                      "/api/sns/web/v1/dqa/history/list", timeout=10000):
+            with page.expect_response(history_list_response, timeout=10000):
                 self.visit(page, CHAT, wait_until="domcontentloaded")
             self.ensure_access(page)
+        if not self.history_listing.valid:
+            raise TaskError("cleanup_unconfirmed", "历史列表格式无法确认，延后清理",
+                            retryable=False)
         expand = page.get_by_role("button", name="展开侧边栏")
         if expand.count():
             if self.visit_gate:
@@ -612,26 +646,25 @@ class SiteBrowser:
         # The history list is paginated. Preserve its loaded pages across new chats;
         # inspect at most three more pages per attempt so backlog work stays bounded.
         for _ in range(3):
-            if conversation_id in self.history_items or self.history_complete:
+            if conversation_id in self.history_listing.items or self.history_listing.complete:
                 break
             if self.visit_gate:
                 self.visit_gate.access()
             runtime.operation("cleanup_history", 120)
-            with page.expect_response(lambda r: urlsplit(r.url).path ==
-                                      "/api/sns/web/v1/dqa/history/list", timeout=10000):
+            with page.expect_response(history_list_response, timeout=10000):
                 page.locator(".xhs-ai-history-list").evaluate(
                     "el => { el.scrollTop = Math.max(0, el.scrollHeight - el.clientHeight - 1); "
                     "el.scrollTop = el.scrollHeight; }")
-        self.ensure_access(page)
-        expected_account = getattr(self, "expected_account", None)
-        if expected_account and self.account_identity() != expected_account:
-            raise TaskError("account_mismatch", "清理前访问账号已改变", retryable=False)
-        if conversation_id not in self.history_items:
-            if self.history_complete:
+        self.verify_account()
+        if not self.history_listing.valid:
+            raise TaskError("cleanup_unconfirmed", "历史列表格式无法确认，延后清理",
+                            retryable=False)
+        if conversation_id not in self.history_listing.items:
+            if self.history_listing.complete:
                 return {"status": "missing", "evidence": {"conversation_id": conversation_id,
                         "history_list_complete": True}}
             raise TaskError("cleanup_unconfirmed", "历史列表尚未查完，延后清理", retryable=False)
-        question = self.history_items[conversation_id]
+        question = self.history_listing.items[conversation_id]
         target = page.locator(".xhs-ai-history-item").filter(
             has=page.get_by_text(question, exact=True))
         if target.count() != 1:
@@ -652,10 +685,7 @@ class SiteBrowser:
         row.wait_for(state="visible", timeout=8000)
         if self.visit_gate:
             self.visit_gate.access()
-        self.ensure_access(page)
-        expected_account = getattr(self, "expected_account", None)
-        if expected_account and self.account_identity() != expected_account:
-            raise TaskError("account_mismatch", "清理前访问账号已改变", retryable=False)
+        self.verify_account()
         current = parse_qs(urlsplit(page.url).query).get("conversationId", [None])[0]
         if current != conversation_id or row.count() != 1:
             raise TaskError("cleanup_unconfirmed", "无法确认唯一目标会话，未点击删除",
@@ -684,7 +714,7 @@ class SiteBrowser:
             self.ensure_access(page)
             raise TaskError("cleanup_unconfirmed", "服务器未确认删除会话", retryable=False)
         self.conversation_id = self.verified_note_id = None
-        self.history_items.pop(conversation_id, None)
+        self.history_listing.items.pop(conversation_id, None)
         return {"status": "deleted", "evidence": {"conversation_id": conversation_id,
                 "request_type": "DELETE_BATCH", "success": True, "code": 0}}
 
@@ -842,7 +872,7 @@ class SiteBrowser:
     def begin_request(self, prompt: str, source: Source, request: dict, persist):
         runtime.operation("prepare_submission", 120)
         page = self.chat_page
-        self.ensure_access(page)
+        self.verify_account()
         editor = self.wait_editor_ready()
         current = parse_qs(urlsplit(page.url).query).get("conversationId", [None])[0]
         if request.get("conversation_id") and current != request["conversation_id"]:
@@ -871,6 +901,8 @@ class SiteBrowser:
         )
         # Durable intent BEFORE Enter. A crash here requires history reconciliation.
         request.update(status="sending", prompt=prompt, reference=evidence, sent_at=time.time())
+        if self.visit_gate:
+            self.visit_gate.check_send_time(request["sent_at"])
         persist(request)
         runtime.check()
         runtime.operation("confirm_submission", 30)
@@ -887,7 +919,7 @@ class SiteBrowser:
                 self.conversation_id = snapshot["conversation_id"]
                 # A new conversation is added to the live sidebar without another list
                 # fetch. Its uniquely confirmed first prompt supplies the same binding.
-                self.history_items.setdefault(self.conversation_id, prompt)
+                self.history_listing.items.setdefault(self.conversation_id, prompt)
                 persist(request)
                 print("  已确认请求发送，等待点点回答…", flush=True)
                 return
