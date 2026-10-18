@@ -12,6 +12,7 @@ from playwright.sync_api import sync_playwright
 
 from . import runtime
 from .accounts import profile_path, require_bindings
+from .chat import PENDING
 from .errors import ACCESS_WAIT_KINDS, TaskError
 from .links import read_profiles
 from .notifications import Outbox, summary
@@ -172,7 +173,8 @@ class ParallelCoordinator:
 
     def throttle(self, stage):
         return AccessThrottle(
-            self.store, self.job["accounts"][stage]["account_id"], **self.job.get("throttle", {})
+            self.store, self.job["accounts"][stage]["account_id"], clock=self.clock,
+            **self.job.get("throttle", {})
         )
 
     def save(self):
@@ -540,6 +542,24 @@ class ParallelCoordinator:
             record = self.job["workers"][stage]
             if record["status"] in TERMINAL | {"blocked", "paused"}:
                 continue
+            gate = self.throttle(stage)
+            opens = gate.next_open(now)
+            night = opens > now
+            submitted = any(r.get("stage") == stage
+                            and r.get("account_id") == self.job["accounts"][stage]["account_id"]
+                            and r.get("status") in PENDING - {"prepared"} and r.get("sent_at")
+                            for r in self.store.stage_rows("chat_requests"))
+            if night and (record["status"] == "waiting"
+                          or record["status"] == "ready" and not submitted):
+                record.update(status="waiting", next_check=max(
+                    record.get("next_check") or 0, opens, gate.state()["frozen_until"]))
+                if not record.get("reason"):
+                    record.update(reason="pacing_window_closed", wait_kind="schedule",
+                                  message="夜间休息；北京时间07:00继续")
+                continue
+            if record["status"] == "waiting" and record.get("wait_kind") == "schedule" \
+                    and now >= (record.get("next_check") or 0):
+                record.update(status="ready", reason=None, wait_kind=None, next_check=None)
             if record["status"] == "waiting":
                 if not record.get("next_check") or now < record["next_check"]:
                     continue
@@ -557,7 +577,16 @@ class ParallelCoordinator:
                         },
                     )
                 continue
-            if not self.ensure_chrome(stage):
+            # A resting worker may keep its existing local window, but never reopen
+            # platform pages at night unless an already-submitted request needs recovery.
+            if night and record["status"] == "running" and not submitted:
+                owner = self.chromes.get(stage)
+                if not owner or not owner.alive():
+                    self.retire(stage)
+                    record.update(status="waiting", reason="pacing_window_closed",
+                                  wait_kind="schedule", next_check=opens)
+                    continue
+            elif not self.ensure_chrome(stage):
                 continue
             if record["status"] == "ready":
                 self.launch(stage, probe=record.get("probing", False))

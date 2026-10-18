@@ -54,7 +54,8 @@ def main(argv=None) -> int:
             if name == "pipeline":
                 command.add_argument("--access-per-hour", type=positive_integer)
                 command.add_argument("--send-per-hour", type=positive_integer)
-                command.add_argument("--active-hours", type=positive)
+                command.add_argument("--active-hours", type=positive,
+                                     help="兼容旧任务；累计时长上限已由北京时间07:00–00:00窗口替代")
                 command.add_argument(
                     "--execution", choices=("serial", "parallel"), default="serial"
                 )

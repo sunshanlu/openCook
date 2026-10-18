@@ -1,3 +1,7 @@
+from datetime import datetime
+from types import SimpleNamespace
+from zoneinfo import ZoneInfo
+
 import pytest
 
 from xhs_to_opencook.chat import ChatSession
@@ -6,7 +10,7 @@ from xhs_to_opencook.storage import Store
 from xhs_to_opencook.throttle import HOUR, AccessThrottle
 
 DAY = 86400
-T0 = 1_700_000_000.0  # Fixed instant; later tests skip ramp by starting past it.
+T0 = datetime(2023, 11, 15, 12, tzinfo=ZoneInfo("Asia/Shanghai")).timestamp()
 
 
 def make(tmp_path, clock, **options):
@@ -73,18 +77,18 @@ def test_sends_capped_per_hour_and_idempotent(tmp_path):
     store.close()
 
 
-def test_active_hours_stop_until_midnight(tmp_path):
+def test_exhausted_legacy_active_budget_does_not_stop_daytime_work(tmp_path):
     clock = [T0]
     store, gate = make(tmp_path, clock, active_hours=1, access_per_hour=10_000, access_gap=(60, 60))
     full_speed(gate, clock)
-    midnight = gate.midnight(clock[0])
-    for _ in range(59):  # Back-to-back visits stay continuously active, inside the budget.
-        gate.access()
-    assert clock[0] < midnight
-    for _ in range(3):  # The budget runs out; the next visits wait for the new day.
-        gate.access()
-    assert clock[0] >= midnight
-    assert gate.state()["day_active"] < 3600  # A fresh day, not the exhausted one.
+    start = clock[0]
+    value = gate.state()
+    value.update(day="2023-11-19", day_active=21600)
+    with store.db:
+        gate.save(value)
+    gate.access()
+    assert clock[0] == start
+    assert gate.state()["day_active"] == 21600
     store.close()
 
 
@@ -184,4 +188,57 @@ def test_spacing_survives_restart(tmp_path):
     store, gate = make(tmp_path, clock, send_per_hour=4)
     gate.ready("send")
     assert clock[0] - start >= HOUR / 4 * 0.8
+    store.close()
+
+
+@pytest.mark.parametrize("hour,minute,expected_hour,expected_minute", [
+    (6, 59, 7, 0), (7, 0, 7, 0), (23, 59, 23, 59), (0, 0, 7, 0),
+])
+def test_daily_window_uses_beijing_clock(tmp_path, monkeypatch, hour, minute,
+                                        expected_hour, expected_minute):
+    monkeypatch.setenv("TZ", "UTC")
+    zone = ZoneInfo("Asia/Shanghai")
+    clock = [datetime(2026, 10, 18, hour, minute, tzinfo=zone).timestamp()]
+    store, gate = make(tmp_path, clock, ramp_days=0)
+    gate.ready()
+    assert clock[0] == datetime(2026, 10, 18, expected_hour, expected_minute,
+                               tzinfo=zone).timestamp()
+    store.close()
+
+
+def test_night_recovery_allows_visits_but_never_new_sends(tmp_path):
+    start = datetime(2026, 10, 18, 0, 0, tzinfo=ZoneInfo("Asia/Shanghai")).timestamp()
+    clock = [start]
+    store, gate = make(tmp_path, clock, ramp_days=0)
+    with gate.recover_submission():
+        gate.access()
+        assert clock[0] == start
+        with pytest.raises(TaskError) as failure:
+            gate.reserve({"request_id": "new", "sent_at": start})
+        assert failure.value.code == "pacing_window_closed"
+    gate.ready()
+    assert clock[0] == start + 7 * HOUR
+    store.close()
+
+
+def test_midnight_during_preparation_keeps_request_unsent_and_attempt_intact(tmp_path):
+    clock = [datetime(2026, 10, 18, 23, 59, 59,
+                      tzinfo=ZoneInfo("Asia/Shanghai")).timestamp()]
+    store, gate = make(tmp_path, clock, ramp_days=0)
+
+    def prepare(prompt, source, request, persist):
+        clock[0] += 1
+        request.update(status="sending", sent_at=clock[0])
+        persist(request)
+        pytest.fail("The reservation must reject before Enter")
+
+    chat = ChatSession(store, lambda: SimpleNamespace(begin_request=prepare), pacing=gate)
+    request = {"request_id": "boundary", "status": "prepared", "attempt": 1}
+    chat.persist(request)
+    with pytest.raises(TaskError) as failure:
+        chat.begin("prompt", None, request)
+    assert failure.value.code == "pacing_window_closed"
+    saved = store.stage_get("chat_requests", "boundary")
+    assert saved["status"] == "prepared" and saved["attempt"] == 1
+    assert "sent_at" not in saved and gate.used("send", clock[0]) == []
     store.close()

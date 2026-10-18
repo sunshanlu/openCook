@@ -433,3 +433,22 @@ def test_job_level_wait_time_is_shown_only_while_the_job_is_waiting(coordinator)
     c.job.update(status="running")  # The shared wait ended but left its time behind.
     c.save()
     assert c.job["next_check_label"] == "按各阶段状态继续"
+
+
+def test_night_defers_new_workers_and_recovery_probes(coordinator):
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    c = coordinator
+    midnight = datetime(2026, 10, 18, tzinfo=ZoneInfo("Asia/Shanghai")).timestamp()
+    c.clock = lambda: midnight
+    c.job["workers"]["classify"].update(status="ready")
+    c.job["workers"]["extract"].update(status="waiting", next_check=midnight,
+                                       reason="page_state_unconfirmed", wait_kind="unconfirmed")
+    c.ensure_chrome = lambda stage: pytest.fail("night must not reopen platform pages")
+    c.probe = lambda stage: pytest.fail("night must not run recovery probes")
+    c.publish = lambda **kw: None
+    c.step()
+    for record in c.job["workers"].values():
+        assert record["status"] == "waiting"
+        assert record["next_check"] == midnight + 7 * 3600
