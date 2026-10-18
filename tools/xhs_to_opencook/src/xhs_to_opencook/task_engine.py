@@ -5,6 +5,7 @@ owner thread only, advances at most one action and never sleeps. Restart rebuild
 executor from the durable record and reconciles an unconfirmed submission before sending.
 """
 
+import sqlite3
 from copy import deepcopy
 from threading import RLock, get_ident
 from uuid import uuid4
@@ -122,7 +123,21 @@ class TaskExecutor:
             return deepcopy(self.record)
 
     def _save(self):
+        previous = self.record.get("phase")
         self.record["phase"] = self.state
+        if previous != self.state:
+            self.record.setdefault("transitions", []).append({
+                "from": previous, "to": self.state, "at": self.clock(),
+                "request_id": self.record["request"]["request_id"],
+                "attempt": self.record.get("attempt", 1),
+            })
+        if self.state == "manual_review":
+            request = self.record["request"]
+            request["status"] = "manual_review"
+            request["review_error"] = self.record.get("error") or self.record.get("wait_review")
+            persist = getattr(self.browser, "persist_request", None)
+            if persist:
+                persist(request)
         self.record["updated_at"] = self.clock()
         self.record["budget"]["sampled_at"] = self.budget_sample
         self.journal.save(self.identity, self.record)
@@ -191,7 +206,15 @@ class TaskExecutor:
     def _submit(self):
         self.record["request"]["status"] = "sending"
         self._save()
-        snapshot = self.browser.submit(deepcopy(self.record["request"]))
+        try:
+            snapshot = self.browser.submit(deepcopy(self.record["request"]))
+        except TaskError as exc:
+            self.record["error"] = {"code": exc.code, "message": str(exc)}
+            self.needs_reconciliation = True
+            self._save()
+            if exc.code == "submission_unknown":
+                return
+            raise
         if snapshot.get("request"):
             self.record["request"].update(snapshot["request"])
         if snapshot.get("submitted"):
@@ -218,7 +241,7 @@ class TaskExecutor:
         try:
             if self.finalize is not None:
                 self.finalize(self.record)
-        except OSError as exc:
+        except (OSError, sqlite3.Error) as exc:
             self.record["save_failures"] = self.record.get("save_failures", 0) + 1
             self.record["error"] = {"code": "save_failed", "message": str(exc)}
             if self.record["save_failures"] >= 3:

@@ -46,6 +46,11 @@ class ChatBrowserAdapter:
         }
 
     def reconcile(self, request):
+        saved = self.chats.store.stage_get("chat_requests", request["request_id"])
+        if saved:
+            request.update(saved)
+        if request.get("status") == "prepared" and not request.get("sent_at"):
+            return {"unsent": True, "request": request}
         self.chats.reconcile(request)
         return {"submitted": True, "request": request}
 

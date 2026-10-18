@@ -491,7 +491,9 @@ class Workflow:
         if phase == "manual_review":
             return {"status": "awaiting_review", "error": error,
                     "attempts": record.get("attempt", 1)}
-        raise TaskError("task_blocked", "当前任务未安全收尾", retryable=False)
+        block = record.get("wait_block", {})
+        runtime.block(block.get("reason", "task_blocked"), "当前任务未安全收尾",
+                      kind="manual" if block.get("reason") == "identity_conflict" else None)
 
     def process_extraction(self, notes):
         for note in notes:
@@ -533,7 +535,9 @@ class Workflow:
                 self.sleeper(0.25)
 
             if record["phase"] == "blocked":
-                raise TaskError("task_blocked", "提取任务未安全收尾", retryable=False)
+                block = record.get("wait_block", {})
+                runtime.block(block.get("reason", "task_blocked"), "提取任务未安全收尾",
+                              kind="manual" if block.get("reason") == "identity_conflict" else None)
             task.update(status="success" if record["phase"] == "completed" else "awaiting_review",
                         attempts=record.get("attempt", 1), error=record.get("error"))
             self.snapshot()
