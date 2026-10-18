@@ -230,7 +230,7 @@ class TaskExecutor:
         self.record["submission_intent"] = True
         self._save()
         try:
-            snapshot = self.browser.submit(deepcopy(self.record["request"]))
+            snapshot = self.browser.submit(self.record["request"])
         except TaskError as exc:
             self.record["error"] = {"code": exc.code, "message": str(exc)}
             if exc.code == "manual_review_required":
