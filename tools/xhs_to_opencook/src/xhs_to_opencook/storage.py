@@ -312,6 +312,22 @@ class Store:
             if enqueue_job and classification.get("status") == "success" and verdict == "tutorial":
                 self.enqueue(enqueue_job, identity)
 
+    def commit_extraction(self, identity, result, task_record):
+        task_id = "extract:" + identity
+        task = {**task_record, "phase": "completed", "updated_at": now()}
+        value = {**result, "updated_at": now(), "schema_version": 1}
+        with self.db:
+            for table, key, record in (
+                ("records", identity, value),
+                ("extraction_runs", identity, value),
+                ("import_tasks", task_id, task),
+            ):
+                self.db.execute(f"INSERT OR REPLACE INTO {table} VALUES (?, ?)",
+                                (key, json.dumps(record, ensure_ascii=False, allow_nan=False)))
+            if self.queue_job:
+                self.db.execute("UPDATE extraction_queue SET status='done',updated_at=? "
+                                "WHERE job_id=? AND note_id=?", (now(), self.queue_job, identity))
+
     def replace_chat_request(self, previous: dict, following: dict):
         """Atomically retire an invalid answer and reserve its immediate correction."""
         with self.db:

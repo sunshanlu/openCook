@@ -197,7 +197,7 @@ def test_reference_conflict_blocks_and_schema_error_reviews():
     executor2.tick()
     clock2.value += 1
     assert executor2.tick()["phase"] == "validating"
-    assert executor2.tick()["phase"] == "manual_review"
+    assert executor2.tick()["phase"] == "submitting"
 
 
 def test_task_ticks_reject_other_threads_before_browser_access():
@@ -206,3 +206,28 @@ def test_task_ticks_reject_other_threads_before_browser_access():
         with pytest.raises(RuntimeError, match="owner thread"):
             pool.submit(executor.tick).result()
     assert executor.snapshot()["phase"] == "preparing"
+
+
+def test_invalid_answer_retries_with_new_request_and_preserves_task():
+    from xhs_to_opencook.errors import TaskError
+
+    journal, browser = Journal(), Browser()
+    calls = []
+
+    def validate(answer, record):
+        calls.append(record['request']['request_id'])
+        if len(calls) == 1:
+            raise TaskError('json_schema_invalid', 'invalid')
+        return {'ok': True}
+
+    executor = TaskExecutor('task', browser, journal, clock=lambda: 100,
+                            validate=validate, stable_seconds=0)
+    browser.answer = 'answer'
+    for _ in range(12):
+        record = executor.tick()
+        if record['phase'] == 'completed':
+            break
+    assert record['phase'] == 'completed'
+    assert len(set(browser.sent)) == 2
+    assert record['task_id'] == 'task'
+    assert len(record['attempts']) == 1

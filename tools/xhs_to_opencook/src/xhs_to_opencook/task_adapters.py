@@ -101,3 +101,35 @@ def classification_commit(store, identity, source, driver, *,
         )
 
     return finalize
+
+
+def extraction_validator(identity):
+    def validate(answer, record):
+        from .prompts import EXTRACTION_VERSION
+
+        result = parse_bound_answer(answer, "extract", identity, record["request"]["request_id"])
+        return {"extraction": result.model_dump(), "prompt_version": EXTRACTION_VERSION}
+
+    return validate
+
+
+def extraction_commit(store, identity, source, driver):
+    def finalize(record):
+        from .export import convert
+        from .models import Extraction
+        from .prompts import EXTRACTION_VERSION
+        from .storage import now
+
+        extraction = record["result"]["extraction"]
+        store.commit_extraction(identity, {
+            "status": "success", "source": source.model_dump(), "extraction": extraction,
+            "export_names": [
+                r["name"] for r in convert(source, Extraction.model_validate(extraction))
+            ],
+            "conversation_id": getattr(driver, "conversation_id", None),
+            "raw_directory": record["request"].get("raw_directory"),
+            "classified_at": now(), "prompt_version": EXTRACTION_VERSION,
+            "cover_path": None, "image_error": {"code": "image_missing", "message": "未提供封面"},
+        }, record)
+
+    return finalize

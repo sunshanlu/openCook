@@ -96,7 +96,7 @@ class TaskExecutor:
                 ["answered", "waiting", "validating"],
                 ["validated", "validating", "saving"],
                 ["saved", "saving", "completed"],
-                ["retry", "waiting", "submitting"],
+                ["retry", ["waiting", "validating"], "submitting"],
                 [
                     "flagged_review",
                     ["preparing", "submitting", "waiting", "validating", "saving"],
@@ -186,16 +186,42 @@ class TaskExecutor:
             if exc.code == "reference_mismatch":
                 self.flagged_blocked()
             else:
-                self.flagged_review()
+                self.request_retry()
             return
         self.record["result"] = result
         self.record.pop("error", None)
         self.validated()
 
     def _finalize(self):
-        if self.finalize is not None:
-            self.finalize(self.record)
+        try:
+            if self.finalize is not None:
+                self.finalize(self.record)
+        except OSError as exc:
+            self.record["save_failures"] = self.record.get("save_failures", 0) + 1
+            self.record["error"] = {"code": "save_failed", "message": str(exc)}
+            if self.record["save_failures"] >= 3:
+                self.record["resume_phase"] = "saving"
+                self.flagged_blocked()
+            return
         self.saved()
+
+    def request_retry(self):
+        """Only the task owner creates a new attempt after a completed answer."""
+        request = self.record["request"]
+        attempt = self.record.get("attempt", 1)
+        if attempt >= request.get("attempt_limit", 2):
+            self.flagged_review()
+            return
+        self.record.setdefault("attempts", []).append(deepcopy(request))
+        following = {k: v for k, v in request.items() if k in {
+            "note_id", "stage", "source", "prompt_version", "raw_directory", "attempt_limit",
+        }}
+        following.update(request_id=uuid4().hex, status="prepared", attempt=attempt + 1)
+        self.record.update(request=following, attempt=attempt + 1)
+        for key in ("answer", "result", "wait", "answer_candidate", "answer_since", "empty_since"):
+            self.record.pop(key, None)
+        self.needs_reconciliation = False
+        self.retry()
 
     def pause(self):
         """Signal a pause; the tree and browser are only touched by the owner thread."""

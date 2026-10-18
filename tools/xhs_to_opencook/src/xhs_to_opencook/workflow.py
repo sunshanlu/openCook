@@ -27,6 +27,8 @@ from .task_adapters import (
     StoreJournal,
     classification_commit,
     classification_validator,
+    extraction_commit,
+    extraction_validator,
 )
 from .task_engine import TERMINAL_PHASES, TaskExecutor, new_record
 
@@ -490,6 +492,50 @@ class Workflow:
                     "attempts": record.get("attempt", 1)}
         return {"status": "failed", "error": error, "attempts": record.get("attempt", 1)}
 
+    def process_extraction(self, notes):
+        for note in notes:
+            identity = note["note_id"]
+            task_id = "extract:" + identity
+            task = {"stage": "extract", "note_id": identity, "engine": "v2", "status": "running"}
+            self.report["tasks"].append(task)
+            classified, decision = classification_record(self.store, identity)
+            if not decision or decision.verdict != "tutorial":
+                task.update(status="skipped", reason="not_confirmed_tutorial")
+                continue
+            if any(r.get("note_id") == identity and r.get("stage") == "extract"
+                   for r in self.chats.pending_rows()) and not self.store.task_get(task_id):
+                task.update(status="skipped", reason="legacy_pending_not_migrated")
+                continue
+            source = collected_source(note, self.store.get(identity), classified)
+            directory = self.raw(identity, "extract", 1)
+            driver = self.driver()
+
+            def bootstrap(key, identity=identity, source=source, directory=directory):
+                return new_record(key, request={
+                    "request_id": uuid4().hex, "note_id": identity, "stage": "extract",
+                    "status": "prepared", "attempt": 1, "attempt_limit": self.chats.max_attempts,
+                    "source": source.model_dump(), "prompt_version": EXTRACTION_VERSION,
+                    "raw_directory": str(directory.relative_to(self.store.directory)),
+                })
+
+            executor = TaskExecutor(
+                task_id, ChatBrowserAdapter(self.chats, driver, source, stage="extract"),
+                StoreJournal(self.store), clock=self.clock, bootstrap=bootstrap,
+                validate=extraction_validator(identity),
+                finalize=extraction_commit(self.store, identity, source, driver),
+                stable_seconds=getattr(self.args, "task_stable_seconds", 1.0),
+            )
+            for _ in range(200):
+                record = executor.tick()
+                if record["phase"] in TERMINAL_PHASES:
+                    break
+            else:
+                raise TaskError("task_incomplete", "提取任务未结束")
+            task.update(status="success" if record["phase"] == "completed" else "awaiting_review",
+                        attempts=record.get("attempt", 1), error=record.get("error"))
+            self.snapshot()
+        return self.report["tasks"]
+
     def process(self, stage, notes=None):
         runtime.operation(f"stage_{stage}", 300)
         if runtime.current():
@@ -498,6 +544,8 @@ class Workflow:
             notes = [
                 n for n in self.store.collected(list(self.profiles)) if n.get("type") == "video"
             ]
+        if stage == "extract" and self.task_engine == "v2":
+            return self.process_extraction(notes)
         if stage == "classify" and self.task_engine == "v2":
             return self.process_classification(notes)
         pending = self.chats.pending()
