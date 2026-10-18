@@ -52,6 +52,9 @@ class ChatBrowserAdapter:
         saved = self.chats.store.stage_get("chat_requests", request["request_id"])
         if saved:
             request.update(saved)
+        if not saved and not request.get("sent_at") and not request.get("batch_id"):
+            request["status"] = "prepared"
+            return {"unsent": True, "request": request}
         if request.get("status") == "prepared" and not request.get("sent_at"):
             return {"unsent": True, "request": request}
         self.chats.reconcile(request)
