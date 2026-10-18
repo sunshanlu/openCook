@@ -235,6 +235,10 @@ class TaskExecutor:
                 or self.record.get("budget", {}).get("auto_seconds", 0) >= AUTO_BUDGET_SECONDS):
             self.flagged_review()
             return
+        request["status"] = "failed"
+        persist = getattr(self.browser, "persist_request", None)
+        if persist:
+            persist(request)
         self.record.setdefault("attempts", []).append(deepcopy(request))
         following = {k: v for k, v in request.items() if k in {
             "note_id", "stage", "source", "prompt_version", "raw_directory", "attempt_limit",

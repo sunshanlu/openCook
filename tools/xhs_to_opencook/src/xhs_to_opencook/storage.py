@@ -309,6 +309,12 @@ class Store:
                 "INSERT OR REPLACE INTO import_tasks VALUES (?, ?)",
                 (identity, json.dumps(task, ensure_ascii=False, allow_nan=False)),
             )
+            request = task_record.get("request", {})
+            if request.get("batch_id"):
+                completed_request = {**request, "status": "complete"}
+                self.db.execute("INSERT OR REPLACE INTO chat_requests VALUES (?, ?)",
+                                (request["request_id"], json.dumps(completed_request,
+                                                                  ensure_ascii=False)))
             if enqueue_job and classification.get("status") == "success" and verdict == "tutorial":
                 self.enqueue(enqueue_job, identity)
 
@@ -324,6 +330,11 @@ class Store:
             ):
                 self.db.execute(f"INSERT OR REPLACE INTO {table} VALUES (?, ?)",
                                 (key, json.dumps(record, ensure_ascii=False, allow_nan=False)))
+            request = task_record.get("request", {})
+            if request.get("batch_id"):
+                self.db.execute("INSERT OR REPLACE INTO chat_requests VALUES (?, ?)",
+                                (request["request_id"], json.dumps({**request, "status": "complete"},
+                                                                  ensure_ascii=False)))
             if self.queue_job:
                 self.db.execute("UPDATE extraction_queue SET status='done',updated_at=? "
                                 "WHERE job_id=? AND note_id=?", (now(), self.queue_job, identity))

@@ -60,6 +60,9 @@ class ChatBrowserAdapter:
                 "answer": text, "error": snapshot.get("error"),
                 "empty_placeholder": snapshot.get("empty_placeholder")}
 
+    def persist_request(self, request):
+        self.chats.persist(request)
+
     def recover(self, request):
         if request.get("conversation_id"):
             self.driver.restore_chat(request["conversation_id"])
