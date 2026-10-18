@@ -208,3 +208,19 @@ def test_runtime_pause_persists_task_and_projects_single_budget(tmp_path, monkey
     assert active.data['deadline'] == 1120
     assert active.items['budgets']['classify:'+N1] == 0
     store.close()
+
+
+def test_local_submission_intent_without_remote_journal_is_not_restored_as_chat(tmp_path):
+    from xhs_to_opencook.models import Source
+    from xhs_to_opencook.task_adapters import ChatBrowserAdapter
+
+    driver = Driver()
+    flow, store = build(tmp_path, driver)
+    source = Source(note_id=N1, url=URL, title='标题', author='作者')
+    adapter = ChatBrowserAdapter(flow.chats, driver, source)
+    result = adapter.reconcile({'request_id': 'local-only', 'status': 'sending',
+                                'note_id': N1, 'stage': 'classify'})
+    assert result['unsent'] is True
+    assert result['request']['status'] == 'prepared'
+    assert driver.sent == 0
+    store.close()
