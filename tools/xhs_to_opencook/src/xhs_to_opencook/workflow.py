@@ -390,6 +390,9 @@ class Workflow:
 
         A legacy pending request keeps its single owner and is never migrated silently.
         """
+        pending = [r for r in self.chats.pending_rows() if r.get("stage") == "classify"]
+        if pending:
+            notes = sorted(notes, key=lambda n: n["note_id"] != pending[0]["note_id"])
         for index, note in enumerate(notes, 1):
             identity = note["note_id"]
             task = {"stage": "classify", "note_id": identity, "status": "running",
