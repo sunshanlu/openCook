@@ -44,6 +44,7 @@ class ChatBrowserAdapter:
             return {"submitted": True, "request": request}
         return {
             "submitted": False,
+            "request": request,
             "unsent": request.get("status") in {"prepared", "retry_ready"},
         }
 
@@ -51,6 +52,9 @@ class ChatBrowserAdapter:
         saved = self.chats.store.stage_get("chat_requests", request["request_id"])
         if saved:
             request.update(saved)
+        if not saved and not request.get("sent_at") and not request.get("batch_id"):
+            request["status"] = "prepared"
+            return {"unsent": True, "request": request}
         if request.get("status") == "prepared" and not request.get("sent_at"):
             return {"unsent": True, "request": request}
         self.chats.reconcile(request)
@@ -68,13 +72,22 @@ class ChatBrowserAdapter:
                 "empty_placeholder": snapshot.get("empty_placeholder")}
 
     def persist_request(self, request):
+        if not request.get("batch_id") and not request.get("sent_at"):
+            self.chats.store.stage_save("chat_requests", request["request_id"], request)
+            return
         self.chats.persist(request)
 
     def recover(self, request):
+        saved = self.chats.store.stage_get("chat_requests", request["request_id"])
+        if saved:
+            request.update(saved)
         if request.get("conversation_id"):
             self.driver.restore_chat(request["conversation_id"])
-        else:
+        elif request.get("status") == "prepared" and not request.get("sent_at"):
             self.driver.new_chat()
+            return {"unsent": True, "request": request}
+        else:
+            return self.reconcile(request)
         return self.reconcile(request)
 
     def cancel_observation(self):

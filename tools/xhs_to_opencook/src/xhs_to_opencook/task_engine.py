@@ -101,7 +101,7 @@ class TaskExecutor:
                 ["saved", "saving", "completed"],
                 *[["restore_" + phase, "blocked", phase] for phase in PHASES
                   if phase not in TERMINAL_PHASES],
-                ["retry", ["waiting", "validating"], "submitting"],
+                ["retry", ["submitting", "waiting", "validating"], "submitting"],
                 [
                     "flagged_review",
                     ["preparing", "submitting", "waiting", "validating", "saving"],
@@ -141,13 +141,27 @@ class TaskExecutor:
         self.record["updated_at"] = self.clock()
         self.record["budget"]["sampled_at"] = self.budget_sample
         self.journal.save(self.identity, self.record)
+        if runtime.current():
+            runtime.current().task_progress(self.record)
 
     def tick(self):
+        try:
+            return self._tick()
+        except KeyboardInterrupt:
+            self.pause()
+            raise
+
+    def _tick(self):
         if get_ident() != self.owner:
             raise RuntimeError("Task ticks must run on the browser owner thread")
         with self.lock:
             if runtime.current():
-                runtime.check()
+                runtime.current().task_progress(self.record)
+                try:
+                    runtime.check()
+                except KeyboardInterrupt:
+                    self.pause()
+                    raise
             if self.record.get("pause_requested") and not self.record["paused"]:
                 self._enact_pause()
             if self.record["paused"]:
@@ -157,7 +171,8 @@ class TaskExecutor:
                 self._save()
                 return self.snapshot()
             elapsed = max(0, self.clock() - self.budget_sample)
-            self.record["budget"]["auto_seconds"] += elapsed
+            if elapsed <= 30 or self.record.get("phase") == "submitting":
+                self.record["budget"]["auto_seconds"] += elapsed
             self.budget_sample = self.clock()
             if self.record["budget"]["auto_seconds"] >= AUTO_BUDGET_SECONDS:
                 if self.state == "waiting":
@@ -212,12 +227,24 @@ class TaskExecutor:
         # Otherwise the submission remains unknown; stay put and reconcile again next tick.
 
     def _submit(self):
-        self.record["request"]["status"] = "sending"
+        self.record["submission_intent"] = True
         self._save()
         try:
-            snapshot = self.browser.submit(deepcopy(self.record["request"]))
+            snapshot = self.browser.submit(self.record["request"])
         except TaskError as exc:
             self.record["error"] = {"code": exc.code, "message": str(exc)}
+            if exc.code == "manual_review_required":
+                self.record["request_closed"] = True
+                self.flagged_review()
+                self._save()
+                return
+            if (exc.code in {"reference_mismatch", "generation_busy"}
+                    and self.record["request"].get("status") == "prepared"
+                    and not self.record["request"].get("sent_at")):
+                self.record["request_closed"] = True
+                self.request_retry()
+                self._save()
+                return
             self.needs_reconciliation = True
             self._save()
             if exc.code == "submission_unknown":
@@ -228,6 +255,9 @@ class TaskExecutor:
         if snapshot.get("submitted"):
             self.record["request"]["status"] = "submitted"
             self.submitted()
+        elif snapshot.get("unsent"):
+            self.record["request_closed"] = True
+            self.request_retry()
         else:
             self.needs_reconciliation = True
 

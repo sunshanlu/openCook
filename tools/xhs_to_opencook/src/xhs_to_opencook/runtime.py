@@ -111,7 +111,7 @@ class WorkerRuntime:
                 self.data["deadline"] += suspension
             key = self.data.get("item")
             # Long monotonic gaps are machine suspension, not active processing time.
-            if key and 0 <= elapsed <= 30:
+            if key and not self.data.get("task_budget_owned") and 0 <= elapsed <= 30:
                 self.items["budgets"][key] = self.items["budgets"].get(key, 0) + elapsed
                 write_json(self.items_path, self.items)
             self.data["heartbeat_at"] = self.clock()
@@ -125,7 +125,8 @@ class WorkerRuntime:
         if self.data.get("journal_failed"):
             raise OSError("运行状态写入失败")
         key = self.data.get("item")
-        if key and self.items["budgets"].get(key, 0) >= 35 * 60:
+        if (key and not self.data.get("task_budget_owned")
+                and self.items["budgets"].get(key, 0) >= 35 * 60):
             raise TaskError("item_budget_exhausted", "单条主动处理已达到35分钟", retryable=False)
 
     def begin_item(self, stage, identity):
@@ -135,6 +136,19 @@ class WorkerRuntime:
         # The chat recovery owner must receive budget exhaustion, not its caller.
         self.data.update(operation="prepare", deadline=self.clock() + 120)
         self.tick()
+
+    def task_progress(self, record):
+        """Task journal owns v2 budget; runtime only projects it and publishes liveness."""
+        with self.lock:
+            request = record["request"]
+            key = f"{request['stage']}:{request['note_id']}"
+            self.data.update(item=key, stage=request["stage"], task_budget_owned=True,
+                             operation="task_" + record["phase"], deadline=self.clock() + 120,
+                             task_phase=record["phase"], request_id=request["request_id"],
+                             next_check=(record.get("wait") or {}).get("backoff_until"))
+            self.items["budgets"][key] = record.get("budget", {}).get("auto_seconds", 0)
+            write_json(self.items_path, self.items)
+            self.tick()
 
     def operation(self, name, seconds):
         with self.lock:
